@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const API_VERSION = '0.1';
+export const API_VERSION = '0.3';
 
 export const RoleSchema = z.enum(['general', 'developer', 'marketer']);
 export type Role = z.infer<typeof RoleSchema>;
@@ -21,6 +21,10 @@ export const IssueCodeSchema = z.enum([
   'TASK_OVERLOADED',
   'GENERIC_PHRASES_DETECTED',
   'GENERIC_OUTPUT_RISK_HIGH',
+  'LOW_EXPECTED_IMPROVEMENT',
+  'PROMPT_ALREADY_OPTIMIZED',
+  'PROMPT_CONVERGENCE_DETECTED',
+  'REWRITE_POSSIBLE_REGRESSION',
 ]);
 export type IssueCode = z.infer<typeof IssueCodeSchema>;
 
@@ -64,6 +68,37 @@ export const ScoreSetSchema = z.object({
 });
 export type ScoreSet = z.infer<typeof ScoreSetSchema>;
 
+export const ImprovementStatusSchema = z.enum([
+  'material_improvement',
+  'minor_improvement',
+  'no_significant_change',
+  'possible_regression',
+  'already_strong',
+]);
+export type ImprovementStatus = z.infer<typeof ImprovementStatusSchema>;
+
+export const ExpectedUsefulnessSchema = z.enum(['higher', 'slightly_higher', 'unchanged', 'lower']);
+export type ExpectedUsefulness = z.infer<typeof ExpectedUsefulnessSchema>;
+
+export const ScoreDeltasSchema = z.object({
+  scope: z.number().int().min(-10).max(10),
+  contrast: z.number().int().min(-10).max(10),
+  clarity: z.number().int().min(-10).max(10),
+  constraintQuality: z.number().int().min(-10).max(10),
+  genericOutputRisk: z.number().int().min(-10).max(10),
+  tokenWasteRisk: z.number().int().min(-10).max(10),
+});
+export type ScoreDeltas = z.infer<typeof ScoreDeltasSchema>;
+
+export const ImprovementSchema = z.object({
+  status: ImprovementStatusSchema,
+  scoreDeltas: ScoreDeltasSchema,
+  overallDelta: z.number(),
+  expectedUsefulness: ExpectedUsefulnessSchema,
+  notes: z.array(z.string()).max(12),
+});
+export type Improvement = z.infer<typeof ImprovementSchema>;
+
 export const AnalysisSchema = z.object({
   scores: ScoreSetSchema,
   issues: z.array(IssueSchema),
@@ -87,6 +122,7 @@ export const MetaSchema = z.object({
   requestId: z.string().min(1),
   latencyMs: z.number().int().nonnegative(),
   providerMode: ProviderModeSchema,
+  providerModel: z.string().min(1).optional(),
 });
 export type Meta = z.infer<typeof MetaSchema>;
 
@@ -100,6 +136,8 @@ export const AnalyzeAndRewriteResponseSchema = z.object({
   id: z.string().startsWith('par_'),
   analysis: AnalysisSchema,
   rewrite: RewriteSchema,
+  rewriteScore: ScoreSetSchema,
+  improvement: ImprovementSchema,
   meta: MetaSchema,
 });
 export type AnalyzeAndRewriteResponse = z.infer<typeof AnalyzeAndRewriteResponseSchema>;
@@ -112,6 +150,7 @@ export const ErrorCodeSchema = z.enum([
   'INVALID_MODE',
   'UNSUPPORTED_CONTENT_TYPE',
   'UNAUTHORIZED',
+  'PROVIDER_NOT_CONFIGURED',
   'UPSTREAM_MODEL_ERROR',
   'INTERNAL_ERROR',
 ]);

@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@promptfire/heuristics": "workspace:*",
-    "@promptfire/shared": "workspace:*"
+    "@promptfire/shared": "workspace:*",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

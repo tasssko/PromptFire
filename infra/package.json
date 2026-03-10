@@ -17,6 +17,7 @@
     "sst": "^2.38.7"
   },
   "devDependencies": {
+    "@types/dotenv-flow": "^3.3.3",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
   }

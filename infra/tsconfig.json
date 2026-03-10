@@ -3,5 +3,5 @@
   "compilerOptions": {
     "rootDir": "."
   },
-  "include": ["lib", "sst.config.ts"]
+  "include": ["lib", "sst.config.ts", "*.d.ts"]
 }
