@@ -1,5 +1,5 @@
-# Promptable
-# Promptable Starter Specification
+# Promptfire
+# Promptfire Starter Specification
 
 ## Goal
 
