@@ -1,0 +1,71 @@
+pipeline {
+    agent {
+      label 'jenkins-agent'
+    }
+    environment {
+      AWS_DEFAULT_REGION = "eu-west-1"
+    }
+    options {
+        buildDiscarder logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', daysToKeepStr: '', numToKeepStr: '10')
+        timestamps()
+        ansiColor('xterm')
+        timeout(activity: true,time: 1, unit: 'HOURS')
+        parallelsAlwaysFailFast()
+    }
+    tools {
+      nodejs 'node18'
+    }
+    stages {
+        stage('Install') {
+          steps {
+              sh 'node --version && npm --version'
+              sh 'npm install'
+          }
+        }
+        stage('Build(Staging)') {
+          steps {
+            withCredentials([
+              string(credentialsId: 'APP_STAGING_APIG_ID', variable: 'APIG_ID'), 
+              string(credentialsId: 'GOOGLE_CLIENT_ID', variable: 'GOOGLE_CLIENT_ID'), 
+              string(credentialsId: 'GOOGLE_CLIENT_SECRET', variable: 'GOOGLE_CLIENT_SECRET')]) {
+              sh "env"
+              sh 'npm run build-staging'
+            }
+          }
+        }
+        stage('Deploy(Staging)') {
+          steps {
+            withCredentials([
+              string(credentialsId: 'APP_STAGING_APIG_ID', variable: 'APIG_ID'), 
+              string(credentialsId: 'GOOGLE_CLIENT_ID', variable: 'GOOGLE_CLIENT_ID'), 
+              string(credentialsId: 'GOOGLE_CLIENT_SECRET', variable: 'GOOGLE_CLIENT_SECRET')]) {
+              sh 'npm run deploy-staging'
+            }
+          }
+        }
+        stage('Build(Prod)') {
+          steps {
+            
+            input 'Deploy to Prod?'
+            
+            withCredentials([
+              string(credentialsId: 'APP_PROD_APIG_ID', variable: 'APIG_ID'), 
+              string(credentialsId: 'GOOGLE_PROD_CLIENT_ID', variable: 'GOOGLE_CLIENT_ID'), 
+              string(credentialsId: 'GOOGLE_PROD_CLIENT_SECRET', variable: 'GOOGLE_CLIENT_SECRET')]) {
+              sh 'npm run build-prod'
+            }
+          }
+        }
+        stage('Deploy(Prod)') {
+          steps {
+            withCredentials([
+              string(credentialsId: 'APP_PROD_APIG_ID', variable: 'APIG_ID'), 
+              string(credentialsId: 'GOOGLE_PROD_CLIENT_ID', variable: 'GOOGLE_CLIENT_ID'), 
+              string(credentialsId: 'GOOGLE_PROD_CLIENT_SECRET', variable: 'GOOGLE_CLIENT_SECRET'),]) {
+              sh 'npm run deploy-prod'
+            }
+          }
+        }
+    }
+}
+

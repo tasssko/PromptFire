@@ -1,0 +1,23 @@
+{
+  "name": "@promptfire/infra",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "sst build",
+    "deploy": "sst deploy",
+    "remove": "sst remove",
+    "dev": "sst dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.110.1",
+    "constructs": "10.3.0",
+    "dotenv-flow": "^3.2.0",
+    "sst": "^2.38.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
