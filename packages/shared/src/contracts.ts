@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const API_VERSION = '0.3';
+export const API_VERSION = '0.4';
 
 export const RoleSchema = z.enum(['general', 'developer', 'marketer']);
 export type Role = z.infer<typeof RoleSchema>;
@@ -99,6 +99,14 @@ export const ImprovementSchema = z.object({
 });
 export type Improvement = z.infer<typeof ImprovementSchema>;
 
+export const EvaluationSchema = z.object({
+  originalScore: ScoreSetSchema,
+  rewriteScore: ScoreSetSchema,
+  improvement: ImprovementSchema,
+  signals: z.array(z.string()).max(12),
+});
+export type Evaluation = z.infer<typeof EvaluationSchema>;
+
 export const AnalysisSchema = z.object({
   scores: ScoreSetSchema,
   issues: z.array(IssueSchema),
@@ -136,8 +144,7 @@ export const AnalyzeAndRewriteResponseSchema = z.object({
   id: z.string().startsWith('par_'),
   analysis: AnalysisSchema,
   rewrite: RewriteSchema,
-  rewriteScore: ScoreSetSchema,
-  improvement: ImprovementSchema,
+  evaluation: EvaluationSchema,
   meta: MetaSchema,
 });
 export type AnalyzeAndRewriteResponse = z.infer<typeof AnalyzeAndRewriteResponseSchema>;

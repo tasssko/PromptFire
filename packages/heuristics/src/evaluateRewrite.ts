@@ -2,8 +2,6 @@ import type {
   Analysis,
   Improvement,
   ImprovementStatus,
-  Issue,
-  IssueCode,
   ScoreDeltas,
   ScoreSet,
 } from '@promptfire/shared';
@@ -18,7 +16,6 @@ interface EvaluateRewriteInput {
 
 interface EvaluateRewriteOutput {
   improvement: Improvement;
-  issues: Issue[];
   signals: string[];
 }
 
@@ -195,10 +192,6 @@ function expectedUsefulnessFromStatus(status: ImprovementStatus): Improvement['e
   }
 }
 
-function issueFromCode(code: IssueCode, severity: Issue['severity'], message: string): Issue {
-  return { code, severity, message };
-}
-
 export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOutput {
   const scoreDeltas = computeScoreDeltas(input.originalAnalysis.scores, input.rewriteAnalysis.scores);
   const overallDelta = computeOverallDelta(scoreDeltas);
@@ -223,53 +216,25 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   }
 
   const signals: string[] = [];
-  const issues: Issue[] = [];
   const notes: string[] = [];
 
   if (lowExpectedImprovement) {
     signals.push('LOW_EXPECTED_IMPROVEMENT');
-    issues.push(
-      issueFromCode(
-        'LOW_EXPECTED_IMPROVEMENT',
-        'low',
-        'Prompt already contains strong structure and may have limited rewrite upside.',
-      ),
-    );
     notes.push('Original prompt already has strong structure.');
   }
 
   if (lowExpectedImprovement && originalHighQuality && overallDelta <= 1.5) {
     signals.push('PROMPT_ALREADY_OPTIMIZED');
-    issues.push(
-      issueFromCode(
-        'PROMPT_ALREADY_OPTIMIZED',
-        'low',
-        'Prompt appears optimized; additional rewrites are unlikely to materially help.',
-      ),
-    );
     notes.push('Further rewriting is unlikely to create material gains.');
   }
 
   if (paraphraseHeavy) {
     signals.push('PROMPT_CONVERGENCE_DETECTED');
-    issues.push(
-      issueFromCode(
-        'PROMPT_CONVERGENCE_DETECTED',
-        'low',
-        'Rewrite appears mostly paraphrased with minimal structural change.',
-      ),
-    );
     notes.push('Rewrite mostly rephrases the same instruction.');
   }
 
   if (status === 'possible_regression') {
-    issues.push(
-      issueFromCode(
-        'REWRITE_POSSIBLE_REGRESSION',
-        'medium',
-        'Rewrite may have reduced specificity or removed useful constraints.',
-      ),
-    );
+    signals.push('REWRITE_POSSIBLE_REGRESSION');
     notes.push('Rewrite may have regressed prompt quality.');
   }
 
@@ -293,7 +258,6 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
       expectedUsefulness: expectedUsefulnessFromStatus(status),
       notes: notes.slice(0, 12),
     },
-    issues,
     signals: [...new Set(signals)].slice(0, 12),
   };
 }

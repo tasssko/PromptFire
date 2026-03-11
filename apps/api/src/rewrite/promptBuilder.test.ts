@@ -39,4 +39,23 @@ describe('buildRewriteInstructions', () => {
     expect(instructions.system).toContain('Narrow to one clear deliverable');
     expect(instructions.user).toContain('CONSTRAINTS_MISSING');
   });
+
+  it('includes marketer anti-paraphrase guidance', () => {
+    const instructions = buildRewriteInstructions({
+      prompt: 'Write landing page copy for IT decision-makers.',
+      role: 'marketer',
+      mode: 'high_contrast',
+      preferences: {
+        includeScores: true,
+        includeExplanation: true,
+        includeAlternatives: false,
+        preserveTone: false,
+      },
+    });
+
+    expect(instructions.system).toContain('Preserve valid audience details when present');
+    expect(instructions.system).toContain('operational tension over cyber fear tropes');
+    expect(instructions.system).toContain('specific lead angle');
+    expect(instructions.system).toContain('proof specificity');
+  });
 });

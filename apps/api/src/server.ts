@@ -48,6 +48,9 @@ function logRequest(params: {
   latencyMs: number;
   providerMode: string;
   providerModel?: string;
+  evaluationStatus?: string;
+  overallDelta?: number;
+  alreadyStrong?: boolean;
   errorCode?: string;
 }): void {
   console.info(JSON.stringify(params));
@@ -205,26 +208,18 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         context: input.context,
       });
 
-      const mergedAnalysis = {
-        ...analysis,
-        issues: [...analysis.issues, ...evaluation.issues],
-        detectedIssueCodes: [
-          ...new Set([
-            ...analysis.detectedIssueCodes,
-            ...evaluation.issues.map((issue) => issue.code),
-          ]),
-        ],
-        signals: [...new Set([...analysis.signals, ...evaluation.signals])].slice(0, 12),
-      };
-
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
 
       const payload: AnalyzeAndRewriteResponse = {
         id: `par_${requestId}`,
-        analysis: mergedAnalysis,
+        analysis,
         rewrite,
-        rewriteScore: rewriteAnalysis.scores,
-        improvement: evaluation.improvement,
+        evaluation: {
+          originalScore: analysis.scores,
+          rewriteScore: rewriteAnalysis.scores,
+          improvement: evaluation.improvement,
+          signals: evaluation.signals,
+        },
         meta,
       };
 
@@ -239,6 +234,9 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         latencyMs: meta.latencyMs,
         providerMode,
         providerModel: providerConfig.model,
+        evaluationStatus: evaluation.improvement.status,
+        overallDelta: evaluation.improvement.overallDelta,
+        alreadyStrong: evaluation.improvement.status === 'already_strong',
       });
       return response;
     } catch (error) {

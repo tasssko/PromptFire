@@ -31,12 +31,31 @@ export class MockRewriteEngine implements RewriteEngine {
         : undefined,
     ].filter(Boolean);
 
+    const marketerDirectives =
+      input.role === 'marketer'
+        ? [
+            input.analysis?.detectedIssueCodes.includes('AUDIENCE_MISSING')
+              ? 'Define the exact audience, for CTOs or IT directors with a concrete business context.'
+              : 'Preserve the existing audience and sharpen specificity without broadening it.',
+            input.analysis?.detectedIssueCodes.includes('GENERIC_OUTPUT_RISK_HIGH')
+              ? 'Lead with operational tension such as audit pressure, identity sprawl, or admin overhead; avoid cyber-fear tropes.'
+              : undefined,
+            'Use a specific lead angle in the opening, not category-generic framing.',
+            'Include one specific proof point and one measurable outcome requirement.',
+            input.analysis?.detectedIssueCodes.includes('EXCLUSIONS_MISSING')
+              ? 'Avoid generic value-prop phrasing such as seamless, robust, and powerful.'
+              : undefined,
+            'Prefer differentiated positioning over expanding generic security/compliance value props.',
+          ].filter(Boolean)
+        : [];
+
     const rewrittenPrompt = [
       `Role: ${input.role}.`,
       `Mode: ${input.mode}.`,
       input.prompt.trim(),
       modeInstruction(input.mode),
       ...constraints,
+      ...marketerDirectives,
     ].join(' ');
 
     return {

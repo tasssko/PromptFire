@@ -4,6 +4,22 @@ import { fixtures, modes, roles } from './config';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
 
+function recommendation(status: AnalyzeAndRewriteResponse['evaluation']['improvement']['status']): string {
+  switch (status) {
+    case 'material_improvement':
+      return 'Material improvement: use the rewritten prompt';
+    case 'minor_improvement':
+      return 'Minor improvement: rewrite is slightly tighter';
+    case 'already_strong':
+      return 'Already strong: your original prompt is already well scoped';
+    case 'possible_regression':
+      return 'Possible regression: rewrite may have removed useful specificity';
+    case 'no_significant_change':
+    default:
+      return 'No significant change: rewrite mostly rephrases the original';
+  }
+}
+
 export function App() {
   const [prompt, setPrompt] = useState(fixtures.marketer);
   const [role, setRole] = useState<Role>('marketer');
@@ -46,7 +62,7 @@ export function App() {
   return (
     <main className="page">
       <section className="panel">
-        <h1>PromptFire v0.1</h1>
+        <h1>PromptFire v0.4</h1>
         <p>Analyze and rewrite prompts with deterministic heuristics and a mock rewrite engine.</p>
 
         <form onSubmit={handleSubmit} className="form">
@@ -114,6 +130,30 @@ export function App() {
           <button onClick={() => navigator.clipboard.writeText(result.rewrite.rewrittenPrompt)} type="button">
             Copy rewritten prompt
           </button>
+
+          <h2>Evaluation</h2>
+          <p>
+            Status: <strong>{result.evaluation.improvement.status}</strong>
+          </p>
+          <p>
+            Overall Delta: <code>{result.evaluation.improvement.overallDelta}</code>
+          </p>
+          <p>{recommendation(result.evaluation.improvement.status)}</p>
+          <p>Signals: {result.evaluation.signals.length > 0 ? result.evaluation.signals.join(', ') : 'none'}</p>
+
+          <h3>Score Comparison</h3>
+          <p>
+            Original scope: <code>{result.evaluation.originalScore.scope}</code> | Rewrite scope:{' '}
+            <code>{result.evaluation.rewriteScore.scope}</code>
+          </p>
+          <p>
+            Original contrast: <code>{result.evaluation.originalScore.contrast}</code> | Rewrite contrast:{' '}
+            <code>{result.evaluation.rewriteScore.contrast}</code>
+          </p>
+          <p>
+            Original clarity: <code>{result.evaluation.originalScore.clarity}</code> | Rewrite clarity:{' '}
+            <code>{result.evaluation.rewriteScore.clarity}</code>
+          </p>
 
           <h3>Trace</h3>
           <p>

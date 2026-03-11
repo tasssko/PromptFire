@@ -32,7 +32,7 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['access-control-allow-origin']).toBe('*');
     expect(body.status).toBe('ok');
-    expect(body.meta.version).toBe('0.3');
+    expect(body.meta.version).toBe('0.4');
     expect(typeof body.meta.requestId).toBe('string');
     expect(typeof body.meta.latencyMs).toBe('number');
     expect(['mock', 'real']).toContain(body.meta.providerMode);
@@ -58,11 +58,13 @@ describe('API vertical slice', () => {
     expect(body.rewrite.role).toBe('marketer');
     expect(body.rewrite.mode).toBe('high_contrast');
     expect(typeof body.rewrite.explanation).toBe('string');
-    expect(body.rewriteScore).toBeTruthy();
-    expect(body.improvement).toBeTruthy();
-    expect(typeof body.improvement.overallDelta).toBe('number');
+    expect(body.evaluation).toBeTruthy();
+    expect(body.evaluation.originalScore).toEqual(body.analysis.scores);
+    expect(body.evaluation.rewriteScore).toBeTruthy();
+    expect(body.evaluation.improvement).toBeTruthy();
+    expect(typeof body.evaluation.improvement.overallDelta).toBe('number');
     expect(Array.isArray(body.analysis.detectedIssueCodes)).toBe(true);
-    expect(body.meta.version).toBe('0.3');
+    expect(body.meta.version).toBe('0.4');
     expect(body.meta.providerMode).toBe('mock');
   });
 
@@ -78,7 +80,7 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(400);
     expect(body.error.code).toBe('INVALID_REQUEST');
     expect(response.headers['access-control-allow-origin']).toBe('*');
-    expect(body.meta.version).toBe('0.3');
+    expect(body.meta.version).toBe('0.4');
   });
 
   it('returns PROVIDER_NOT_CONFIGURED in real mode without required vars', async () => {
@@ -145,10 +147,67 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(body.rewrite.rewrittenPrompt).toContain('Node.js Lambda webhook');
     expect(body.rewrite.explanation).toBeTruthy();
-    expect(body.rewriteScore.scope).toBeGreaterThanOrEqual(0);
-    expect(body.improvement.status).toBeTruthy();
+    expect(body.evaluation.rewriteScore.scope).toBeGreaterThanOrEqual(0);
+    expect(body.evaluation.improvement.status).toBeTruthy();
     expect(body.meta.providerMode).toBe('real');
     expect(body.meta.providerModel).toBe('gpt-4o-mini');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps IAM marketer regression fixed in analyze-and-rewrite', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Develop targeted landing page copy for our Identity and Access Management (IAM) service, specifically aimed at IT decision-makers in mid-sized enterprises. Emphasize the distinct advantages of our solution, including robust security features, compliance assistance, and seamless integration processes. Incorporate specific customer testimonials and quantifiable results to enhance credibility and demonstrate effectiveness.',
+        role: 'marketer',
+        mode: 'high_contrast',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.analysis.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
+    expect(body.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(body.analysis.detectedIssueCodes).not.toContain('TASK_OVERLOADED');
+    expect(body.analysis.detectedIssueCodes).toContain('EXCLUSIONS_MISSING');
+    expect(body.rewrite.rewrittenPrompt).toContain('IT decision-makers in mid-sized enterprises');
+    expect(body.rewrite.rewrittenPrompt).toContain('Lead with operational tension');
+  });
+
+  it('does not lower contrast for generic IAM prompt after high_contrast rewrite when audience+tension+proof are added', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write landing page copy for our IAM service.',
+        role: 'marketer',
+        mode: 'high_contrast',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+
+    const originalContrast = body.evaluation.originalScore.contrast;
+    const rewriteContrast = body.evaluation.rewriteScore.contrast;
+    const rewriteText = String(body.rewrite.rewrittenPrompt).toLowerCase();
+    const hasAudience = /\bfor ctos\b|\bfor it directors\b|\bfor it decision-makers\b/.test(rewriteText);
+    const hasTension = /\baudit pressure\b|\bidentity sprawl\b|\badmin overhead\b|\boperational tension\b/.test(
+      rewriteText,
+    );
+    const hasProof = /\bproof point\b|\bmeasurable outcome\b|\bquantifiable\b/.test(rewriteText);
+    const clearlyMoreGeneric = /\bgeneric copy|vague|general audience|broad messaging\b/.test(rewriteText);
+
+    if (hasAudience && hasTension && hasProof && !clearlyMoreGeneric) {
+      expect(rewriteContrast).toBeGreaterThanOrEqual(originalContrast);
+    }
   });
 });

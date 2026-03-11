@@ -25,7 +25,7 @@ describe('shared contracts', () => {
     expect(parsed.success).toBe(false);
   });
 
-  it('validates analyze-and-rewrite response with rewrite scoring fields', () => {
+  it('validates analyze-and-rewrite response with evaluation block', () => {
     const parsed = AnalyzeAndRewriteResponseSchema.safeParse({
       id: 'par_test',
       analysis: {
@@ -47,27 +47,38 @@ describe('shared contracts', () => {
         mode: 'balanced',
         rewrittenPrompt: 'Rewrite',
       },
-      rewriteScore: {
-        scope: 7,
-        contrast: 7,
-        clarity: 7,
-        constraintQuality: 7,
-        genericOutputRisk: 3,
-        tokenWasteRisk: 3,
-      },
-      improvement: {
-        status: 'minor_improvement',
-        scoreDeltas: {
-          scope: 1,
-          contrast: 1,
-          clarity: 0,
-          constraintQuality: 1,
-          genericOutputRisk: -1,
-          tokenWasteRisk: 0,
+      evaluation: {
+        originalScore: {
+          scope: 6,
+          contrast: 6,
+          clarity: 7,
+          constraintQuality: 6,
+          genericOutputRisk: 4,
+          tokenWasteRisk: 3,
         },
-        overallDelta: 2.75,
-        expectedUsefulness: 'slightly_higher',
-        notes: ['Improved'],
+        rewriteScore: {
+          scope: 7,
+          contrast: 7,
+          clarity: 7,
+          constraintQuality: 7,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 3,
+        },
+        improvement: {
+          status: 'minor_improvement',
+          scoreDeltas: {
+            scope: 1,
+            contrast: 1,
+            clarity: 0,
+            constraintQuality: 1,
+            genericOutputRisk: -1,
+            tokenWasteRisk: 0,
+          },
+          overallDelta: 2.75,
+          expectedUsefulness: 'slightly_higher',
+          notes: ['Improved'],
+        },
+        signals: [],
       },
       meta: {
         version: API_VERSION,

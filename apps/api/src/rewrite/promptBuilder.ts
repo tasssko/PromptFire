@@ -5,7 +5,7 @@ function roleGuidance(role: RewriteInput['role']): string {
     case 'developer':
       return 'Focus on implementation boundaries, runtime constraints, failure handling, and explicit exclusions.';
     case 'marketer':
-      return 'Focus on audience clarity, positioning, proof, and avoiding generic buzzwords.';
+      return 'Focus on audience clarity, positioning, proof specificity, and avoiding generic buzzwords. Preserve valid audience details when present, prioritize operational tension over cyber fear tropes, add a specific lead angle, and avoid synonym-only rewrites.';
     case 'general':
     default:
       return 'Focus on clarity, concrete scope, and practical constraints without domain assumptions.';
@@ -17,7 +17,7 @@ function modeGuidance(mode: RewriteInput['mode']): string {
     case 'tight_scope':
       return 'Narrow to one clear deliverable and reduce ambiguity aggressively.';
     case 'high_contrast':
-      return 'Increase differentiation, tension, and exclusion criteria.';
+      return 'Increase differentiation, add a specific lead angle and operational tension, require proof specificity, and include explicit exclusions for generic phrasing.';
     case 'low_token_cost':
       return 'Keep output concise while preserving essential constraints.';
     case 'balanced':

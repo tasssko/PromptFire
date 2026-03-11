@@ -105,7 +105,7 @@ describe('evaluateRewrite', () => {
     });
 
     expect(evaluation.improvement.status).toBe('possible_regression');
-    expect(evaluation.issues.some((issue) => issue.code === 'REWRITE_POSSIBLE_REGRESSION')).toBe(true);
+    expect(evaluation.signals).toContain('REWRITE_POSSIBLE_REGRESSION');
     expect(evaluation.improvement.expectedUsefulness).toBe('lower');
   });
 });
