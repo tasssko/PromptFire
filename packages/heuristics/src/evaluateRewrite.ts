@@ -35,7 +35,9 @@ function hasAudience(prompt: string, context?: Record<string, unknown>): boolean
 
 function hasConstraints(prompt: string, context?: Record<string, unknown>): boolean {
   const hasContextConstraints = Boolean(context?.mustInclude) || Boolean(context?.systemGoals);
-  const hasPromptConstraints = /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt);
+  const hasPromptConstraints =
+    /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
+    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt);
   return hasContextConstraints || hasPromptConstraints;
 }
 

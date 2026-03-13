@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const API_VERSION = '0.4';
+export const V2_API_VERSION = '2';
 
 export const RoleSchema = z.enum(['general', 'developer', 'marketer']);
 export type Role = z.infer<typeof RoleSchema>;
@@ -48,6 +49,14 @@ export const AnalyzeAndRewriteRequestSchema = z.object({
   preferences: PreferencesSchema.partial().optional(),
 });
 export type AnalyzeAndRewriteRequest = z.infer<typeof AnalyzeAndRewriteRequestSchema>;
+
+export const RewritePreferenceSchema = z.enum(['auto', 'force', 'suppress']);
+export type RewritePreference = z.infer<typeof RewritePreferenceSchema>;
+
+export const AnalyzeAndRewriteV2RequestSchema = AnalyzeAndRewriteRequestSchema.extend({
+  rewritePreference: RewritePreferenceSchema.default('auto'),
+});
+export type AnalyzeAndRewriteV2Request = z.infer<typeof AnalyzeAndRewriteV2RequestSchema>;
 
 export const IssueSchema = z.object({
   code: IssueCodeSchema,
@@ -134,6 +143,15 @@ export const MetaSchema = z.object({
 });
 export type Meta = z.infer<typeof MetaSchema>;
 
+export const MetaV2Schema = z.object({
+  version: z.literal(V2_API_VERSION),
+  requestId: z.string().min(1),
+  latencyMs: z.number().int().nonnegative(),
+  providerMode: ProviderModeSchema,
+  providerModel: z.string().min(1).optional(),
+});
+export type MetaV2 = z.infer<typeof MetaV2Schema>;
+
 export const HealthResponseSchema = z.object({
   status: z.literal('ok'),
   meta: MetaSchema,
@@ -148,6 +166,58 @@ export const AnalyzeAndRewriteResponseSchema = z.object({
   meta: MetaSchema,
 });
 export type AnalyzeAndRewriteResponse = z.infer<typeof AnalyzeAndRewriteResponseSchema>;
+
+export const ScoreBandSchema = z.enum(['poor', 'weak', 'usable', 'strong', 'excellent']);
+export type ScoreBand = z.infer<typeof ScoreBandSchema>;
+
+export const RewriteRecommendationSchema = z.enum([
+  'rewrite_recommended',
+  'rewrite_optional',
+  'no_rewrite_needed',
+]);
+export type RewriteRecommendation = z.infer<typeof RewriteRecommendationSchema>;
+
+export const ExpectedImprovementLevelSchema = z.enum(['low', 'high']);
+export type ExpectedImprovementLevel = z.infer<typeof ExpectedImprovementLevelSchema>;
+
+export const GatingSchema = z.object({
+  rewritePreference: RewritePreferenceSchema,
+  expectedImprovement: ExpectedImprovementLevelSchema,
+  majorBlockingIssues: z.boolean(),
+});
+export type Gating = z.infer<typeof GatingSchema>;
+
+export const EvaluationV2Schema = z.object({
+  status: ImprovementStatusSchema,
+  overallDelta: z.number(),
+  signals: z.array(z.string()).max(12),
+  scoreComparison: z.object({
+    original: z.object({
+      scope: score,
+      contrast: score,
+      clarity: score,
+    }),
+    rewrite: z.object({
+      scope: score,
+      contrast: score,
+      clarity: score,
+    }),
+  }),
+});
+export type EvaluationV2 = z.infer<typeof EvaluationV2Schema>;
+
+export const AnalyzeAndRewriteV2ResponseSchema = z.object({
+  id: z.string().startsWith('par_'),
+  overallScore: z.number().int().min(0).max(100),
+  scoreBand: ScoreBandSchema,
+  rewriteRecommendation: RewriteRecommendationSchema,
+  analysis: AnalysisSchema,
+  gating: GatingSchema,
+  rewrite: RewriteSchema.nullable(),
+  evaluation: EvaluationV2Schema.nullable(),
+  meta: MetaV2Schema,
+});
+export type AnalyzeAndRewriteV2Response = z.infer<typeof AnalyzeAndRewriteV2ResponseSchema>;
 
 export const ErrorCodeSchema = z.enum([
   'INVALID_REQUEST',
@@ -169,7 +239,7 @@ export const ErrorResponseSchema = z.object({
     message: z.string().min(1),
     details: z.record(z.string(), z.unknown()).optional(),
   }),
-  meta: MetaSchema,
+  meta: z.union([MetaSchema, MetaV2Schema]),
 });
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 

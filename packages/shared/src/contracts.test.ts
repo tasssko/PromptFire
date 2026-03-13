@@ -3,6 +3,9 @@ import {
   API_VERSION,
   AnalyzeAndRewriteRequestSchema,
   AnalyzeAndRewriteResponseSchema,
+  AnalyzeAndRewriteV2RequestSchema,
+  AnalyzeAndRewriteV2ResponseSchema,
+  V2_API_VERSION,
   normalizePreferences,
 } from './contracts';
 
@@ -83,6 +86,57 @@ describe('shared contracts', () => {
       meta: {
         version: API_VERSION,
         requestId: 'req_1',
+        latencyMs: 0,
+        providerMode: 'mock',
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it('defaults v2 rewritePreference to auto', () => {
+    const parsed = AnalyzeAndRewriteV2RequestSchema.safeParse({
+      prompt: 'Write a blog post',
+      role: 'general',
+      mode: 'balanced',
+    });
+
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.rewritePreference).toBe('auto');
+    }
+  });
+
+  it('validates v2 analyze-and-rewrite response with nullable rewrite and evaluation', () => {
+    const parsed = AnalyzeAndRewriteV2ResponseSchema.safeParse({
+      id: 'par_test_v2',
+      overallScore: 86,
+      scoreBand: 'strong',
+      rewriteRecommendation: 'no_rewrite_needed',
+      analysis: {
+        scores: {
+          scope: 8,
+          contrast: 7,
+          clarity: 8,
+          constraintQuality: 8,
+          genericOutputRisk: 2,
+          tokenWasteRisk: 2,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: ['Low expected improvement.'],
+        summary: 'Strong prompt.',
+      },
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+        majorBlockingIssues: false,
+      },
+      rewrite: null,
+      evaluation: null,
+      meta: {
+        version: V2_API_VERSION,
+        requestId: 'req_v2',
         latencyMs: 0,
         providerMode: 'mock',
       },

@@ -108,4 +108,35 @@ describe('evaluateRewrite', () => {
     expect(evaluation.signals).toContain('REWRITE_POSSIBLE_REGRESSION');
     expect(evaluation.improvement.expectedUsefulness).toBe('lower');
   });
+
+  it('treats the microservices calibration prompt as already strong when rewrite adds little', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 8,
+      contrast: 8,
+      clarity: 8,
+      constraintQuality: 7,
+      genericOutputRisk: 3,
+      tokenWasteRisk: 2,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 8,
+      contrast: 8,
+      clarity: 8,
+      constraintQuality: 7,
+      genericOutputRisk: 3,
+      tokenWasteRisk: 2,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt:
+        'Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.',
+      rewrittenPrompt:
+        'Write a grounded blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create operational overhead. Use one startup example and one mature-organization example, and avoid hype.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).toBe('already_strong');
+    expect(evaluation.signals).toContain('LOW_EXPECTED_IMPROVEMENT');
+  });
 });

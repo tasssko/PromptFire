@@ -60,6 +60,20 @@ describe('analyzePrompt', () => {
     expect(result.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
   });
 
+  it('treats natural-language example and framing requirements as real constraints', () => {
+    const result = analyzePrompt({
+      prompt:
+        'Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.',
+      role: 'general',
+      mode: 'balanced',
+    });
+
+    expect(result.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(result.scores.constraintQuality).toBeGreaterThanOrEqual(7);
+    expect(result.scores.genericOutputRisk).toBeLessThanOrEqual(4);
+    expect(result.scores.tokenWasteRisk).toBeLessThanOrEqual(4);
+  });
+
   it('keeps IAM landing-page regression behavior stable', () => {
     const result = analyzePrompt({
       prompt:

@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { API_VERSION, type ErrorCode, type ErrorResponse, type Meta, type ProviderMode } from '@promptfire/shared';
+import {
+  API_VERSION,
+  V2_API_VERSION,
+  type ErrorCode,
+  type ErrorResponse,
+  type Meta,
+  type MetaV2,
+  type ProviderMode,
+} from '@promptfire/shared';
 
 export interface HttpRequest {
   method: string;
@@ -63,6 +71,21 @@ export function createMeta(
   };
 }
 
+export function createMetaV2(
+  requestId: string,
+  startedAtMs: number,
+  providerMode: ProviderMode,
+  providerModel?: string,
+): MetaV2 {
+  return {
+    version: V2_API_VERSION,
+    requestId,
+    latencyMs: Math.max(0, Math.round(performance.now() - startedAtMs)),
+    providerMode,
+    providerModel,
+  };
+}
+
 export function jsonResponse(
   statusCode: number,
   payload: unknown,
@@ -95,7 +118,7 @@ export function errorResponse(
   statusCode: number,
   code: ErrorCode,
   message: string,
-  meta: Meta,
+  meta: Meta | MetaV2,
   requestHeaders?: Record<string, string>,
   details?: Record<string, unknown>,
 ): HttpResponse {
@@ -105,7 +128,7 @@ export function errorResponse(
       message,
       details,
     },
-    meta,
+    meta: meta as ErrorResponse['meta'],
   };
 
   return jsonResponse(statusCode, payload, requestHeaders);

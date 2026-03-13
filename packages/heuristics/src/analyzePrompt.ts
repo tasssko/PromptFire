@@ -148,7 +148,9 @@ function hasAudience(prompt: string, context?: Record<string, unknown>) {
 
 function hasConstraints(prompt: string, context?: Record<string, unknown>) {
   const hasContextConstraints = Boolean(context?.mustInclude) || Boolean(context?.systemGoals);
-  const hasPromptConstraints = /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt);
+  const hasPromptConstraints =
+    /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
+    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt);
   return hasContextConstraints || hasPromptConstraints;
 }
 
@@ -159,9 +161,11 @@ function hasExclusions(prompt: string, context?: Record<string, unknown>) {
 }
 
 function isTaskOverloaded(prompt: string) {
-  const verbCount = (prompt.match(/\b(build|write|create|design|implement|analyze|optimize|draft)\b/gi) ?? []).length;
+  const directiveVerbCount =
+    (prompt.match(/(?:^|[.;]\s+|\bthen\b\s+|\band\b\s+)(build|write|create|design|implement|analyze|optimize|draft)\b/gi) ?? [])
+      .length;
   const listSeparators = (prompt.match(/,| and |;| then /gi) ?? []).length;
-  return verbCount >= 3 || listSeparators >= 4;
+  return directiveVerbCount >= 3 || (directiveVerbCount >= 2 && listSeparators >= 4);
 }
 
 function isMarketerTaskOverloaded(prompt: string): boolean {
@@ -232,7 +236,7 @@ function hasStructureOrScopeConstraints(prompt: string, context?: Record<string,
     return true;
   }
 
-  return /\b(must|should|exactly|only|at least|at most|include one|include two|limit|headline|opening|section|cta|call to action)\b/i.test(
+  return /\b(must|should|exactly|only|at least|at most|include one|include two|use one|use two|limit|headline|opening|section|cta|call to action|keep the tone|focus on|rather than|lead with)\b/i.test(
     prompt,
   );
 }
@@ -293,7 +297,10 @@ function hasWeakConstraints(prompt: string, context?: Record<string, unknown>): 
     return false;
   }
 
-  const specific = /\b(one|two|\d+|at least|exactly|measurable|quantifiable|avoid|do not)\b/i.test(prompt);
+  const specific =
+    /\b(one|two|\d+|at least|exactly|measurable|quantifiable|avoid|do not|keep the tone|rather than|focus on)\b/i.test(
+      prompt,
+    );
   const highDifferentiation = /\b(audit|sprawl|overhead|regulatory|governance)\b/i.test(prompt);
   return !specific && !highDifferentiation;
 }

@@ -10,6 +10,9 @@ afterEach(() => {
 });
 
 describe('API vertical slice', () => {
+  const strongV2Prompt =
+    'Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.';
+
   it('handles CORS preflight and returns allow headers', async () => {
     const response = await handleHttpRequest({
       method: 'OPTIONS',
@@ -36,6 +39,15 @@ describe('API vertical slice', () => {
     expect(typeof body.meta.requestId).toBe('string');
     expect(typeof body.meta.latencyMs).toBe('number');
     expect(['mock', 'real']).toContain(body.meta.providerMode);
+  });
+
+  it('returns v2 health with required meta block', async () => {
+    const response = await handleHttpRequest({ method: 'GET', path: '/v2/health' });
+    const body = JSON.parse(response.body);
+
+    expect(response.statusCode).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.meta.version).toBe('2');
   });
 
   it('validates analyze-and-rewrite response shape and role/mode handling', async () => {
@@ -209,5 +221,102 @@ describe('API vertical slice', () => {
     if (hasAudience && hasTension && hasProof && !clearlyMoreGeneric) {
       expect(rewriteContrast).toBeGreaterThanOrEqual(originalContrast);
     }
+  });
+
+  it('returns v2 strong prompt without rewrite by default', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: strongV2Prompt,
+        role: 'marketer',
+        mode: 'high_contrast',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.meta.version).toBe('2');
+    expect(body.overallScore).toBeGreaterThanOrEqual(80);
+    expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+    expect(body.gating.expectedImprovement).toBe('low');
+    expect(body.gating.majorBlockingIssues).toBe(false);
+    expect(body.rewrite).toBeNull();
+    expect(body.evaluation).toBeNull();
+  });
+
+  it('returns v2 forced rewrite for strong prompt', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: strongV2Prompt,
+        role: 'marketer',
+        mode: 'high_contrast',
+        rewritePreference: 'force',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.rewriteRecommendation).toBe('rewrite_optional');
+    expect(body.gating.rewritePreference).toBe('force');
+    expect(body.rewrite).toBeTruthy();
+    expect(body.evaluation).toBeTruthy();
+  });
+
+  it('treats the microservices calibration prompt as no-rewrite-needed in v2 auto mode', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(body.gating.majorBlockingIssues).toBe(false);
+    expect(body.gating.expectedImprovement).toBe('low');
+    expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+    expect(body.rewrite).toBeNull();
+    expect(body.evaluation).toBeNull();
+  });
+
+  it('returns v2 suppressed response without rewrite for weak prompt', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write landing page copy for our IAM service.',
+        role: 'marketer',
+        mode: 'high_contrast',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.gating.rewritePreference).toBe('suppress');
+    expect(body.rewrite).toBeNull();
+    expect(body.evaluation).toBeNull();
   });
 });
