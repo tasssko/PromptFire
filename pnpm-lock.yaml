@@ -29,6 +29,9 @@ importers:
       '@promptfire/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      dotenv:
+        specifier: ^16.4.7
+        version: 16.6.1
     devDependencies:
       '@types/node':
         specifier: ^22.10.2
@@ -89,6 +92,9 @@ importers:
         specifier: ^2.38.7
         version: 2.49.6(@aws-cdk/cli-plugin-contract@2.182.1)(@aws-sdk/client-sso-oidc@3.699.0(@aws-sdk/client-sts@3.699.0(aws-crt@1.29.1))(aws-crt@1.29.1))(@types/react@18.3.28)(aws-crt@1.29.1)
     devDependencies:
+      '@types/dotenv-flow':
+        specifier: ^3.3.3
+        version: 3.3.3
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.15
@@ -2039,6 +2045,9 @@ packages:
 
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
+
+  '@types/dotenv-flow@3.3.3':
+    resolution: {integrity: sha512-aJjBsKw4bfGjvaRwrxBtEOfYZxCAq+LiFTpZ4DGTEK2b9eLVt/IAClapSxMfgV4Mi/2bIBKKjoTCO0lOh4ACLg==}
 
   '@types/estree@1.0.8':
     resolution: {integrity: sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==}
@@ -7541,6 +7550,8 @@ snapshots:
   '@types/babel__traverse@7.28.0':
     dependencies:
       '@babel/types': 7.29.0
+
+  '@types/dotenv-flow@3.3.3': {}
 
   '@types/estree@1.0.8': {}
 
