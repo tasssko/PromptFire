@@ -5,7 +5,7 @@ function roleGuidance(role: RewriteInput['role']): string {
     case 'developer':
       return 'Focus on implementation boundaries, runtime constraints, failure handling, and explicit exclusions.';
     case 'marketer':
-      return 'Focus on audience clarity, positioning, and proof specificity. Preserve valid audience details when present, keep the same deliverable, and replace abstract phrasing with concrete buyer context, proof requirements, and exclusions.';
+      return 'Focus on audience clarity and concrete positioning detail. Preserve valid audience details when present, keep the same deliverable, and replace abstract phrasing with grounded context and explicit exclusions.';
     case 'general':
     default:
       return 'Focus on clarity, concrete scope, and practical constraints without domain assumptions.';
@@ -17,12 +17,12 @@ function modeGuidance(mode: RewriteInput['mode']): string {
     case 'tight_scope':
       return 'Narrow to one clear deliverable and reduce ambiguity aggressively.';
     case 'high_contrast':
-      return 'Increase differentiation through concrete context, one specific proof requirement, and a concrete exclusion; do not add scorer-facing rubric language.';
+      return 'Increase differentiation through grounded context or comparison when supported by the prompt; if not supported, keep the rewrite minimal and concrete.';
     case 'low_token_cost':
       return 'Keep output concise while preserving essential constraints.';
     case 'balanced':
     default:
-      return 'Improve task boundedness with concrete audience, structure, and exclusions while keeping prompt practical.';
+      return 'Improve task boundedness with concrete audience, structure, and exclusions, and prefer direct prompt fills over meta-instructions.';
   }
 }
 

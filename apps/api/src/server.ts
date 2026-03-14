@@ -405,6 +405,15 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const input = parsed.data;
     const preferences = normalizePreferences(input.preferences);
     const analysis = analyzePrompt({ ...input, preferences });
+    const overallScore = computeOverallScore(withV2Scores(analysis, input.prompt, input.context).scores);
+    const scoreBand = scoreBandFromOverallScore(overallScore);
+    const improvementSuggestions = generateImprovementSuggestions({
+      input,
+      analysis,
+      overallScore,
+      scoreBand,
+      rewriteRecommendation: 'rewrite_recommended',
+    });
 
     try {
       const rewriteEngine = selectRewriteEngine(providerConfig);
@@ -415,6 +424,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         context: input.context,
         preferences,
         analysis,
+        improvementSuggestions,
       });
 
       const rewriteAnalysis = analyzePrompt({
@@ -645,6 +655,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           context: input.context,
           preferences,
           analysis: originalAnalysis,
+          improvementSuggestions,
         });
 
         const rewriteAnalysis = withV2Scores(

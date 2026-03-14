@@ -55,7 +55,7 @@ describe('buildRewriteInstructions', () => {
 
     expect(instructions.system).toContain('Preserve valid audience details when present');
     expect(instructions.system).toContain('keep the same deliverable');
-    expect(instructions.system).toContain('proof specificity');
-    expect(instructions.system).toContain('do not add scorer-facing rubric language');
+    expect(instructions.system).toContain('grounded context');
+    expect(instructions.system).toContain('keep the rewrite minimal and concrete');
   });
 });

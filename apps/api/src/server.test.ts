@@ -190,7 +190,8 @@ describe('API vertical slice', () => {
     expect(body.analysis.detectedIssueCodes).not.toContain('TASK_OVERLOADED');
     expect(body.analysis.detectedIssueCodes).toContain('EXCLUSIONS_MISSING');
     expect(body.rewrite.rewrittenPrompt).toContain('IT decision-makers in mid-sized enterprises');
-    expect(body.rewrite.rewrittenPrompt).toContain('Anchor the opening in one concrete operational condition');
+    expect(body.rewrite.rewrittenPrompt).toContain('Include one clear comparison to an alternative approach.');
+    expect(body.rewrite.rewrittenPrompt).toContain('Avoid vendor-marketing language and unsupported superlatives.');
   });
 
   it('does not lower contrast for generic IAM prompt after high_contrast rewrite when audience+tension+proof are added', async () => {
@@ -249,8 +250,8 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(rewrittenPrompt).toContain('landing page copy');
     expect(rewrittenPrompt).toContain('for IT decision-makers in mid-sized enterprises');
-    expect(rewrittenPrompt).toMatch(/\boperational condition\b|\baudit pressure\b|\bidentity sprawl\b/i);
-    expect(rewrittenPrompt).toMatch(/\bproof artifact\b|\bmetric\b|\bBan generic claims\b/i);
+    expect(rewrittenPrompt).toMatch(/\bcomparison\b|\balternative approach\b/i);
+    expect(rewrittenPrompt).toMatch(/\bavoid generic marketing claims\b|\bunsupported superlatives\b/i);
     expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
   });
 
@@ -326,7 +327,7 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(rewrittenPrompt).toContain('landing page copy');
     expect(rewrittenPrompt).toContain('for CTOs at SaaS companies');
-    expect(rewrittenPrompt).toMatch(/\bproof artifact\b|\bmetric\b|\boperational condition\b/i);
+    expect(rewrittenPrompt).toMatch(/\bcomparison\b|\balternative approach\b/i);
     expect(rewrittenPrompt).not.toMatch(/\bfor CEOs\b|\bfor developers\b|\bblog post\b|\bemail\b|\bad campaign\b/i);
     expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
     expect(body.evaluation.rewriteScore.scope).toBeGreaterThanOrEqual(body.evaluation.originalScore.scope);

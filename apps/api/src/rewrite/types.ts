@@ -1,4 +1,12 @@
-import type { Analysis, Mode, Preferences, PromptContext, Rewrite, Role } from '@promptfire/shared';
+import type {
+  Analysis,
+  ImprovementSuggestion,
+  Mode,
+  Preferences,
+  PromptContext,
+  Rewrite,
+  Role,
+} from '@promptfire/shared';
 
 export interface RewriteInput {
   prompt: string;
@@ -7,6 +15,7 @@ export interface RewriteInput {
   context?: PromptContext;
   preferences: Preferences;
   analysis?: Analysis;
+  improvementSuggestions?: ImprovementSuggestion[];
 }
 
 export interface RewriteEngine {

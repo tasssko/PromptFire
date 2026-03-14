@@ -31,13 +31,19 @@ const OVERALL_DELTA_WEIGHTS = {
 const RUBRIC_ECHO_PATTERNS: RegExp[] = [
   /\bimprove (?:clarity|contrast|scope)\b/i,
   /\badd (?:non[-\s]?negotiable )?constraints?\b/i,
-  /\binclude explicit exclusions?\b/i,
+  /\badd (?:one|two|\d+)\s+concrete requirement\b/i,
+  /\badd (?:one|two|\d+)\s+concrete exclusion\b/i,
+  /\binclude (?:explicit )?exclusions?\b/i,
   /\blead with operational tension\b/i,
+  /\bemphasize (?:audience|operational)?\s*tension\b/i,
   /\buse a specific lead angle\b/i,
   /\binclude (?:one )?(?:specific )?proof point\b/i,
-  /\bmeasurable outcome\b/i,
+  /\bconcrete proof artifact\b/i,
+  /\bdifferentiating constraints?\b/i,
+  /\b(?:include|add|require) (?:a )?measurable outcome\b/i,
   /\bdifferentiated positioning\b/i,
   /\bavoid generic buzzwords\b/i,
+  /\bkeep the same deliverable and audience\b/i,
 ];
 
 const FRAMING_IMPORT_PATTERNS: RegExp[] = [
@@ -120,8 +126,29 @@ function hasOutputStructure(prompt: string): boolean {
   return /\b(section|outline|template|format|table|bullet|step[-\s]?by[-\s]?step|headings?)\b/i.test(prompt);
 }
 
+function hasConcreteOutputStructure(prompt: string): boolean {
+  const concreteStructure =
+    /\b(exactly|at least|at most|use)\s+(?:one|two|three|\d+)\s+sections?\b/i.test(prompt) ||
+    /\b(?:section|heading)s?:\s+[a-z]/i.test(prompt) ||
+    /\b(?:three|four|five|\d+)\s+part\b/i.test(prompt);
+  const metaPlaceholder = /\bsection count\b/i.test(prompt) || /\bsuch as\b/i.test(prompt);
+  return concreteStructure && !metaPlaceholder;
+}
+
 function hasExampleOrComparisonFrame(prompt: string): boolean {
   return /\b(example|case study|comparison|compare|versus|vs\.?|trade[-\s]?off)\b/i.test(prompt);
+}
+
+function hasConcreteExampleOrComparisonFrame(prompt: string): boolean {
+  const concreteFrame =
+    /\b(startup|enterprise|customer|case study|real[-\s]?world)\b.{0,40}\b(example|comparison|vs\.?|versus)\b/i.test(
+      prompt,
+    ) ||
+    /\b(include|use)\s+(?:one|two|\d+)\s+(?:startup|enterprise|customer|case study|real[-\s]?world)\s+example\b/i.test(
+      prompt,
+    );
+  const metaPlaceholder = /\bexample count\b/i.test(prompt) || /\bsuch as\b/i.test(prompt);
+  return concreteFrame && !metaPlaceholder;
 }
 
 function hasConcreteExclusion(prompt: string): boolean {
@@ -132,6 +159,28 @@ function hasConcreteExclusion(prompt: string): boolean {
 function hasBoundaryNarrowing(prompt: string): boolean {
   return /\b(exactly|at least|at most|one|two|\d+)\b/i.test(prompt) &&
     /\b(example|section|deliverable|output|audience|comparison|constraint)\b/i.test(prompt);
+}
+
+function hasConcreteBoundaryNarrowing(prompt: string): boolean {
+  const concreteBoundary =
+    /\b(exactly|at least|at most|\d+)\b.{0,25}\b(sections?|examples?|comparisons?|steps?)\b/i.test(
+      prompt,
+    ) ||
+    /\b(exactly|at least|at most|one|two|three|\d+)\b.{0,25}\b(startup|enterprise|customer|real[-\s]?world)\b.{0,25}\bexample\b/i.test(
+      prompt,
+    );
+  const metaPlaceholder =
+    /\b(add|include|define|specify|require)\b.{0,60}\b(?:concrete|explicit)\b.{0,40}\b(requirement|constraint|exclusion|audience|proof)\b/i.test(
+      prompt,
+    ) ||
+    /\bsuch as\b/i.test(prompt);
+  return concreteBoundary && !metaPlaceholder;
+}
+
+function hasOperationalContext(prompt: string): boolean {
+  return /\b(business|technical|production|latency|cost|compliance|regulated|smb|enterprise|migration|deployment)\b/i.test(
+    prompt,
+  );
 }
 
 function countPatternAdds(original: string, rewrite: string, patterns: RegExp[]): number {
@@ -145,40 +194,49 @@ function countConcreteGroundingGains(input: {
 }): number {
   const gains = [
     !hasAudience(input.originalPrompt, input.context) && hasAudience(input.rewrittenPrompt, input.context),
-    !hasOutputStructure(input.originalPrompt) && hasOutputStructure(input.rewrittenPrompt),
-    !hasExampleOrComparisonFrame(input.originalPrompt) && hasExampleOrComparisonFrame(input.rewrittenPrompt),
+    !hasConcreteOutputStructure(input.originalPrompt) && hasConcreteOutputStructure(input.rewrittenPrompt),
+    !hasConcreteExampleOrComparisonFrame(input.originalPrompt) &&
+      hasConcreteExampleOrComparisonFrame(input.rewrittenPrompt),
     !hasConcreteExclusion(input.originalPrompt) && hasConcreteExclusion(input.rewrittenPrompt),
-    !hasBoundaryNarrowing(input.originalPrompt) && hasBoundaryNarrowing(input.rewrittenPrompt),
+    !hasConcreteBoundaryNarrowing(input.originalPrompt) && hasConcreteBoundaryNarrowing(input.rewrittenPrompt),
+    !hasOperationalContext(input.originalPrompt) && hasOperationalContext(input.rewrittenPrompt),
   ];
 
   return gains.filter(Boolean).length;
+}
+
+function getAbstractInstructionCount(input: {
+  originalPrompt: string;
+  rewrittenPrompt: string;
+}): number {
+  return countPatternAdds(input.originalPrompt, input.rewrittenPrompt, RUBRIC_ECHO_PATTERNS);
 }
 
 function rubricEchoRiskLevel(input: {
   originalPrompt: string;
   rewrittenPrompt: string;
   context?: Record<string, unknown>;
-}): 'none' | 'medium' | 'high' {
-  const addedRubricPatterns = countPatternAdds(
-    input.originalPrompt,
-    input.rewrittenPrompt,
-    RUBRIC_ECHO_PATTERNS,
-  );
+}): 'low' | 'medium' | 'high' {
+  const addedRubricPatterns = getAbstractInstructionCount(input);
   const concreteGroundingGains = countConcreteGroundingGains(input);
 
-  if (addedRubricPatterns >= 3 && concreteGroundingGains <= 1) {
+  if (addedRubricPatterns >= 2 && concreteGroundingGains < 2) {
     return 'high';
   }
-  if (addedRubricPatterns >= 2 && concreteGroundingGains <= 1) {
+  if (
+    addedRubricPatterns >= 1 &&
+    concreteGroundingGains >= 1 &&
+    addedRubricPatterns > concreteGroundingGains
+  ) {
     return 'medium';
   }
-  return 'none';
+  return 'low';
 }
 
-function intentDriftRiskLevel(input: {
+function intentPreservationLevel(input: {
   originalPrompt: string;
   rewrittenPrompt: string;
-}): 'none' | 'medium' | 'high' {
+}): 'high' | 'medium' | 'low' {
   const taskTypeChanged = getTaskType(input.originalPrompt) !== getTaskType(input.rewrittenPrompt);
   const originalDeliverable = getPrimaryDeliverable(input.originalPrompt);
   const rewrittenDeliverable = getPrimaryDeliverable(input.rewrittenPrompt);
@@ -193,12 +251,12 @@ function intentDriftRiskLevel(input: {
   );
 
   if (taskTypeChanged || deliverableChanged || importedFramingAnchors >= 3) {
-    return 'high';
+    return 'low';
   }
-  if (importedFramingAnchors >= 2) {
+  if (importedFramingAnchors >= 1) {
     return 'medium';
   }
-  return 'none';
+  return 'high';
 }
 
 function computeScoreDeltas(original: ScoreSet, rewrite: ScoreSet): ScoreDeltas {
@@ -293,22 +351,6 @@ function isParaphraseHeavy(
   );
 }
 
-function statusFromOverallDelta(overallDelta: number): ImprovementStatus {
-  if (overallDelta >= 4) {
-    return 'material_improvement';
-  }
-
-  if (overallDelta >= 1.5) {
-    return 'minor_improvement';
-  }
-
-  if (overallDelta <= -1.5) {
-    return 'possible_regression';
-  }
-
-  return 'no_significant_change';
-}
-
 function expectedUsefulnessFromStatus(status: ImprovementStatus): Improvement['expectedUsefulness'] {
   switch (status) {
     case 'material_improvement':
@@ -326,7 +368,7 @@ function expectedUsefulnessFromStatus(status: ImprovementStatus): Improvement['e
 
 export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOutput {
   const scoreDeltas = computeScoreDeltas(input.originalAnalysis.scores, input.rewriteAnalysis.scores);
-  const rawOverallDelta = computeOverallDelta(scoreDeltas);
+  const overallDelta = computeOverallDelta(scoreDeltas);
   const lowExpectedImprovement = hasLowExpectedImprovement(
     input.originalAnalysis.scores,
     input.originalPrompt,
@@ -335,41 +377,29 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   const originalHighQuality = isOriginalHighQuality(input.originalAnalysis.scores);
   const paraphraseHeavy = isParaphraseHeavy(scoreDeltas, input);
   const rubricEchoRisk = rubricEchoRiskLevel(input);
-  const intentDriftRisk = intentDriftRiskLevel(input);
-  const concreteGroundingGains = countConcreteGroundingGains(input);
+  const intentPreservation = intentPreservationLevel(input);
+  const groundedImprovementCount = countConcreteGroundingGains(input);
+  const abstractInstructionCount = getAbstractInstructionCount(input);
 
-  let adjustedOverallDelta = rawOverallDelta;
-  if (rubricEchoRisk === 'medium') {
-    adjustedOverallDelta -= 1.5;
-  } else if (rubricEchoRisk === 'high') {
-    adjustedOverallDelta -= 3;
-  }
+  const abstractScaffoldingDominates =
+    abstractInstructionCount >= 2 && abstractInstructionCount > groundedImprovementCount;
+  const futureModelScaffolding = abstractInstructionCount >= 2 && groundedImprovementCount === 0;
 
-  if (intentDriftRisk === 'medium') {
-    adjustedOverallDelta -= 1.5;
-  } else if (intentDriftRisk === 'high') {
-    adjustedOverallDelta -= 3;
-  }
-
-  let status = statusFromOverallDelta(adjustedOverallDelta);
-  if (paraphraseHeavy && status === 'minor_improvement') {
+  let status: ImprovementStatus;
+  if (overallDelta <= -1.5 || intentPreservation === 'low') {
+    status = 'possible_regression';
+  } else if (paraphraseHeavy || abstractScaffoldingDominates || futureModelScaffolding) {
     status = 'no_significant_change';
-  }
-
-  if (rubricEchoRisk === 'high' && concreteGroundingGains <= 1) {
-    if (status === 'material_improvement' || status === 'minor_improvement') {
-      status = 'no_significant_change';
-    }
-  } else if (rubricEchoRisk !== 'none' && concreteGroundingGains <= 1 && status === 'material_improvement') {
+  } else if (
+    overallDelta >= 4 &&
+    groundedImprovementCount >= 2 &&
+    rubricEchoRisk !== 'high'
+  ) {
+    status = 'material_improvement';
+  } else if (overallDelta > 0 && groundedImprovementCount >= 1) {
     status = 'minor_improvement';
-  }
-
-  if (intentDriftRisk === 'high') {
-    if (status === 'material_improvement' || status === 'minor_improvement') {
-      status = 'no_significant_change';
-    }
-  } else if (intentDriftRisk === 'medium' && status === 'material_improvement') {
-    status = 'minor_improvement';
+  } else {
+    status = 'no_significant_change';
   }
 
   if (
@@ -387,7 +417,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     notes.push('Original prompt already has strong structure.');
   }
 
-  if (lowExpectedImprovement && originalHighQuality && adjustedOverallDelta <= 1.5) {
+  if (lowExpectedImprovement && originalHighQuality && overallDelta <= 1.5) {
     signals.push('PROMPT_ALREADY_OPTIMIZED');
     notes.push('Further rewriting is unlikely to create material gains.');
   }
@@ -402,14 +432,30 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     notes.push('Rewrite may have regressed prompt quality.');
   }
 
-  if (rubricEchoRisk !== 'none') {
+  if (rubricEchoRisk !== 'low') {
     signals.push('REWRITE_RUBRIC_ECHO');
-    notes.push('Rewrite adds scorer-facing rubric language with limited task-grounded specificity gains.');
+    notes.push(
+      'Rewrite adds abstract optimization language that is not sufficiently backed by concrete task detail.',
+    );
   }
 
-  if (intentDriftRisk !== 'none') {
+  if (intentPreservation !== 'high') {
     signals.push('REWRITE_INTENT_DRIFT_RISK');
     notes.push('Rewrite may shift framing or deliverable away from the original job.');
+  }
+
+  if (intentPreservation === 'low') {
+    signals.push('LOW_INTENT_PRESERVATION');
+  }
+
+  if (futureModelScaffolding) {
+    notes.push('Rewrite asks for specificity patterns instead of adding concrete, task-grounded content directly.');
+  }
+
+  if (status === 'material_improvement') {
+    notes.push(
+      `Material improvement met: overall delta ${Math.round(overallDelta * 100) / 100}, grounded improvements ${groundedImprovementCount}.`,
+    );
   }
 
   if (notes.length === 0) {
@@ -428,7 +474,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     improvement: {
       status,
       scoreDeltas,
-      overallDelta: Math.round(adjustedOverallDelta * 100) / 100,
+      overallDelta: Math.round(overallDelta * 100) / 100,
       expectedUsefulness: expectedUsefulnessFromStatus(status),
       notes: notes.slice(0, 12),
     },

@@ -140,7 +140,7 @@ describe('evaluateRewrite', () => {
     expect(evaluation.signals).toContain('LOW_EXPECTED_IMPROVEMENT');
   });
 
-  it('weights contrast gains above wording-only clarity gains for bounded rewrites', () => {
+  it('blocks Kubernetes scorer-language-only rewrites from material improvement', () => {
     const originalAnalysis = analysisWithScores({
       scope: 3,
       contrast: 0,
@@ -167,8 +167,7 @@ describe('evaluateRewrite', () => {
       rewriteAnalysis,
     });
 
-    expect(evaluation.improvement.status).toBe('material_improvement');
-    expect(evaluation.improvement.overallDelta).toBeGreaterThanOrEqual(10);
+    expect(evaluation.improvement.status).not.toBe('material_improvement');
   });
 
   it('does not treat polish-only high_contrast rewrites as meaningful improvement', () => {
@@ -225,6 +224,36 @@ describe('evaluateRewrite', () => {
         'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
       rewrittenPrompt:
         'Create a complete Kubernetes guide and improve clarity, scope, and contrast. Add constraints, include explicit exclusions, use a specific lead angle, include one proof point, require a measurable outcome, and enforce differentiated positioning.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).not.toBe('material_improvement');
+    expect(evaluation.signals).toContain('REWRITE_RUBRIC_ECHO');
+  });
+
+  it('does not classify rubric-heavy marketer rewrites as material without concrete detail', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 5,
+      contrast: 4,
+      clarity: 7,
+      constraintQuality: 4,
+      genericOutputRisk: 6,
+      tokenWasteRisk: 3,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 8,
+      contrast: 8,
+      clarity: 8,
+      constraintQuality: 8,
+      genericOutputRisk: 3,
+      tokenWasteRisk: 3,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt: 'Write landing page copy for our IAM platform for IT leaders.',
+      rewrittenPrompt:
+        'Write landing page copy for our IAM platform and improve clarity, contrast, and scope. Add constraints, include exclusions, use a specific lead angle, include one proof point, require a measurable outcome, and enforce differentiated positioning.',
       originalAnalysis,
       rewriteAnalysis,
     });
@@ -291,6 +320,36 @@ describe('evaluateRewrite', () => {
 
     expect(evaluation.improvement.status).toBe('material_improvement');
     expect(evaluation.improvement.expectedUsefulness).toBe('higher');
+    expect(evaluation.signals).not.toContain('REWRITE_RUBRIC_ECHO');
+  });
+
+  it('keeps high-contrast grounded differentiation eligible for material improvement', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 4,
+      contrast: 3,
+      clarity: 6,
+      constraintQuality: 3,
+      genericOutputRisk: 7,
+      tokenWasteRisk: 4,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 8,
+      contrast: 8,
+      clarity: 8,
+      constraintQuality: 7,
+      genericOutputRisk: 4,
+      tokenWasteRisk: 3,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt: 'Write landing page copy for our IAM platform.',
+      rewrittenPrompt:
+        'Write landing page copy for CTOs at mid-sized SaaS companies adopting IAM after acquisitions. Use exactly three sections: operational condition, proof artifact, and rollout boundary. Include one quantified proof metric and one exclusion: avoid fear-based compliance claims.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).toBe('material_improvement');
     expect(evaluation.signals).not.toContain('REWRITE_RUBRIC_ECHO');
   });
 });
