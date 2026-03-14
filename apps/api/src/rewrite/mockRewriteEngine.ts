@@ -11,7 +11,7 @@ function modeInstruction(mode: RewriteInput['mode']): string {
       return 'Use concise wording while preserving critical constraints.';
     case 'balanced':
     default:
-      return 'Improve clarity, scope, and contrast without unnecessary verbosity.';
+      return 'Tighten to a clear deliverable, specify audience/context, and add one concrete boundary.';
   }
 }
 
@@ -24,10 +24,10 @@ export class MockRewriteEngine implements RewriteEngine {
         ? 'Define the exact target audience.'
         : undefined,
       input.analysis?.detectedIssueCodes.includes('CONSTRAINTS_MISSING')
-        ? 'Add non-negotiable constraints.'
+        ? 'Add one concrete requirement such as exact section count, example count, or decision criteria.'
         : undefined,
       input.analysis?.detectedIssueCodes.includes('EXCLUSIONS_MISSING')
-        ? 'Include explicit exclusions.'
+        ? 'Add one concrete exclusion tied to this task output.'
         : undefined,
     ].filter(Boolean);
 
@@ -38,14 +38,13 @@ export class MockRewriteEngine implements RewriteEngine {
               ? 'Define the exact audience, for CTOs or IT directors with a concrete business context.'
               : 'Preserve the existing audience and sharpen specificity without broadening it.',
             input.analysis?.detectedIssueCodes.includes('GENERIC_OUTPUT_RISK_HIGH')
-              ? 'Lead with operational tension such as audit pressure, identity sprawl, or admin overhead; avoid cyber-fear tropes.'
+              ? 'Anchor the opening in one concrete operational condition already present in the prompt context; avoid fear-based framing.'
               : undefined,
-            'Use a specific lead angle in the opening, not category-generic framing.',
-            'Include one specific proof point and one measurable outcome requirement.',
+            'Require one concrete proof artifact, such as a customer result, metric, or direct comparison.',
             input.analysis?.detectedIssueCodes.includes('EXCLUSIONS_MISSING')
-              ? 'Avoid generic value-prop phrasing such as seamless, robust, and powerful.'
+              ? 'Ban generic claims such as seamless, robust, and powerful.'
               : undefined,
-            'Prefer differentiated positioning over expanding generic security/compliance value props.',
+            'Keep the same deliverable and audience; do not add extra channels or new jobs.',
           ].filter(Boolean)
         : [];
 

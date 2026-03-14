@@ -54,8 +54,8 @@ describe('buildRewriteInstructions', () => {
     });
 
     expect(instructions.system).toContain('Preserve valid audience details when present');
-    expect(instructions.system).toContain('operational tension over cyber fear tropes');
-    expect(instructions.system).toContain('specific lead angle');
+    expect(instructions.system).toContain('keep the same deliverable');
     expect(instructions.system).toContain('proof specificity');
+    expect(instructions.system).toContain('do not add scorer-facing rubric language');
   });
 });

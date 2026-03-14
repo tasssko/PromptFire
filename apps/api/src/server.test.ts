@@ -190,7 +190,7 @@ describe('API vertical slice', () => {
     expect(body.analysis.detectedIssueCodes).not.toContain('TASK_OVERLOADED');
     expect(body.analysis.detectedIssueCodes).toContain('EXCLUSIONS_MISSING');
     expect(body.rewrite.rewrittenPrompt).toContain('IT decision-makers in mid-sized enterprises');
-    expect(body.rewrite.rewrittenPrompt).toContain('Lead with operational tension');
+    expect(body.rewrite.rewrittenPrompt).toContain('Anchor the opening in one concrete operational condition');
   });
 
   it('does not lower contrast for generic IAM prompt after high_contrast rewrite when audience+tension+proof are added', async () => {
@@ -217,8 +217,10 @@ describe('API vertical slice', () => {
     const hasTension = /\baudit pressure\b|\bidentity sprawl\b|\badmin overhead\b|\boperational tension\b/.test(
       rewriteText,
     );
-    const hasProof = /\bproof point\b|\bmeasurable outcome\b|\bquantifiable\b/.test(rewriteText);
-    const clearlyMoreGeneric = /\bgeneric copy|vague|general audience|broad messaging\b/.test(rewriteText);
+    const hasProof = /\bproof artifact\b|\bmetric\b|\bcomparison\b|\bquantifiable\b/.test(rewriteText);
+    const clearlyMoreGeneric = /\bgeneric copy|vague|general audience|broad messaging|scorer-facing rubric\b/.test(
+      rewriteText,
+    );
 
     if (hasAudience && hasTension && hasProof && !clearlyMoreGeneric) {
       expect(rewriteContrast).toBeGreaterThanOrEqual(originalContrast);
@@ -247,8 +249,8 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(rewrittenPrompt).toContain('landing page copy');
     expect(rewrittenPrompt).toContain('for IT decision-makers in mid-sized enterprises');
-    expect(rewrittenPrompt).toMatch(/\boperational tension\b|\baudit pressure\b|\bidentity sprawl\b/i);
-    expect(rewrittenPrompt).toMatch(/\bproof point\b|\bmeasurable outcome\b|\bAvoid generic value-prop phrasing\b/i);
+    expect(rewrittenPrompt).toMatch(/\boperational condition\b|\baudit pressure\b|\bidentity sprawl\b/i);
+    expect(rewrittenPrompt).toMatch(/\bproof artifact\b|\bmetric\b|\bBan generic claims\b/i);
     expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
   });
 
@@ -324,7 +326,7 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(rewrittenPrompt).toContain('landing page copy');
     expect(rewrittenPrompt).toContain('for CTOs at SaaS companies');
-    expect(rewrittenPrompt).toMatch(/\bproof point\b|\bmeasurable outcome\b|\boperational tension\b/i);
+    expect(rewrittenPrompt).toMatch(/\bproof artifact\b|\bmetric\b|\boperational condition\b/i);
     expect(rewrittenPrompt).not.toMatch(/\bfor CEOs\b|\bfor developers\b|\bblog post\b|\bemail\b|\bad campaign\b/i);
     expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
     expect(body.evaluation.rewriteScore.scope).toBeGreaterThanOrEqual(body.evaluation.originalScore.scope);
@@ -379,6 +381,8 @@ describe('API vertical slice', () => {
     expect(body.gating.rewritePreference).toBe('force');
     expect(body.rewrite).toBeTruthy();
     expect(body.evaluation).toBeTruthy();
+    expect(body.evaluation.status).not.toBe('material_improvement');
+    expect(String(body.rewrite.rewrittenPrompt).toLowerCase()).not.toContain('improve clarity, scope, and contrast');
   });
 
   it('treats the microservices calibration prompt as no-rewrite-needed in v2 auto mode', async () => {

@@ -201,4 +201,96 @@ describe('evaluateRewrite', () => {
     expect(evaluation.improvement.overallDelta).toBeLessThan(4);
     expect(evaluation.improvement.expectedUsefulness).not.toBe('higher');
   });
+
+  it('downgrades rubric-heavy Kubernetes rewrite inflation to non-material improvement', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 5,
+      contrast: 3,
+      clarity: 6,
+      constraintQuality: 2,
+      genericOutputRisk: 6,
+      tokenWasteRisk: 4,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 7,
+      contrast: 7,
+      clarity: 8,
+      constraintQuality: 7,
+      genericOutputRisk: 4,
+      tokenWasteRisk: 4,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt:
+        'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+      rewrittenPrompt:
+        'Create a complete Kubernetes guide and improve clarity, scope, and contrast. Add constraints, include explicit exclusions, use a specific lead angle, include one proof point, require a measurable outcome, and enforce differentiated positioning.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).not.toBe('material_improvement');
+    expect(evaluation.signals).toContain('REWRITE_RUBRIC_ECHO');
+  });
+
+  it('flags intent drift when rewrite imports a new framing not latent in the original task', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 4,
+      contrast: 3,
+      clarity: 6,
+      constraintQuality: 2,
+      genericOutputRisk: 7,
+      tokenWasteRisk: 4,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 7,
+      contrast: 7,
+      clarity: 8,
+      constraintQuality: 7,
+      genericOutputRisk: 4,
+      tokenWasteRisk: 4,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt: 'Write a practical guide to Kubernetes deployment trade-offs for engineering teams.',
+      rewrittenPrompt:
+        'Write a practical guide to Kubernetes deployment trade-offs. Lead with audit pressure, identity sprawl, and admin overhead, and emphasize compliance readiness with differentiated positioning.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).not.toBe('material_improvement');
+    expect(evaluation.signals).toContain('REWRITE_INTENT_DRIFT_RISK');
+  });
+
+  it('still allows material improvement for concrete task-grounded rewrites', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 3,
+      contrast: 2,
+      clarity: 5,
+      constraintQuality: 2,
+      genericOutputRisk: 8,
+      tokenWasteRisk: 6,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 8,
+      contrast: 7,
+      clarity: 7,
+      constraintQuality: 7,
+      genericOutputRisk: 4,
+      tokenWasteRisk: 4,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt: 'Write about cloud cost optimization.',
+      rewrittenPrompt:
+        'Write a step-by-step blog post for engineering managers at mid-sized SaaS companies about cloud cost optimization. Use exactly three sections: quick wins, trade-offs, and measurement plan. Include one startup vs enterprise comparison and one concrete exclusion: avoid vendor marketing claims.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).toBe('material_improvement');
+    expect(evaluation.improvement.expectedUsefulness).toBe('higher');
+    expect(evaluation.signals).not.toContain('REWRITE_RUBRIC_ECHO');
+  });
 });

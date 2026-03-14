@@ -28,6 +28,28 @@ const OVERALL_DELTA_WEIGHTS = {
   tokenWasteRisk: 1.0,
 } as const;
 
+const RUBRIC_ECHO_PATTERNS: RegExp[] = [
+  /\bimprove (?:clarity|contrast|scope)\b/i,
+  /\badd (?:non[-\s]?negotiable )?constraints?\b/i,
+  /\binclude explicit exclusions?\b/i,
+  /\blead with operational tension\b/i,
+  /\buse a specific lead angle\b/i,
+  /\binclude (?:one )?(?:specific )?proof point\b/i,
+  /\bmeasurable outcome\b/i,
+  /\bdifferentiated positioning\b/i,
+  /\bavoid generic buzzwords\b/i,
+];
+
+const FRAMING_IMPORT_PATTERNS: RegExp[] = [
+  /\baudit pressure\b/i,
+  /\bidentity sprawl\b/i,
+  /\badmin overhead\b/i,
+  /\bcompliance readiness\b/i,
+  /\boperational tension\b/i,
+  /\blead angle\b/i,
+  /\bdifferentiated positioning\b/i,
+];
+
 function hasAudience(prompt: string, context?: Record<string, unknown>): boolean {
   const audienceHint = context?.audienceHint;
   return Boolean(audienceHint) || /\b(audience|for\s+[a-z]|target\s+user)\b/i.test(prompt);
@@ -72,6 +94,111 @@ function getTaskType(prompt: string): string {
     return 'analysis';
   }
   return 'general';
+}
+
+function getPrimaryDeliverable(prompt: string): string | null {
+  const normalized = prompt.toLowerCase();
+  if (/\blanding page\b/.test(normalized)) {
+    return 'landing_page';
+  }
+  if (/\bblog\b|\barticle\b|\bpost\b/.test(normalized)) {
+    return 'blog';
+  }
+  if (/\bguide\b/.test(normalized)) {
+    return 'guide';
+  }
+  if (/\bemail\b/.test(normalized)) {
+    return 'email';
+  }
+  if (/\bapi\b|\bhandler\b|\bfunction\b/.test(normalized)) {
+    return 'technical';
+  }
+  return null;
+}
+
+function hasOutputStructure(prompt: string): boolean {
+  return /\b(section|outline|template|format|table|bullet|step[-\s]?by[-\s]?step|headings?)\b/i.test(prompt);
+}
+
+function hasExampleOrComparisonFrame(prompt: string): boolean {
+  return /\b(example|case study|comparison|compare|versus|vs\.?|trade[-\s]?off)\b/i.test(prompt);
+}
+
+function hasConcreteExclusion(prompt: string): boolean {
+  return /\b(avoid|exclude|without|do not|don't)\b/i.test(prompt) &&
+    /\b(buzzwords?|jargon|hype|generic|unsupported|out of scope|fear[-\s]?based)\b/i.test(prompt);
+}
+
+function hasBoundaryNarrowing(prompt: string): boolean {
+  return /\b(exactly|at least|at most|one|two|\d+)\b/i.test(prompt) &&
+    /\b(example|section|deliverable|output|audience|comparison|constraint)\b/i.test(prompt);
+}
+
+function countPatternAdds(original: string, rewrite: string, patterns: RegExp[]): number {
+  return patterns.filter((pattern) => pattern.test(rewrite) && !pattern.test(original)).length;
+}
+
+function countConcreteGroundingGains(input: {
+  originalPrompt: string;
+  rewrittenPrompt: string;
+  context?: Record<string, unknown>;
+}): number {
+  const gains = [
+    !hasAudience(input.originalPrompt, input.context) && hasAudience(input.rewrittenPrompt, input.context),
+    !hasOutputStructure(input.originalPrompt) && hasOutputStructure(input.rewrittenPrompt),
+    !hasExampleOrComparisonFrame(input.originalPrompt) && hasExampleOrComparisonFrame(input.rewrittenPrompt),
+    !hasConcreteExclusion(input.originalPrompt) && hasConcreteExclusion(input.rewrittenPrompt),
+    !hasBoundaryNarrowing(input.originalPrompt) && hasBoundaryNarrowing(input.rewrittenPrompt),
+  ];
+
+  return gains.filter(Boolean).length;
+}
+
+function rubricEchoRiskLevel(input: {
+  originalPrompt: string;
+  rewrittenPrompt: string;
+  context?: Record<string, unknown>;
+}): 'none' | 'medium' | 'high' {
+  const addedRubricPatterns = countPatternAdds(
+    input.originalPrompt,
+    input.rewrittenPrompt,
+    RUBRIC_ECHO_PATTERNS,
+  );
+  const concreteGroundingGains = countConcreteGroundingGains(input);
+
+  if (addedRubricPatterns >= 3 && concreteGroundingGains <= 1) {
+    return 'high';
+  }
+  if (addedRubricPatterns >= 2 && concreteGroundingGains <= 1) {
+    return 'medium';
+  }
+  return 'none';
+}
+
+function intentDriftRiskLevel(input: {
+  originalPrompt: string;
+  rewrittenPrompt: string;
+}): 'none' | 'medium' | 'high' {
+  const taskTypeChanged = getTaskType(input.originalPrompt) !== getTaskType(input.rewrittenPrompt);
+  const originalDeliverable = getPrimaryDeliverable(input.originalPrompt);
+  const rewrittenDeliverable = getPrimaryDeliverable(input.rewrittenPrompt);
+  const deliverableChanged =
+    Boolean(originalDeliverable) &&
+    Boolean(rewrittenDeliverable) &&
+    originalDeliverable !== rewrittenDeliverable;
+  const importedFramingAnchors = countPatternAdds(
+    input.originalPrompt,
+    input.rewrittenPrompt,
+    FRAMING_IMPORT_PATTERNS,
+  );
+
+  if (taskTypeChanged || deliverableChanged || importedFramingAnchors >= 3) {
+    return 'high';
+  }
+  if (importedFramingAnchors >= 2) {
+    return 'medium';
+  }
+  return 'none';
 }
 
 function computeScoreDeltas(original: ScoreSet, rewrite: ScoreSet): ScoreDeltas {
@@ -199,7 +326,7 @@ function expectedUsefulnessFromStatus(status: ImprovementStatus): Improvement['e
 
 export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOutput {
   const scoreDeltas = computeScoreDeltas(input.originalAnalysis.scores, input.rewriteAnalysis.scores);
-  const overallDelta = computeOverallDelta(scoreDeltas);
+  const rawOverallDelta = computeOverallDelta(scoreDeltas);
   const lowExpectedImprovement = hasLowExpectedImprovement(
     input.originalAnalysis.scores,
     input.originalPrompt,
@@ -207,10 +334,42 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   );
   const originalHighQuality = isOriginalHighQuality(input.originalAnalysis.scores);
   const paraphraseHeavy = isParaphraseHeavy(scoreDeltas, input);
+  const rubricEchoRisk = rubricEchoRiskLevel(input);
+  const intentDriftRisk = intentDriftRiskLevel(input);
+  const concreteGroundingGains = countConcreteGroundingGains(input);
 
-  let status = statusFromOverallDelta(overallDelta);
+  let adjustedOverallDelta = rawOverallDelta;
+  if (rubricEchoRisk === 'medium') {
+    adjustedOverallDelta -= 1.5;
+  } else if (rubricEchoRisk === 'high') {
+    adjustedOverallDelta -= 3;
+  }
+
+  if (intentDriftRisk === 'medium') {
+    adjustedOverallDelta -= 1.5;
+  } else if (intentDriftRisk === 'high') {
+    adjustedOverallDelta -= 3;
+  }
+
+  let status = statusFromOverallDelta(adjustedOverallDelta);
   if (paraphraseHeavy && status === 'minor_improvement') {
     status = 'no_significant_change';
+  }
+
+  if (rubricEchoRisk === 'high' && concreteGroundingGains <= 1) {
+    if (status === 'material_improvement' || status === 'minor_improvement') {
+      status = 'no_significant_change';
+    }
+  } else if (rubricEchoRisk !== 'none' && concreteGroundingGains <= 1 && status === 'material_improvement') {
+    status = 'minor_improvement';
+  }
+
+  if (intentDriftRisk === 'high') {
+    if (status === 'material_improvement' || status === 'minor_improvement') {
+      status = 'no_significant_change';
+    }
+  } else if (intentDriftRisk === 'medium' && status === 'material_improvement') {
+    status = 'minor_improvement';
   }
 
   if (
@@ -228,7 +387,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     notes.push('Original prompt already has strong structure.');
   }
 
-  if (lowExpectedImprovement && originalHighQuality && overallDelta <= 1.5) {
+  if (lowExpectedImprovement && originalHighQuality && adjustedOverallDelta <= 1.5) {
     signals.push('PROMPT_ALREADY_OPTIMIZED');
     notes.push('Further rewriting is unlikely to create material gains.');
   }
@@ -241,6 +400,16 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   if (status === 'possible_regression') {
     signals.push('REWRITE_POSSIBLE_REGRESSION');
     notes.push('Rewrite may have regressed prompt quality.');
+  }
+
+  if (rubricEchoRisk !== 'none') {
+    signals.push('REWRITE_RUBRIC_ECHO');
+    notes.push('Rewrite adds scorer-facing rubric language with limited task-grounded specificity gains.');
+  }
+
+  if (intentDriftRisk !== 'none') {
+    signals.push('REWRITE_INTENT_DRIFT_RISK');
+    notes.push('Rewrite may shift framing or deliverable away from the original job.');
   }
 
   if (notes.length === 0) {
@@ -259,7 +428,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     improvement: {
       status,
       scoreDeltas,
-      overallDelta,
+      overallDelta: Math.round(adjustedOverallDelta * 100) / 100,
       expectedUsefulness: expectedUsefulnessFromStatus(status),
       notes: notes.slice(0, 12),
     },

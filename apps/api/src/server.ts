@@ -613,7 +613,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const majorBlockingIssues = hasMajorBlockingIssues(originalAnalysis.issues);
     const cleanStrongPrompt = expectedImprovement === 'low' && originalAnalysis.issues.length === 0;
     const shouldSuppressByStrength =
-      (overallScore >= 75 || cleanStrongPrompt) &&
+      (overallScore >= 80 || cleanStrongPrompt) &&
       !majorBlockingIssues &&
       expectedImprovement === 'low' &&
       input.rewritePreference !== 'force';

@@ -45,10 +45,9 @@ describe('MockRewriteEngine marketer behavior', () => {
       analysis,
     });
 
-    expect(rewrite.rewrittenPrompt).toContain('Lead with operational tension');
-    expect(rewrite.rewrittenPrompt).toContain('measurable outcome');
-    expect(rewrite.rewrittenPrompt).toContain('Avoid generic value-prop phrasing');
-    expect(rewrite.rewrittenPrompt).toContain('specific lead angle');
-    expect(rewrite.rewrittenPrompt).toContain('Prefer differentiated positioning');
+    expect(rewrite.rewrittenPrompt).toContain('Anchor the opening in one concrete operational condition');
+    expect(rewrite.rewrittenPrompt).toContain('concrete proof artifact');
+    expect(rewrite.rewrittenPrompt).toContain('Ban generic claims');
+    expect(rewrite.rewrittenPrompt).toContain('Keep the same deliverable and audience');
   });
 });
