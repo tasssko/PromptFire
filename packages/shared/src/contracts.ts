@@ -77,6 +77,40 @@ export const ScoreSetSchema = z.object({
 });
 export type ScoreSet = z.infer<typeof ScoreSetSchema>;
 
+export const TargetScoreSchema = z.enum([
+  'scope',
+  'contrast',
+  'clarity',
+  'constraintQuality',
+  'genericOutputRisk',
+  'tokenWasteRisk',
+]);
+export type TargetScore = z.infer<typeof TargetScoreSchema>;
+
+export const ImprovementSuggestionCategorySchema = z.enum([
+  'audience',
+  'proof',
+  'exclusion',
+  'boundary',
+  'framing',
+  'task_load',
+  'clarity',
+  'structure',
+  'theme_specific',
+]);
+export type ImprovementSuggestionCategory = z.infer<typeof ImprovementSuggestionCategorySchema>;
+
+export const ImprovementSuggestionSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  reason: z.string().min(1),
+  impact: SeveritySchema,
+  targetScores: z.array(TargetScoreSchema).min(1).max(3),
+  category: ImprovementSuggestionCategorySchema,
+  exampleChange: z.string().min(1).optional(),
+});
+export type ImprovementSuggestion = z.infer<typeof ImprovementSuggestionSchema>;
+
 export const ImprovementStatusSchema = z.enum([
   'material_improvement',
   'minor_improvement',
@@ -212,6 +246,7 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   scoreBand: ScoreBandSchema,
   rewriteRecommendation: RewriteRecommendationSchema,
   analysis: AnalysisSchema,
+  improvementSuggestions: z.array(ImprovementSuggestionSchema),
   gating: GatingSchema,
   rewrite: RewriteSchema.nullable(),
   evaluation: EvaluationV2Schema.nullable(),

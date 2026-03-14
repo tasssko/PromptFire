@@ -170,4 +170,35 @@ describe('evaluateRewrite', () => {
     expect(evaluation.improvement.status).toBe('material_improvement');
     expect(evaluation.improvement.overallDelta).toBeGreaterThanOrEqual(10);
   });
+
+  it('does not treat polish-only high_contrast rewrites as meaningful improvement', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 5,
+      contrast: 3,
+      clarity: 7,
+      constraintQuality: 3,
+      genericOutputRisk: 7,
+      tokenWasteRisk: 4,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 5,
+      contrast: 3,
+      clarity: 8,
+      constraintQuality: 3,
+      genericOutputRisk: 7,
+      tokenWasteRisk: 4,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt: 'Write a landing page for our IAM platform for IT leaders. Mention security and compliance.',
+      rewrittenPrompt:
+        'Create polished landing page copy for our IAM platform for IT leaders. Highlight security and compliance in a modern, compelling way.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(['no_significant_change', 'possible_regression']).toContain(evaluation.improvement.status);
+    expect(evaluation.improvement.overallDelta).toBeLessThan(4);
+    expect(evaluation.improvement.expectedUsefulness).not.toBe('higher');
+  });
 });

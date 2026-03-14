@@ -192,6 +192,27 @@ export function App() {
             ))}
           </ul>
 
+          <h2>Opportunities</h2>
+          {result.improvementSuggestions.length > 0 ? (
+            <div className="suggestions">
+              {result.improvementSuggestions.map((suggestion) => (
+                <article key={suggestion.id} className="suggestion-card">
+                  <div className="suggestion-header">
+                    <h3>{suggestion.title}</h3>
+                    <span className={`impact impact-${suggestion.impact}`}>{suggestion.impact}</span>
+                  </div>
+                  <p>{suggestion.reason}</p>
+                  <p>
+                    Targets: <code>{suggestion.targetScores.join(', ')}</code>
+                  </p>
+                  {suggestion.exampleChange && <p>Example: {suggestion.exampleChange}</p>}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p>No improvement suggestions for this prompt.</p>
+          )}
+
           <h2>Gating</h2>
           <div className="metrics">
             <p>

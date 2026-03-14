@@ -127,6 +127,17 @@ describe('shared contracts', () => {
         signals: ['Low expected improvement.'],
         summary: 'Strong prompt.',
       },
+      improvementSuggestions: [
+        {
+          id: 'optional_proof_requirement',
+          title: 'Optional: require one proof point',
+          reason: 'A proof requirement may slightly improve differentiation, but the prompt is already strong.',
+          impact: 'low',
+          targetScores: ['contrast', 'constraintQuality'],
+          category: 'proof',
+          exampleChange: 'Require one measurable example or concrete comparison.',
+        },
+      ],
       gating: {
         rewritePreference: 'auto',
         expectedImprovement: 'low',

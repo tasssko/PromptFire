@@ -161,6 +161,77 @@ describe('analyzePrompt', () => {
     }
   });
 
+  it('improves low-contrast marketer prompts without changing the deliverable or audience', () => {
+    const originalPrompt =
+      'Write landing page copy for IT decision-makers in mid-sized enterprises about our IAM platform. Highlight security, compliance, and ease of use.';
+    const rewrittenPrompt =
+      'Write landing page copy for IT decision-makers in mid-sized enterprises about our IAM platform. Lead with audit pressure and identity sprawl, require one customer proof point and one measurable outcome, and avoid generic value-prop phrasing around security, compliance, and ease of use.';
+
+    const original = analyzePrompt({
+      prompt: originalPrompt,
+      role: 'marketer',
+      mode: 'high_contrast',
+    });
+    const rewrite = analyzePrompt({
+      prompt: rewrittenPrompt,
+      role: 'marketer',
+      mode: 'high_contrast',
+    });
+
+    expect(rewrittenPrompt).toContain('landing page copy');
+    expect(rewrittenPrompt).toContain('for IT decision-makers in mid-sized enterprises');
+    expect(rewrittenPrompt).toMatch(/\baudit pressure\b|\bidentity sprawl\b|\bproof point\b|\bmeasurable outcome\b/i);
+    expect(rewrite.scores.contrast).toBeGreaterThanOrEqual(original.scores.contrast);
+  });
+
+  it('improves broad themed prompts with safe narrowing and no fabricated niche audience details', () => {
+    const originalPrompt =
+      'Write a guide about Kubernetes security, deployment, monitoring, troubleshooting, cost optimization, and migration for businesses. Include examples and practical advice.';
+    const rewrittenPrompt =
+      'Write a guide for SMB teams evaluating Kubernetes security, deployment, monitoring, troubleshooting, cost optimization, and migration. Organize it around decision criteria and practical trade-offs, include examples, and avoid generic advice that does not apply to smaller teams.';
+
+    const original = analyzePrompt({
+      prompt: originalPrompt,
+      role: 'general',
+      mode: 'balanced',
+    });
+    const rewrite = analyzePrompt({
+      prompt: rewrittenPrompt,
+      role: 'general',
+      mode: 'balanced',
+    });
+
+    expect(rewrittenPrompt).toContain('Write a guide');
+    expect(rewrittenPrompt).toMatch(/\bSMB teams\b/i);
+    expect(rewrittenPrompt).not.toMatch(/\bfintech\b|\bseries [abc]\b|\bhealthcare\b|\bprocurement\b/i);
+    expect(rewrite.scores.scope).toBeGreaterThanOrEqual(original.scores.scope);
+    expect(rewrite.scores.genericOutputRisk).toBeLessThanOrEqual(original.scores.genericOutputRisk);
+  });
+
+  it('improves contrast without broadening audience or adding extra jobs', () => {
+    const originalPrompt =
+      'Write landing page copy for CTOs at SaaS companies about our platform engineering service. Keep the tone practical.';
+    const rewrittenPrompt =
+      'Write landing page copy for CTOs at SaaS companies about our platform engineering service. Lead with delivery bottlenecks and handoff friction, require one proof point and one measurable outcome, and avoid broad category claims. Keep the tone practical.';
+
+    const original = analyzePrompt({
+      prompt: originalPrompt,
+      role: 'marketer',
+      mode: 'high_contrast',
+    });
+    const rewrite = analyzePrompt({
+      prompt: rewrittenPrompt,
+      role: 'marketer',
+      mode: 'high_contrast',
+    });
+
+    expect(rewrittenPrompt).toContain('for CTOs at SaaS companies');
+    expect(rewrittenPrompt).toContain('landing page copy');
+    expect(rewrittenPrompt).not.toMatch(/\bemail\b|\bblog post\b|\bad campaign\b|\bcase study\b/i);
+    expect(rewrite.scores.contrast).toBeGreaterThanOrEqual(original.scores.contrast);
+    expect(rewrite.scores.scope).toBeGreaterThanOrEqual(original.scores.scope);
+  });
+
   it('does not penalize functional category terms in marketer prompts', () => {
     const result = analyzePrompt({
       prompt:

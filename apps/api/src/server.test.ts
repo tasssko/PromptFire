@@ -225,6 +225,111 @@ describe('API vertical slice', () => {
     }
   });
 
+  it('recovers contrast for low-contrast marketer prompts without changing deliverable or audience', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const prompt =
+      'Write landing page copy for IT decision-makers in mid-sized enterprises about our IAM platform. Highlight security, compliance, and ease of use.';
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        role: 'marketer',
+        mode: 'high_contrast',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    const rewrittenPrompt = String(body.rewrite.rewrittenPrompt);
+
+    expect(response.statusCode).toBe(200);
+    expect(rewrittenPrompt).toContain('landing page copy');
+    expect(rewrittenPrompt).toContain('for IT decision-makers in mid-sized enterprises');
+    expect(rewrittenPrompt).toMatch(/\boperational tension\b|\baudit pressure\b|\bidentity sprawl\b/i);
+    expect(rewrittenPrompt).toMatch(/\bproof point\b|\bmeasurable outcome\b|\bAvoid generic value-prop phrasing\b/i);
+    expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
+  });
+
+  it('improves low-contrast general prompts without inventing specific business context or drifting task type', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write a blog post about cloud cost optimization. Keep it practical.',
+        role: 'general',
+        mode: 'balanced',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    const rewrittenPrompt = String(body.rewrite.rewrittenPrompt);
+
+    expect(response.statusCode).toBe(200);
+    expect(rewrittenPrompt).toContain('Write a blog post');
+    expect(rewrittenPrompt).not.toMatch(/\blanding page\b|\bemail\b|\bad campaign\b|\bsales deck\b/i);
+    expect(rewrittenPrompt).not.toMatch(/\bSeries [ABC]\b|\bhealthcare\b|\bfintech\b|\bprocurement teams\b/i);
+    expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
+  });
+
+  it('safely narrows broad themed prompts without fabricating niche buyer details', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write a guide about Kubernetes security, deployment, monitoring, troubleshooting, cost optimization, and migration for businesses. Include examples and practical advice.',
+        role: 'general',
+        mode: 'balanced',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    const rewrittenPrompt = String(body.rewrite.rewrittenPrompt);
+
+    expect(response.statusCode).toBe(200);
+    expect(rewrittenPrompt).toContain('guide');
+    expect(rewrittenPrompt).not.toMatch(/\bprocurement directors\b|\bB2B SaaS founders\b|\bhealthcare compliance\b/i);
+    expect(body.evaluation.rewriteScore.genericOutputRisk).toBeLessThanOrEqual(
+      body.evaluation.originalScore.genericOutputRisk,
+    );
+    expect(body.evaluation.rewriteScore.scope).toBeGreaterThanOrEqual(body.evaluation.originalScore.scope);
+  });
+
+  it('adds contrast without broadening audience or adding extra jobs', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write landing page copy for CTOs at SaaS companies about our platform engineering service. Keep the tone practical.',
+        role: 'marketer',
+        mode: 'high_contrast',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    const rewrittenPrompt = String(body.rewrite.rewrittenPrompt);
+
+    expect(response.statusCode).toBe(200);
+    expect(rewrittenPrompt).toContain('landing page copy');
+    expect(rewrittenPrompt).toContain('for CTOs at SaaS companies');
+    expect(rewrittenPrompt).toMatch(/\bproof point\b|\bmeasurable outcome\b|\boperational tension\b/i);
+    expect(rewrittenPrompt).not.toMatch(/\bfor CEOs\b|\bfor developers\b|\bblog post\b|\bemail\b|\bad campaign\b/i);
+    expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
+    expect(body.evaluation.rewriteScore.scope).toBeGreaterThanOrEqual(body.evaluation.originalScore.scope);
+  });
+
   it('returns v2 strong prompt without rewrite by default', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 
@@ -249,6 +354,8 @@ describe('API vertical slice', () => {
     expect(body.gating.majorBlockingIssues).toBe(false);
     expect(body.rewrite).toBeNull();
     expect(body.evaluation).toBeNull();
+    expect(Array.isArray(body.improvementSuggestions)).toBe(true);
+    expect(body.improvementSuggestions.length).toBeLessThanOrEqual(2);
   });
 
   it('returns v2 forced rewrite for strong prompt', async () => {
@@ -319,6 +426,64 @@ describe('API vertical slice', () => {
     expect(body.gating.rewritePreference).toBe('suppress');
     expect(body.rewrite).toBeNull();
     expect(body.evaluation).toBeNull();
+    expect(Array.isArray(body.improvementSuggestions)).toBe(true);
+    expect(body.improvementSuggestions.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('returns landing page opportunities tied to buyer, pain, proof, and exclusions', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write a landing page for our IAM platform aimed at IT leaders. Mention security, compliance, and ease of use.',
+        role: 'marketer',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.improvementSuggestions.some((suggestion: { id: string }) => suggestion.id === 'add_business_pain')).toBe(
+      true,
+    );
+    expect(
+      body.improvementSuggestions.some(
+        (suggestion: { category: string }) => suggestion.category === 'proof' || suggestion.category === 'exclusion',
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps opportunities presentable when rewrite is null for a strong general prompt', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write a blog post for engineering managers at SaaS companies about when TypeScript improves maintainability and when it adds unnecessary complexity. Use one startup example and one enterprise example. Avoid hype and keep the tone practical.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.rewrite).toBeNull();
+    expect(Array.isArray(body.improvementSuggestions)).toBe(true);
+    expect(body.improvementSuggestions.length).toBeLessThanOrEqual(2);
+    expect(
+      body.improvementSuggestions.every(
+        (suggestion: { title: string; impact: string }) =>
+          suggestion.title.startsWith('Optional:') || suggestion.impact === 'low',
+      ),
+    ).toBe(true);
   });
 
   describe('v2 calibration fixtures', () => {
@@ -601,10 +766,21 @@ describe('API vertical slice', () => {
         expect(body.overallScore).toBe(fixture.expected.overallScore);
         expect(body.scoreBand).toBe(fixture.expected.scoreBand);
         expect(body.rewriteRecommendation).toBe(fixture.expected.rewriteRecommendation);
+        expect(Array.isArray(body.improvementSuggestions)).toBe(true);
         expect(body.gating.rewritePreference).toBe('auto');
         expect(body.gating.expectedImprovement).toBe(fixture.expected.expectedImprovement);
         expect(body.gating.majorBlockingIssues).toBe(fixture.expected.majorBlockingIssues);
         expect(normalizeCodes(body.analysis.detectedIssueCodes)).toEqual(normalizeCodes(fixture.expected.issueCodes));
+
+        if (fixture.expected.rewriteRecommendation === 'no_rewrite_needed') {
+          expect(body.improvementSuggestions.length).toBeLessThanOrEqual(2);
+        } else if (fixture.expected.scoreBand === 'usable') {
+          expect(body.improvementSuggestions.length).toBeGreaterThanOrEqual(2);
+          expect(body.improvementSuggestions.length).toBeLessThanOrEqual(4);
+        } else {
+          expect(body.improvementSuggestions.length).toBeGreaterThanOrEqual(2);
+          expect(body.improvementSuggestions.length).toBeLessThanOrEqual(5);
+        }
 
         if (fixture.expected.rewritePresent) {
           expect(body.rewrite).toBeTruthy();

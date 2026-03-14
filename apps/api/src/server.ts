@@ -1,4 +1,4 @@
-import { analyzePrompt, evaluateRewrite } from '@promptfire/heuristics';
+import { analyzePrompt, evaluateRewrite, generateImprovementSuggestions } from '@promptfire/heuristics';
 import {
   AnalyzeAndRewriteV2RequestSchema,
   AnalyzeAndRewriteRequestSchema,
@@ -606,6 +606,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const preferences = normalizePreferences(input.preferences);
     const originalAnalysis = withV2Scores(analyzePrompt({ ...input, preferences }), input.prompt, input.context);
     const overallScore = computeOverallScore(originalAnalysis.scores);
+    const scoreBand = scoreBandFromOverallScore(overallScore);
     const expectedImprovement = hasLowExpectedImprovementV2(originalAnalysis.scores, input.prompt, input.context)
       ? 'low'
       : 'high';
@@ -622,6 +623,13 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       rewritePreference: input.rewritePreference,
       shouldSuppress,
       expectedImprovementLow: expectedImprovement === 'low',
+    });
+    const improvementSuggestions = generateImprovementSuggestions({
+      input,
+      analysis: originalAnalysis,
+      overallScore,
+      scoreBand,
+      rewriteRecommendation,
     });
 
     try {
@@ -694,9 +702,10 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const payload: AnalyzeAndRewriteV2Response = {
         id: `par_${requestId}`,
         overallScore,
-        scoreBand: scoreBandFromOverallScore(overallScore),
+        scoreBand,
         rewriteRecommendation,
         analysis,
+        improvementSuggestions,
         gating: {
           rewritePreference: input.rewritePreference,
           expectedImprovement,
