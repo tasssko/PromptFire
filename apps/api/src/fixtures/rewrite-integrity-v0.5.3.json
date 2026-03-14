@@ -1,0 +1,91 @@
+[
+  {
+    "id": "kubernetes_marketer_rubric_echo_blocked",
+    "prompt": "Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.",
+    "role": "marketer",
+    "mode": "high_contrast",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "rewrite_recommended",
+    "expectedEvaluationStatus": "possible_regression",
+    "mustHaveSignals": ["REWRITE_RUBRIC_ECHO", "REWRITE_POSSIBLE_REGRESSION"],
+    "mustNotHaveSignals": [],
+    "rationale": "Rubric-shaped marketer rewrite language must not be rewarded without concrete task detail.",
+    "rewrittenPrompt": "Create a complete guide to Kubernetes and improve clarity, scope, and contrast. Add constraints, include explicit exclusions, lead with operational tension, use a specific lead angle, include one proof point, require a measurable outcome, and enforce differentiated positioning."
+  },
+  {
+    "id": "kubernetes_general_meta_instruction_blocked",
+    "prompt": "Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.",
+    "role": "general",
+    "mode": "balanced",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "rewrite_recommended",
+    "expectedEvaluationStatus": "no_significant_change",
+    "mustHaveSignals": ["REWRITE_RUBRIC_ECHO"],
+    "mustNotHaveSignals": ["LOW_INTENT_PRESERVATION"],
+    "rationale": "General-mode meta instructions should not become material gains when concrete task shaping is absent.",
+    "rewrittenPrompt": "Create a complete Kubernetes guide. Improve clarity, scope, and contrast. Add non-negotiable constraints, include explicit exclusions, use a specific lead angle, include one proof point, and require a measurable outcome."
+  },
+  {
+    "id": "weak_concrete_rewrite_can_be_material",
+    "prompt": "Write about cloud cost optimization.",
+    "role": "general",
+    "mode": "balanced",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "rewrite_recommended",
+    "expectedEvaluationStatus": "material_improvement",
+    "mustHaveSignals": [],
+    "mustNotHaveSignals": ["REWRITE_RUBRIC_ECHO", "LOW_INTENT_PRESERVATION"],
+    "rationale": "Weak prompts can still earn material improvement when rewrites add concrete audience, structure, comparison, and exclusions.",
+    "rewrittenPrompt": "Write a step-by-step blog post for engineering managers at mid-sized SaaS companies about cloud cost optimization. Use exactly three sections: quick wins, trade-offs, and measurement plan. Include one startup vs enterprise comparison and one concrete exclusion: avoid vendor marketing claims."
+  },
+  {
+    "id": "strong_microservices_no_rewrite_needed",
+    "prompt": "Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.",
+    "role": "general",
+    "mode": "balanced",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "no_rewrite_needed",
+    "expectedEvaluationStatus": null,
+    "mustHaveSignals": [],
+    "mustNotHaveSignals": ["REWRITE_RUBRIC_ECHO", "LOW_INTENT_PRESERVATION"],
+    "rationale": "Strong, bounded prompts should remain protected by default rewrite suppression."
+  },
+  {
+    "id": "strong_typescript_no_rewrite_needed",
+    "prompt": "Write a blog post for engineering managers at SaaS companies about when TypeScript improves maintainability and when it adds unnecessary complexity. Use one startup example and one enterprise example. Avoid hype and keep the tone practical.",
+    "role": "general",
+    "mode": "balanced",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "no_rewrite_needed",
+    "expectedEvaluationStatus": null,
+    "mustHaveSignals": [],
+    "mustNotHaveSignals": ["REWRITE_RUBRIC_ECHO", "LOW_INTENT_PRESERVATION"],
+    "rationale": "Another strong baseline case to prevent accidental rewrite churn for already bounded technical prompts."
+  },
+  {
+    "id": "intent_drift_downgrades_rewrite",
+    "prompt": "Write a practical guide to Kubernetes deployment trade-offs for engineering teams.",
+    "role": "general",
+    "mode": "high_contrast",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "rewrite_recommended",
+    "expectedEvaluationStatus": "possible_regression",
+    "mustHaveSignals": ["REWRITE_INTENT_DRIFT_RISK", "LOW_INTENT_PRESERVATION", "REWRITE_POSSIBLE_REGRESSION"],
+    "mustNotHaveSignals": [],
+    "rationale": "Rewrites that import a new positioning frame and shift deliverable should be treated as potential regression.",
+    "rewrittenPrompt": "Write landing page copy about Kubernetes deployment trade-offs for engineering teams. Lead with audit pressure, identity sprawl, and admin overhead, and emphasize compliance readiness with differentiated positioning."
+  },
+  {
+    "id": "grounded_high_contrast_still_allowed",
+    "prompt": "Write landing page copy for our IAM platform.",
+    "role": "marketer",
+    "mode": "high_contrast",
+    "rewritePreference": "auto",
+    "expectedRecommendation": "rewrite_recommended",
+    "expectedEvaluationStatus": "material_improvement",
+    "mustHaveSignals": [],
+    "mustNotHaveSignals": ["REWRITE_RUBRIC_ECHO", "LOW_INTENT_PRESERVATION"],
+    "rationale": "High-contrast mode must still reward grounded differentiation when concrete audience, structure, and exclusions are added.",
+    "rewrittenPrompt": "Write landing page copy for CTOs at mid-sized SaaS companies adopting IAM after acquisitions. Use exactly three sections: operational condition, proof artifact, and rollout boundary. Include one quantified proof metric and one exclusion: avoid fear-based compliance claims."
+  }
+]
