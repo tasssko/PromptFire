@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { analyzePrompt } from './analyzePrompt';
 
+const strongMarketerPrompt =
+  'Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.';
+
+const microservicesCalibrationPrompt =
+  'Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.';
+
 describe('analyzePrompt', () => {
   it('returns stable issue codes for vague prompt', () => {
     const result = analyzePrompt({
@@ -197,8 +203,7 @@ describe('analyzePrompt', () => {
 
   it('matches scope rubric example C around tightly bounded prompt', () => {
     const result = analyzePrompt({
-      prompt:
-        'Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.',
+      prompt: strongMarketerPrompt,
       role: 'marketer',
       mode: 'high_contrast',
     });
@@ -214,5 +219,126 @@ describe('analyzePrompt', () => {
     });
 
     expect(result.scores.scope).toBeLessThanOrEqual(1);
+  });
+
+  describe('calibration regression fixtures', () => {
+    const scoreBandFromOverallScore = (overallScore: number) => {
+      if (overallScore >= 90) {
+        return 'excellent';
+      }
+      if (overallScore >= 75) {
+        return 'strong';
+      }
+      if (overallScore >= 55) {
+        return 'usable';
+      }
+      if (overallScore >= 35) {
+        return 'weak';
+      }
+      return 'poor';
+    };
+
+    const computeOverallScore = (scores: ReturnType<typeof analyzePrompt>['scores']) => {
+      const rawOverallScore =
+        2.5 * scores.scope +
+        2.0 * scores.contrast +
+        2.0 * scores.clarity +
+        1.5 * scores.constraintQuality +
+        1.0 * (10 - scores.genericOutputRisk) +
+        1.0 * (10 - scores.tokenWasteRisk);
+
+      return Math.round(Math.max(0, Math.min(100, rawOverallScore)));
+    };
+
+    const fixtures = [
+      {
+        name: 'low prompt',
+        input: {
+          prompt: 'Write a blog post about DevOps.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          minScore: 0,
+          maxScore: 54,
+          scoreBands: ['weak', 'poor'],
+          mustIncludeIssueCodes: ['AUDIENCE_MISSING', 'CONSTRAINTS_MISSING'],
+        },
+      },
+      {
+        name: 'medium prompt',
+        input: {
+          prompt:
+            'Write a blog post for engineering managers about CI/CD mistakes teams make when they grow quickly. Use a practical tone and include examples.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          minScore: 55,
+          maxScore: 79,
+          scoreBands: ['usable'],
+          mustNotIncludeIssueCodes: ['AUDIENCE_MISSING'],
+        },
+      },
+      {
+        name: 'high marketer prompt',
+        input: {
+          prompt: strongMarketerPrompt,
+          role: 'marketer' as const,
+          mode: 'high_contrast' as const,
+        },
+        expected: {
+          minScore: 80,
+          maxScore: 100,
+          scoreBands: ['strong', 'excellent'],
+          maxGenericOutputRisk: 4,
+          maxTokenWasteRisk: 3,
+        },
+      },
+      {
+        name: 'high microservices prompt',
+        input: {
+          prompt: microservicesCalibrationPrompt,
+          role: 'general' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          minScore: 75,
+          maxScore: 100,
+          scoreBands: ['strong', 'excellent'],
+          mustNotIncludeIssueCodes: ['CONSTRAINTS_MISSING'],
+          maxGenericOutputRisk: 4,
+          maxTokenWasteRisk: 4,
+        },
+      },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      it(fixture.name, () => {
+        const result = analyzePrompt(fixture.input);
+        const overallScore = computeOverallScore(result.scores);
+        const scoreBand = scoreBandFromOverallScore(overallScore);
+
+        expect(overallScore).toBeGreaterThanOrEqual(fixture.expected.minScore);
+        expect(overallScore).toBeLessThanOrEqual(fixture.expected.maxScore);
+        expect(fixture.expected.scoreBands).toContain(scoreBand);
+
+        for (const code of fixture.expected.mustIncludeIssueCodes ?? []) {
+          expect(result.detectedIssueCodes).toContain(code);
+        }
+
+        for (const code of fixture.expected.mustNotIncludeIssueCodes ?? []) {
+          expect(result.detectedIssueCodes).not.toContain(code);
+        }
+
+        if (fixture.expected.maxGenericOutputRisk !== undefined) {
+          expect(result.scores.genericOutputRisk).toBeLessThanOrEqual(fixture.expected.maxGenericOutputRisk);
+        }
+
+        if (fixture.expected.maxTokenWasteRisk !== undefined) {
+          expect(result.scores.tokenWasteRisk).toBeLessThanOrEqual(fixture.expected.maxTokenWasteRisk);
+        }
+      });
+    }
   });
 });

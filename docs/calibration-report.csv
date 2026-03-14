@@ -1,0 +1,5 @@
+fixture,role,mode,heuristics_scope,heuristics_contrast,heuristics_clarity,heuristics_constraint_quality,heuristics_generic_output_risk,heuristics_token_waste_risk,heuristics_overall_score,heuristics_score_band,heuristics_issue_codes,api_scope,api_contrast,api_clarity,api_constraint_quality,api_generic_output_risk,api_token_waste_risk,api_overall_score,api_score_band,api_rewrite_recommendation,api_expected_improvement,api_major_blocking_issues,api_rewrite_present,api_evaluation_present,api_issue_codes
+low,general,balanced,4,0,6,2,8,4,33,poor,"AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH",5,0,6,2,8,4,36,weak,rewrite_recommended,high,true,true,true,"AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH"
+medium,general,balanced,6,4,8,7,4,4,62,usable,"EXCLUSIONS_MISSING",5,4,8,7,4,4,59,usable,rewrite_optional,high,false,true,true,"EXCLUSIONS_MISSING"
+high_marketer,marketer,high_contrast,10,10,8,7,3,2,87,strong,"",10,10,8,7,3,2,87,strong,no_rewrite_needed,low,false,false,false,""
+high_microservices,general,balanced,10,7,8,7,3,4,79,strong,"",7,7,8,7,3,4,71,usable,no_rewrite_needed,low,false,false,false,""

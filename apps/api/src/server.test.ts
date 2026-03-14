@@ -12,6 +12,8 @@ afterEach(() => {
 describe('API vertical slice', () => {
   const strongV2Prompt =
     'Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.';
+  const microservicesCalibrationPrompt =
+    'Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.';
 
   it('handles CORS preflight and returns allow headers', async () => {
     const response = await handleHttpRequest({
@@ -280,8 +282,7 @@ describe('API vertical slice', () => {
       path: '/v2/analyze-and-rewrite',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        prompt:
-          'Write a practical blog post for CTOs at mid-sized SaaS companies about when microservices improve team autonomy and when they create unnecessary operational overhead. Use one example from a fast-growing startup and one from a more mature engineering organization. Avoid hype, keep the tone grounded, and focus on real trade-offs rather than architectural fashion.',
+        prompt: microservicesCalibrationPrompt,
         role: 'general',
         mode: 'balanced',
         rewritePreference: 'auto',
@@ -318,5 +319,137 @@ describe('API vertical slice', () => {
     expect(body.gating.rewritePreference).toBe('suppress');
     expect(body.rewrite).toBeNull();
     expect(body.evaluation).toBeNull();
+  });
+
+  describe('v2 calibration fixtures', () => {
+    const fixtures = [
+      {
+        name: 'low prompt',
+        request: {
+          prompt: 'Write a blog post about DevOps.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          minScore: 0,
+          maxScore: 54,
+          scoreBands: ['weak', 'poor'],
+          rewriteRecommendation: 'rewrite_recommended' as const,
+          expectedImprovement: 'high' as const,
+          majorBlockingIssues: true,
+          rewritePresent: true,
+          evaluationPresent: true,
+          mustIncludeIssueCodes: ['AUDIENCE_MISSING', 'CONSTRAINTS_MISSING'],
+        },
+      },
+      {
+        name: 'medium prompt',
+        request: {
+          prompt:
+            'Write a blog post for engineering managers about CI/CD mistakes teams make when they grow quickly. Use a practical tone and include examples.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          minScore: 55,
+          maxScore: 79,
+          scoreBands: ['usable'],
+          rewriteRecommendation: 'rewrite_optional' as const,
+          expectedImprovement: 'high' as const,
+          majorBlockingIssues: false,
+          rewritePresent: true,
+          evaluationPresent: true,
+          mustNotIncludeIssueCodes: ['AUDIENCE_MISSING'],
+        },
+      },
+      {
+        name: 'high marketer prompt',
+        request: {
+          prompt: strongV2Prompt,
+          role: 'marketer' as const,
+          mode: 'high_contrast' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          minScore: 80,
+          maxScore: 100,
+          scoreBands: ['strong', 'excellent'],
+          rewriteRecommendation: 'no_rewrite_needed' as const,
+          expectedImprovement: 'low' as const,
+          majorBlockingIssues: false,
+          rewritePresent: false,
+          evaluationPresent: false,
+        },
+      },
+      {
+        name: 'high microservices prompt',
+        request: {
+          prompt: microservicesCalibrationPrompt,
+          role: 'general' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          // v2 scope remapping keeps this prompt in the usable band, while low expected
+          // improvement and no blocking issues still suppress rewrite generation.
+          minScore: 70,
+          maxScore: 79,
+          scoreBands: ['usable'],
+          rewriteRecommendation: 'no_rewrite_needed' as const,
+          expectedImprovement: 'low' as const,
+          majorBlockingIssues: false,
+          rewritePresent: false,
+          evaluationPresent: false,
+          mustNotIncludeIssueCodes: ['CONSTRAINTS_MISSING'],
+        },
+      },
+    ] as const;
+
+    for (const fixture of fixtures) {
+      it(fixture.name, async () => {
+        process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+        const response = await handleHttpRequest({
+          method: 'POST',
+          path: '/v2/analyze-and-rewrite',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(fixture.request),
+        });
+
+        const body = JSON.parse(response.body);
+
+        expect(response.statusCode).toBe(200);
+        expect(body.meta.version).toBe('2');
+        expect(body.overallScore).toBeGreaterThanOrEqual(fixture.expected.minScore);
+        expect(body.overallScore).toBeLessThanOrEqual(fixture.expected.maxScore);
+        expect(fixture.expected.scoreBands).toContain(body.scoreBand);
+        expect(body.rewriteRecommendation).toBe(fixture.expected.rewriteRecommendation);
+        expect(body.gating.rewritePreference).toBe('auto');
+        expect(body.gating.expectedImprovement).toBe(fixture.expected.expectedImprovement);
+        expect(body.gating.majorBlockingIssues).toBe(fixture.expected.majorBlockingIssues);
+
+        for (const code of fixture.expected.mustIncludeIssueCodes ?? []) {
+          expect(body.analysis.detectedIssueCodes).toContain(code);
+        }
+
+        for (const code of fixture.expected.mustNotIncludeIssueCodes ?? []) {
+          expect(body.analysis.detectedIssueCodes).not.toContain(code);
+        }
+
+        if (fixture.expected.rewritePresent) {
+          expect(body.rewrite).toBeTruthy();
+        } else {
+          expect(body.rewrite).toBeNull();
+        }
+
+        if (fixture.expected.evaluationPresent) {
+          expect(body.evaluation).toBeTruthy();
+        } else {
+          expect(body.evaluation).toBeNull();
+        }
+      });
+    }
   });
 });
