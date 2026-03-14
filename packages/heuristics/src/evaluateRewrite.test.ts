@@ -139,4 +139,35 @@ describe('evaluateRewrite', () => {
     expect(evaluation.improvement.status).toBe('already_strong');
     expect(evaluation.signals).toContain('LOW_EXPECTED_IMPROVEMENT');
   });
+
+  it('weights contrast gains above wording-only clarity gains for bounded rewrites', () => {
+    const originalAnalysis = analysisWithScores({
+      scope: 3,
+      contrast: 0,
+      clarity: 6,
+      constraintQuality: 2,
+      genericOutputRisk: 7,
+      tokenWasteRisk: 5,
+    });
+    const rewriteAnalysis = analysisWithScores({
+      scope: 4,
+      contrast: 5,
+      clarity: 8,
+      constraintQuality: 7,
+      genericOutputRisk: 5,
+      tokenWasteRisk: 5,
+    });
+
+    const evaluation = evaluateRewrite({
+      originalPrompt:
+        'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+      rewrittenPrompt:
+        'Develop a targeted guide on Kubernetes tailored for small to medium-sized businesses (SMBs) that covers essential aspects such as architecture, security measures, deployment strategies, monitoring techniques, troubleshooting methods, cost optimization practices, and migration strategies. Include real-world examples and actionable best practices, while explicitly excluding overly technical jargon and generic advice that may not apply to SMBs.',
+      originalAnalysis,
+      rewriteAnalysis,
+    });
+
+    expect(evaluation.improvement.status).toBe('material_improvement');
+    expect(evaluation.improvement.overallDelta).toBeGreaterThanOrEqual(10);
+  });
 });

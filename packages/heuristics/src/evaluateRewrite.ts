@@ -21,8 +21,8 @@ interface EvaluateRewriteOutput {
 
 const OVERALL_DELTA_WEIGHTS = {
   scope: 1.5,
-  contrast: 1.5,
-  clarity: 1.0,
+  contrast: 1.75,
+  clarity: 0.9,
   constraintQuality: 1.25,
   genericOutputRisk: 1.25,
   tokenWasteRisk: 1.0,
@@ -37,13 +37,16 @@ function hasConstraints(prompt: string, context?: Record<string, unknown>): bool
   const hasContextConstraints = Boolean(context?.mustInclude) || Boolean(context?.systemGoals);
   const hasPromptConstraints =
     /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
-    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt);
+    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt) ||
+    /\b(include|incorporate|cover)\s+(?:real-world|actionable|specific|practical|one|two|\d+|examples?|best practices|steps?|checklist|conclusion)\b/i.test(
+      prompt,
+    );
   return hasContextConstraints || hasPromptConstraints;
 }
 
 function hasExclusions(prompt: string, context?: Record<string, unknown>): boolean {
   const hasContextExclusions = Boolean(context?.mustAvoid) || Boolean(context?.forbiddenPhrases);
-  const hasPromptExclusions = /\b(avoid|exclude|without|do not|don't)\b/i.test(prompt);
+  const hasPromptExclusions = /\b(avoid|exclude|excluding|without|do not|don't)\b/i.test(prompt);
   return hasContextExclusions || hasPromptExclusions;
 }
 

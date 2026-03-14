@@ -74,6 +74,38 @@ describe('analyzePrompt', () => {
     expect(result.scores.tokenWasteRisk).toBeLessThanOrEqual(4);
   });
 
+  it('treats SMB business segments as a valid audience for general prompts', () => {
+    const result = analyzePrompt({
+      prompt:
+        'Develop a targeted guide on Kubernetes tailored for small to medium-sized businesses (SMBs) that covers essential aspects such as architecture, security measures, deployment strategies, monitoring techniques, troubleshooting methods, cost optimization practices, and migration strategies. Include real-world examples and actionable best practices, while explicitly excluding overly technical jargon and generic advice that may not apply to SMBs.',
+      role: 'general',
+      mode: 'balanced',
+    });
+
+    expect(result.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
+    expect(result.scores.contrast).toBeGreaterThanOrEqual(5);
+    expect(result.scores.clarity).toBeGreaterThanOrEqual(8);
+  });
+
+  it('raises general contrast when a rewrite adds audience narrowing and exclusions', () => {
+    const original = analyzePrompt({
+      prompt:
+        'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+      role: 'general',
+      mode: 'balanced',
+    });
+
+    const rewrite = analyzePrompt({
+      prompt:
+        'Develop a targeted guide on Kubernetes tailored for small to medium-sized businesses (SMBs) that covers essential aspects such as architecture, security measures, deployment strategies, monitoring techniques, troubleshooting methods, cost optimization practices, and migration strategies. Include real-world examples and actionable best practices, while explicitly excluding overly technical jargon and generic advice that may not apply to SMBs.',
+      role: 'general',
+      mode: 'balanced',
+    });
+
+    expect(rewrite.scores.contrast).toBeGreaterThan(original.scores.contrast);
+    expect(rewrite.scores.clarity).toBeGreaterThanOrEqual(original.scores.clarity);
+  });
+
   it('keeps IAM landing-page regression behavior stable', () => {
     const result = analyzePrompt({
       prompt:

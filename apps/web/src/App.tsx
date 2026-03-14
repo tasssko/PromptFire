@@ -34,8 +34,8 @@ function recommendation(result: AnalyzeAndRewriteV2Response): string {
 }
 
 export function App() {
-  const [prompt, setPrompt] = useState(fixtures.marketer);
-  const [role, setRole] = useState<Role>('marketer');
+  const [prompt, setPrompt] = useState(fixtures.general);
+  const [role, setRole] = useState<Role>('general');
   const [mode, setMode] = useState<Mode>('balanced');
   const [rewritePreference, setRewritePreference] = useState<RewritePreference>('auto');
   const [loading, setLoading] = useState(false);
@@ -122,10 +122,22 @@ export function App() {
           </div>
 
           <div className="row">
-            <button type="button" onClick={() => setPrompt(fixtures.marketer)}>
+            <button type="button" onClick={() => {
+              setRole('general');
+              setPrompt(fixtures.general);
+            }}>
+              General Fixture
+            </button>
+            <button type="button" onClick={() => {
+              setRole('marketer');
+              setPrompt(fixtures.marketer);
+            }}>
               Marketer Fixture
             </button>
-            <button type="button" onClick={() => setPrompt(fixtures.developer)}>
+            <button type="button" onClick={() => {
+              setRole('developer');
+              setPrompt(fixtures.developer);
+            }}>
               Developer Fixture
             </button>
             <button type="submit" disabled={!canSubmit}>

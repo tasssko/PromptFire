@@ -141,7 +141,7 @@ function hasAudience(prompt: string, context?: Record<string, unknown>) {
   }
 
   const explicitAudience =
-    /\b(for|aimed at|target(?:ing|ed at)?)\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,4}(?:cto|ctos|it decision-makers?|decision-makers?|enterprise buyers?|buyers?|developers?|engineers?|directors?|managers?|leaders?|admins?)\b/i;
+    /\b(for|aimed at|target(?:ing|ed at)?|tailored for)\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,6}(?:cto|ctos|it decision-makers?|decision-makers?|enterprise buyers?|buyers?|developers?|engineers?|directors?|managers?|leaders?|admins?|business(?:es)?|companies|organizations|teams|startups?|scaleups?|enterprises?|smbs?|small(?:\s+to\s+medium-sized)?\s+business(?:es)?|mid-sized\s+business(?:es)?)\b/i;
   const genericAudience = /\b(audience|target\s+user)\b/i;
   return explicitAudience.test(prompt) || genericAudience.test(prompt);
 }
@@ -150,13 +150,16 @@ function hasConstraints(prompt: string, context?: Record<string, unknown>) {
   const hasContextConstraints = Boolean(context?.mustInclude) || Boolean(context?.systemGoals);
   const hasPromptConstraints =
     /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
-    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt);
+    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt) ||
+    /\b(include|incorporate|cover)\s+(?:real-world|actionable|specific|practical|one|two|\d+|examples?|best practices|steps?|checklist|conclusion)\b/i.test(
+      prompt,
+    );
   return hasContextConstraints || hasPromptConstraints;
 }
 
 function hasExclusions(prompt: string, context?: Record<string, unknown>) {
   const hasContextExclusions = Boolean(context?.mustAvoid) || Boolean(context?.forbiddenPhrases);
-  const hasPromptExclusions = /\b(avoid|exclude|without|do not|don't)\b/i.test(prompt);
+  const hasPromptExclusions = /\b(avoid|exclude|excluding|without|do not|don't)\b/i.test(prompt);
   return hasContextExclusions || hasPromptExclusions;
 }
 
@@ -214,6 +217,13 @@ function countCategoryTerms(prompt: string): number {
     .toLowerCase()
     .replace(/(avoid|do not|don't|without|exclude|ban)\s+[^.]{0,200}/gi, '');
   return categoryTerms.filter((term) => new RegExp(`\\b${term}\\b`, 'i').test(withoutExclusions)).length;
+}
+
+function hasContrastBoundary(prompt: string, context?: Record<string, unknown>): boolean {
+  return (
+    hasExclusions(prompt, context) ||
+    /\b(tailored for|specific to|for smb|for smbs|for startups|for enterprises|rather than|instead of)\b/i.test(prompt)
+  );
 }
 
 function hasLeadAngle(prompt: string): boolean {
@@ -490,7 +500,18 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
         }
       : {
           scope: computeScopeScore({ prompt, context, constraintsPresent, overloaded }),
-          contrast: Math.max(0, 10 - (foundGenericPhrases.length > 0 ? 5 : 2) - (audiencePresent ? 0 : 2)),
+          contrast: Math.min(
+            10,
+            Math.max(
+              0,
+              (audiencePresent ? 2 : 0) +
+                audienceOrContextSpecificity(prompt, context) +
+                (hasContrastBoundary(prompt, context) ? 2 : 0) +
+                (constraintsPresent ? 1 : 0) -
+                (foundGenericPhrases.length > 0 ? 4 : 0) -
+                (overloaded ? 1 : 0),
+            ),
+          ),
           clarity: Math.max(0, 8 - (overloaded ? 2 : 0) - (constraintsPresent ? 0 : 2)),
           constraintQuality: constraintsPresent ? 7 : 2,
           genericOutputRisk,
