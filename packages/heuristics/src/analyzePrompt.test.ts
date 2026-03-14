@@ -221,7 +221,7 @@ describe('analyzePrompt', () => {
     expect(result.scores.scope).toBeLessThanOrEqual(1);
   });
 
-  describe('calibration regression fixtures', () => {
+  describe('calibration fixtures', () => {
     const scoreBandFromOverallScore = (overallScore: number) => {
       if (overallScore >= 90) {
         return 'excellent';
@@ -250,23 +250,91 @@ describe('analyzePrompt', () => {
       return Math.round(Math.max(0, Math.min(100, rawOverallScore)));
     };
 
+    const normalizeCodes = (input: string[] | string) =>
+      [...new Set((Array.isArray(input) ? input : input ? input.split('|') : []).filter(Boolean))].sort();
+
     const fixtures = [
       {
-        name: 'low prompt',
+        id: 'p1',
         input: {
           prompt: 'Write a blog post about DevOps.',
           role: 'general' as const,
           mode: 'balanced' as const,
         },
         expected: {
-          minScore: 0,
-          maxScore: 54,
-          scoreBands: ['weak', 'poor'],
-          mustIncludeIssueCodes: ['AUDIENCE_MISSING', 'CONSTRAINTS_MISSING'],
+          scope: 4,
+          contrast: 0,
+          clarity: 6,
+          constraintQuality: 2,
+          genericOutputRisk: 8,
+          tokenWasteRisk: 4,
+          overallScore: 33,
+          scoreBand: 'poor',
+          issueCodes: 'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
         },
       },
       {
-        name: 'medium prompt',
+        id: 'p2',
+        input: {
+          prompt:
+            'Write an amazing, compelling, innovative blog post about cloud security that really stands out and feels modern and professional.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          scope: 4,
+          contrast: 0,
+          clarity: 6,
+          constraintQuality: 2,
+          genericOutputRisk: 10,
+          tokenWasteRisk: 4,
+          overallScore: 31,
+          scoreBand: 'poor',
+          issueCodes:
+            'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_PHRASES_DETECTED|GENERIC_OUTPUT_RISK_HIGH',
+        },
+      },
+      {
+        id: 'p3',
+        input: {
+          prompt:
+            'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          scope: 5,
+          contrast: 3,
+          clarity: 6,
+          constraintQuality: 2,
+          genericOutputRisk: 6,
+          tokenWasteRisk: 4,
+          overallScore: 44,
+          scoreBand: 'weak',
+          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING',
+        },
+      },
+      {
+        id: 'p4',
+        input: {
+          prompt: 'Write a landing page for our IAM platform aimed at IT leaders. Mention security, compliance, and ease of use.',
+          role: 'marketer' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          scope: 5,
+          contrast: 4,
+          clarity: 8,
+          constraintQuality: 2,
+          genericOutputRisk: 6,
+          tokenWasteRisk: 2,
+          overallScore: 52,
+          scoreBand: 'weak',
+          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+        },
+      },
+      {
+        id: 'p5',
         input: {
           prompt:
             'Write a blog post for engineering managers about CI/CD mistakes teams make when they grow quickly. Use a practical tone and include examples.',
@@ -274,70 +342,112 @@ describe('analyzePrompt', () => {
           mode: 'balanced' as const,
         },
         expected: {
-          minScore: 55,
-          maxScore: 79,
-          scoreBands: ['usable'],
-          mustNotIncludeIssueCodes: ['AUDIENCE_MISSING'],
+          scope: 6,
+          contrast: 4,
+          clarity: 8,
+          constraintQuality: 7,
+          genericOutputRisk: 4,
+          tokenWasteRisk: 4,
+          overallScore: 62,
+          scoreBand: 'usable',
+          issueCodes: 'EXCLUSIONS_MISSING',
         },
       },
       {
-        name: 'high marketer prompt',
+        id: 'p6',
+        input: {
+          prompt:
+            'Write an email to CTOs at SaaS companies explaining why platform engineering improves developer productivity. Keep it concise and persuasive.',
+          role: 'marketer' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          scope: 4,
+          contrast: 3,
+          clarity: 8,
+          constraintQuality: 2,
+          genericOutputRisk: 6,
+          tokenWasteRisk: 2,
+          overallScore: 47,
+          scoreBand: 'weak',
+          issueCodes: 'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+        },
+      },
+      {
+        id: 'p7',
+        input: {
+          prompt:
+            'Write a blog post for engineering managers at SaaS companies about when TypeScript improves maintainability and when it adds unnecessary complexity. Use one startup example and one enterprise example. Avoid hype and keep the tone practical.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+        },
+        expected: {
+          scope: 10,
+          contrast: 7,
+          clarity: 8,
+          constraintQuality: 7,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 4,
+          overallScore: 79,
+          scoreBand: 'strong',
+          issueCodes: '',
+        },
+      },
+      {
+        id: 'p8',
         input: {
           prompt: strongMarketerPrompt,
           role: 'marketer' as const,
           mode: 'high_contrast' as const,
         },
         expected: {
-          minScore: 80,
-          maxScore: 100,
-          scoreBands: ['strong', 'excellent'],
-          maxGenericOutputRisk: 4,
-          maxTokenWasteRisk: 3,
+          scope: 10,
+          contrast: 10,
+          clarity: 8,
+          constraintQuality: 7,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 2,
+          overallScore: 87,
+          scoreBand: 'strong',
+          issueCodes: '',
         },
       },
       {
-        name: 'high microservices prompt',
+        id: 'p9',
         input: {
           prompt: microservicesCalibrationPrompt,
           role: 'general' as const,
           mode: 'balanced' as const,
         },
         expected: {
-          minScore: 75,
-          maxScore: 100,
-          scoreBands: ['strong', 'excellent'],
-          mustNotIncludeIssueCodes: ['CONSTRAINTS_MISSING'],
-          maxGenericOutputRisk: 4,
-          maxTokenWasteRisk: 4,
+          scope: 10,
+          contrast: 7,
+          clarity: 8,
+          constraintQuality: 7,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 4,
+          overallScore: 79,
+          scoreBand: 'strong',
+          issueCodes: '',
         },
       },
     ] as const;
 
     for (const fixture of fixtures) {
-      it(fixture.name, () => {
+      it(fixture.id, () => {
         const result = analyzePrompt(fixture.input);
         const overallScore = computeOverallScore(result.scores);
         const scoreBand = scoreBandFromOverallScore(overallScore);
 
-        expect(overallScore).toBeGreaterThanOrEqual(fixture.expected.minScore);
-        expect(overallScore).toBeLessThanOrEqual(fixture.expected.maxScore);
-        expect(fixture.expected.scoreBands).toContain(scoreBand);
-
-        for (const code of fixture.expected.mustIncludeIssueCodes ?? []) {
-          expect(result.detectedIssueCodes).toContain(code);
-        }
-
-        for (const code of fixture.expected.mustNotIncludeIssueCodes ?? []) {
-          expect(result.detectedIssueCodes).not.toContain(code);
-        }
-
-        if (fixture.expected.maxGenericOutputRisk !== undefined) {
-          expect(result.scores.genericOutputRisk).toBeLessThanOrEqual(fixture.expected.maxGenericOutputRisk);
-        }
-
-        if (fixture.expected.maxTokenWasteRisk !== undefined) {
-          expect(result.scores.tokenWasteRisk).toBeLessThanOrEqual(fixture.expected.maxTokenWasteRisk);
-        }
+        expect(result.scores.scope).toBe(fixture.expected.scope);
+        expect(result.scores.contrast).toBe(fixture.expected.contrast);
+        expect(result.scores.clarity).toBe(fixture.expected.clarity);
+        expect(result.scores.constraintQuality).toBe(fixture.expected.constraintQuality);
+        expect(result.scores.genericOutputRisk).toBe(fixture.expected.genericOutputRisk);
+        expect(result.scores.tokenWasteRisk).toBe(fixture.expected.tokenWasteRisk);
+        expect(overallScore).toBe(fixture.expected.overallScore);
+        expect(scoreBand).toBe(fixture.expected.scoreBand);
+        expect(normalizeCodes(result.detectedIssueCodes)).toEqual(normalizeCodes(fixture.expected.issueCodes));
       });
     }
   });

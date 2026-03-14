@@ -322,9 +322,12 @@ describe('API vertical slice', () => {
   });
 
   describe('v2 calibration fixtures', () => {
+    const normalizeCodes = (input: string[] | string) =>
+      [...new Set((Array.isArray(input) ? input : input ? input.split('|') : []).filter(Boolean))].sort();
+
     const fixtures = [
       {
-        name: 'low prompt',
+        id: 'p1',
         request: {
           prompt: 'Write a blog post about DevOps.',
           role: 'general' as const,
@@ -332,19 +335,110 @@ describe('API vertical slice', () => {
           rewritePreference: 'auto' as const,
         },
         expected: {
-          minScore: 0,
-          maxScore: 54,
-          scoreBands: ['weak', 'poor'],
+          scores: {
+            scope: 5,
+            contrast: 0,
+            clarity: 6,
+            constraintQuality: 2,
+            genericOutputRisk: 8,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 36,
+          scoreBand: 'weak',
           rewriteRecommendation: 'rewrite_recommended' as const,
           expectedImprovement: 'high' as const,
           majorBlockingIssues: true,
           rewritePresent: true,
           evaluationPresent: true,
-          mustIncludeIssueCodes: ['AUDIENCE_MISSING', 'CONSTRAINTS_MISSING'],
+          issueCodes: 'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
         },
       },
       {
-        name: 'medium prompt',
+        id: 'p2',
+        request: {
+          prompt:
+            'Write an amazing, compelling, innovative blog post about cloud security that really stands out and feels modern and professional.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          scores: {
+            scope: 5,
+            contrast: 0,
+            clarity: 6,
+            constraintQuality: 2,
+            genericOutputRisk: 10,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 34,
+          scoreBand: 'poor',
+          rewriteRecommendation: 'rewrite_recommended' as const,
+          expectedImprovement: 'high' as const,
+          majorBlockingIssues: true,
+          rewritePresent: true,
+          evaluationPresent: true,
+          issueCodes:
+            'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_PHRASES_DETECTED|GENERIC_OUTPUT_RISK_HIGH',
+        },
+      },
+      {
+        id: 'p3',
+        request: {
+          prompt:
+            'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          scores: {
+            scope: 5,
+            contrast: 3,
+            clarity: 6,
+            constraintQuality: 2,
+            genericOutputRisk: 6,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 44,
+          scoreBand: 'weak',
+          rewriteRecommendation: 'rewrite_recommended' as const,
+          expectedImprovement: 'high' as const,
+          majorBlockingIssues: true,
+          rewritePresent: true,
+          evaluationPresent: true,
+          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING',
+        },
+      },
+      {
+        id: 'p4',
+        request: {
+          prompt: 'Write a landing page for our IAM platform aimed at IT leaders. Mention security, compliance, and ease of use.',
+          role: 'marketer' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          scores: {
+            scope: 7,
+            contrast: 4,
+            clarity: 8,
+            constraintQuality: 2,
+            genericOutputRisk: 6,
+            tokenWasteRisk: 2,
+          },
+          overallScore: 57,
+          scoreBand: 'usable',
+          rewriteRecommendation: 'rewrite_optional' as const,
+          expectedImprovement: 'high' as const,
+          majorBlockingIssues: true,
+          rewritePresent: true,
+          evaluationPresent: true,
+          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+        },
+      },
+      {
+        id: 'p5',
         request: {
           prompt:
             'Write a blog post for engineering managers about CI/CD mistakes teams make when they grow quickly. Use a practical tone and include examples.',
@@ -353,19 +447,82 @@ describe('API vertical slice', () => {
           rewritePreference: 'auto' as const,
         },
         expected: {
-          minScore: 55,
-          maxScore: 79,
-          scoreBands: ['usable'],
+          scores: {
+            scope: 5,
+            contrast: 4,
+            clarity: 8,
+            constraintQuality: 7,
+            genericOutputRisk: 4,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 59,
+          scoreBand: 'usable',
           rewriteRecommendation: 'rewrite_optional' as const,
           expectedImprovement: 'high' as const,
           majorBlockingIssues: false,
           rewritePresent: true,
           evaluationPresent: true,
-          mustNotIncludeIssueCodes: ['AUDIENCE_MISSING'],
+          issueCodes: 'EXCLUSIONS_MISSING',
         },
       },
       {
-        name: 'high marketer prompt',
+        id: 'p6',
+        request: {
+          prompt:
+            'Write an email to CTOs at SaaS companies explaining why platform engineering improves developer productivity. Keep it concise and persuasive.',
+          role: 'marketer' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          scores: {
+            scope: 6,
+            contrast: 3,
+            clarity: 8,
+            constraintQuality: 2,
+            genericOutputRisk: 6,
+            tokenWasteRisk: 2,
+          },
+          overallScore: 52,
+          scoreBand: 'weak',
+          rewriteRecommendation: 'rewrite_recommended' as const,
+          expectedImprovement: 'high' as const,
+          majorBlockingIssues: true,
+          rewritePresent: true,
+          evaluationPresent: true,
+          issueCodes: 'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+        },
+      },
+      {
+        id: 'p7',
+        request: {
+          prompt:
+            'Write a blog post for engineering managers at SaaS companies about when TypeScript improves maintainability and when it adds unnecessary complexity. Use one startup example and one enterprise example. Avoid hype and keep the tone practical.',
+          role: 'general' as const,
+          mode: 'balanced' as const,
+          rewritePreference: 'auto' as const,
+        },
+        expected: {
+          scores: {
+            scope: 7,
+            contrast: 7,
+            clarity: 8,
+            constraintQuality: 7,
+            genericOutputRisk: 3,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 71,
+          scoreBand: 'usable',
+          rewriteRecommendation: 'no_rewrite_needed' as const,
+          expectedImprovement: 'low' as const,
+          majorBlockingIssues: false,
+          rewritePresent: false,
+          evaluationPresent: false,
+          issueCodes: '',
+        },
+      },
+      {
+        id: 'p8',
         request: {
           prompt: strongV2Prompt,
           role: 'marketer' as const,
@@ -373,18 +530,26 @@ describe('API vertical slice', () => {
           rewritePreference: 'auto' as const,
         },
         expected: {
-          minScore: 80,
-          maxScore: 100,
-          scoreBands: ['strong', 'excellent'],
+          scores: {
+            scope: 10,
+            contrast: 10,
+            clarity: 8,
+            constraintQuality: 7,
+            genericOutputRisk: 3,
+            tokenWasteRisk: 2,
+          },
+          overallScore: 87,
+          scoreBand: 'strong',
           rewriteRecommendation: 'no_rewrite_needed' as const,
           expectedImprovement: 'low' as const,
           majorBlockingIssues: false,
           rewritePresent: false,
           evaluationPresent: false,
+          issueCodes: '',
         },
       },
       {
-        name: 'high microservices prompt',
+        id: 'p9',
         request: {
           prompt: microservicesCalibrationPrompt,
           role: 'general' as const,
@@ -392,23 +557,28 @@ describe('API vertical slice', () => {
           rewritePreference: 'auto' as const,
         },
         expected: {
-          // v2 scope remapping keeps this prompt in the usable band, while low expected
-          // improvement and no blocking issues still suppress rewrite generation.
-          minScore: 70,
-          maxScore: 79,
-          scoreBands: ['usable'],
+          scores: {
+            scope: 7,
+            contrast: 7,
+            clarity: 8,
+            constraintQuality: 7,
+            genericOutputRisk: 3,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 71,
+          scoreBand: 'usable',
           rewriteRecommendation: 'no_rewrite_needed' as const,
           expectedImprovement: 'low' as const,
           majorBlockingIssues: false,
           rewritePresent: false,
           evaluationPresent: false,
-          mustNotIncludeIssueCodes: ['CONSTRAINTS_MISSING'],
+          issueCodes: '',
         },
       },
     ] as const;
 
     for (const fixture of fixtures) {
-      it(fixture.name, async () => {
+      it(fixture.id, async () => {
         process.env.REWRITE_PROVIDER_MODE = 'mock';
 
         const response = await handleHttpRequest({
@@ -422,21 +592,19 @@ describe('API vertical slice', () => {
 
         expect(response.statusCode).toBe(200);
         expect(body.meta.version).toBe('2');
-        expect(body.overallScore).toBeGreaterThanOrEqual(fixture.expected.minScore);
-        expect(body.overallScore).toBeLessThanOrEqual(fixture.expected.maxScore);
-        expect(fixture.expected.scoreBands).toContain(body.scoreBand);
+        expect(body.analysis.scores.scope).toBe(fixture.expected.scores.scope);
+        expect(body.analysis.scores.contrast).toBe(fixture.expected.scores.contrast);
+        expect(body.analysis.scores.clarity).toBe(fixture.expected.scores.clarity);
+        expect(body.analysis.scores.constraintQuality).toBe(fixture.expected.scores.constraintQuality);
+        expect(body.analysis.scores.genericOutputRisk).toBe(fixture.expected.scores.genericOutputRisk);
+        expect(body.analysis.scores.tokenWasteRisk).toBe(fixture.expected.scores.tokenWasteRisk);
+        expect(body.overallScore).toBe(fixture.expected.overallScore);
+        expect(body.scoreBand).toBe(fixture.expected.scoreBand);
         expect(body.rewriteRecommendation).toBe(fixture.expected.rewriteRecommendation);
         expect(body.gating.rewritePreference).toBe('auto');
         expect(body.gating.expectedImprovement).toBe(fixture.expected.expectedImprovement);
         expect(body.gating.majorBlockingIssues).toBe(fixture.expected.majorBlockingIssues);
-
-        for (const code of fixture.expected.mustIncludeIssueCodes ?? []) {
-          expect(body.analysis.detectedIssueCodes).toContain(code);
-        }
-
-        for (const code of fixture.expected.mustNotIncludeIssueCodes ?? []) {
-          expect(body.analysis.detectedIssueCodes).not.toContain(code);
-        }
+        expect(normalizeCodes(body.analysis.detectedIssueCodes)).toEqual(normalizeCodes(fixture.expected.issueCodes));
 
         if (fixture.expected.rewritePresent) {
           expect(body.rewrite).toBeTruthy();
