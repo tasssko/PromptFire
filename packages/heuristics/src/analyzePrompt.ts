@@ -25,6 +25,17 @@ interface MarketerSignals {
   functionalCompositionScore: number;
 }
 
+interface ConstraintSignals {
+  audience: boolean;
+  examples: boolean;
+  exclusions: boolean;
+  tone: boolean;
+  framing: boolean;
+  structure: boolean;
+  explicitLimit: boolean;
+  categoryCount: number;
+}
+
 function hasClearDeliverable(prompt: string): 0 | 1 | 2 {
   const actionVerb = /\b(write|draft|create|build|design|implement|analyze|optimize|summarize|generate)\b/i.test(
     prompt,
@@ -73,7 +84,7 @@ function taskBoundaries(prompt: string, context?: Record<string, unknown>): 0 | 
   const strongBoundary =
     exclusions ||
     /\b(lead with|focus on|rather than|in scope|out of scope|avoid fear-based|do not use)\b/i.test(prompt);
-  const weakBoundary = /\b(focus on|highlight|emphasize)\b/i.test(prompt);
+  const weakBoundary = /\b(focus on|prioritize|center on)\b/i.test(prompt);
 
   if (strongBoundary) {
     return 2;
@@ -84,27 +95,6 @@ function taskBoundaries(prompt: string, context?: Record<string, unknown>): 0 | 
   }
 
   return 0;
-}
-
-function functionalConstraintQuality(
-  prompt: string,
-  context: Record<string, unknown> | undefined,
-  constraintsPresent: boolean,
-): 0 | 1 | 2 {
-  if (!constraintsPresent) {
-    return 0;
-  }
-
-  const specificConstraint =
-    /\b(one|two|\d+|at least|exactly|measurable|quantifiable|must|only|limit|avoid|do not)\b/i.test(prompt) ||
-    Boolean(context?.mustInclude) ||
-    Boolean(context?.mustAvoid);
-
-  if (specificConstraint) {
-    return 2;
-  }
-
-  return 1;
 }
 
 function taskLoadScore(prompt: string, overloaded: boolean): 0 | 1 | 2 {
@@ -120,6 +110,149 @@ function taskLoadScore(prompt: string, overloaded: boolean): 0 | 1 | 2 {
   return 2;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function hasOutputShapeRequirement(prompt: string, context?: Record<string, unknown>): boolean {
+  if (Boolean(context?.mustInclude) || Boolean(context?.systemGoals)) {
+    return true;
+  }
+
+  return /\b(section|sections|headline|opening|cta|call to action|outline|format|bullet|table|checklist|conclusion|step|steps)\b/i.test(
+    prompt,
+  );
+}
+
+function hasExplicitLimit(prompt: string, context?: Record<string, unknown>): boolean {
+  if (Boolean(context?.mustInclude) || Boolean(context?.mustAvoid)) {
+    return true;
+  }
+
+  return /\b(exactly|at least|at most|one|two|\d+|only|limit|maximum|min(?:imum)?)\b/i.test(prompt);
+}
+
+function outputShapeScore(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 {
+  const hasShape = hasOutputShapeRequirement(prompt, context);
+  const hasLimit = hasExplicitLimit(prompt, context);
+
+  if (hasShape && hasLimit) {
+    return 2;
+  }
+
+  if (hasShape || hasLimit) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function estimateTopicInclusions(prompt: string): number {
+  const lowered = prompt.toLowerCase();
+  const inclusionVerbMatch = lowered.match(/\b(include|including|cover|covering|mention|highlight|emphasize|address|incorporate)\b/g)
+    ?.length ?? 0;
+  const separators = lowered.match(/,| and |;|\/|&/g)?.length ?? 0;
+  const listBurst = /\b(include|including|cover|covering)\b.{0,180}(?:,| and |;).{0,180}(?:,| and |;)/i.test(prompt) ? 2 : 0;
+  return inclusionVerbMatch + Math.floor(separators / 2) + listBurst;
+}
+
+function breadthExpansionPenalty(prompt: string, overloaded: boolean): 0 | 1 | 2 {
+  if (overloaded) {
+    return 2;
+  }
+
+  const completeGuidePattern = /\b(complete guide|comprehensive guide|end-to-end guide|everything about)\b/i.test(prompt);
+  const topicInclusions = estimateTopicInclusions(prompt);
+  if (completeGuidePattern || topicInclusions >= 8) {
+    return 2;
+  }
+
+  if (topicInclusions >= 5) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function netBoundingAdjustment(prompt: string, context: Record<string, unknown> | undefined, overloaded: boolean): -1 | 0 | 1 {
+  const narrowedAudience = audienceOrContextSpecificity(prompt, context) >= 2;
+  const exclusions = hasExclusions(prompt, context);
+  const framing = /\b(lead with|focus on|rather than|trade[-\s]?off|instead of|angle)\b/i.test(prompt);
+  const outputShape = hasOutputShapeRequirement(prompt, context);
+  const explicitLimit = hasExplicitLimit(prompt, context);
+  const narrowingSignals = [narrowedAudience, exclusions, framing, outputShape, explicitLimit].filter(Boolean).length;
+
+  const completeGuidePattern = /\b(complete guide|comprehensive guide|end-to-end guide|everything about)\b/i.test(prompt);
+  const broadAudience = /\b(for different kinds of businesses|for all businesses|for everyone|for any audience)\b/i.test(prompt);
+  const expandingSignals = [
+    completeGuidePattern,
+    broadAudience,
+    estimateTopicInclusions(prompt) >= 5,
+    overloaded,
+  ].filter(Boolean).length;
+
+  if (narrowingSignals >= expandingSignals + 2) {
+    return 1;
+  }
+
+  if (expandingSignals >= narrowingSignals + 1) {
+    return -1;
+  }
+
+  return 0;
+}
+
+function deriveConstraintSignals(prompt: string, context?: Record<string, unknown>): ConstraintSignals {
+  const audience = hasAudience(prompt, context);
+  const examples = /\b(example|examples|case study|testimonial|proof|metric|result|outcome)\b/i.test(prompt);
+  const exclusions = hasExclusions(prompt, context);
+  const tone = /\b(tone|voice|concise|persuasive|grounded|formal|casual|avoid hype|practical)\b/i.test(prompt);
+  const framing = /\b(lead with|focus on|rather than|trade[-\s]?off|angle|framing|positioning)\b/i.test(prompt);
+  const structure = hasOutputShapeRequirement(prompt, context);
+  const explicitLimit = hasExplicitLimit(prompt, context);
+
+  const categoryCount = [audience, examples, exclusions, tone, framing, structure, explicitLimit].filter(Boolean).length;
+
+  return {
+    audience,
+    examples,
+    exclusions,
+    tone,
+    framing,
+    structure,
+    explicitLimit,
+    categoryCount,
+  };
+}
+
+function computeConstraintQualityScore(
+  prompt: string,
+  context: Record<string, unknown> | undefined,
+  constraintsPresent: boolean,
+  marketerConstraintsWeak: boolean,
+): number {
+  if (!constraintsPresent) {
+    return 2;
+  }
+
+  const signals = deriveConstraintSignals(prompt, context);
+  const onlyAudience = signals.audience && signals.categoryCount === 1;
+  if (onlyAudience) {
+    return 2;
+  }
+
+  let score = 2 + signals.categoryCount;
+  if ((signals.exclusions && signals.framing) || (signals.structure && signals.explicitLimit)) {
+    score += 1;
+  }
+
+  if (marketerConstraintsWeak) {
+    score -= 1;
+  }
+
+  return clamp(score, 2, 9);
+}
+
 function computeScopeScore(input: {
   prompt: string;
   context?: Record<string, unknown>;
@@ -129,9 +262,12 @@ function computeScopeScore(input: {
   const deliverable = hasClearDeliverable(input.prompt);
   const audienceContext = audienceOrContextSpecificity(input.prompt, input.context);
   const boundaries = taskBoundaries(input.prompt, input.context);
-  const constraints = functionalConstraintQuality(input.prompt, input.context, input.constraintsPresent);
+  const outputShape = outputShapeScore(input.prompt, input.context);
   const taskLoad = taskLoadScore(input.prompt, input.overloaded);
-  return deliverable + audienceContext + boundaries + constraints + taskLoad;
+  const breadthPenalty = breadthExpansionPenalty(input.prompt, input.overloaded);
+  const netBounding = netBoundingAdjustment(input.prompt, input.context, input.overloaded);
+
+  return clamp(deliverable + audienceContext + boundaries + outputShape + taskLoad - breadthPenalty + netBounding, 0, 10);
 }
 
 function hasAudience(prompt: string, context?: Record<string, unknown>) {
@@ -148,9 +284,13 @@ function hasAudience(prompt: string, context?: Record<string, unknown>) {
 
 function hasConstraints(prompt: string, context?: Record<string, unknown>) {
   const hasContextConstraints = Boolean(context?.mustInclude) || Boolean(context?.systemGoals);
+  const inclusionListConstraint =
+    /\b(include|including|cover|covering)\b/i.test(prompt) &&
+    ((prompt.match(/,| and |;|\/|&/gi)?.length ?? 0) >= 2 || /\b(example|examples|best practices|steps?|checklist|conclusion)\b/i.test(prompt));
   const hasPromptConstraints =
     /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
     /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt) ||
+    inclusionListConstraint ||
     /\b(include|incorporate|cover)\s+(?:real-world|actionable|specific|practical|one|two|\d+|examples?|best practices|steps?|checklist|conclusion)\b/i.test(
       prompt,
     );
@@ -494,7 +634,12 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
             0,
             8 - (marketerSignals?.proofWeak ? 1 : 0) - (marketerSignals?.constraintsWeak ? 1 : 0) - (overloaded ? 2 : 0),
           ),
-          constraintQuality: !constraintsPresent ? 2 : marketerSignals?.constraintsWeak ? 5 : 7,
+          constraintQuality: computeConstraintQualityScore(
+            prompt,
+            context,
+            constraintsPresent,
+            Boolean(marketerSignals?.constraintsWeak),
+          ),
           genericOutputRisk,
           tokenWasteRisk: Math.min(10, Math.max(0, 2 + (overloaded ? 3 : 0) + (prompt.length > 1000 ? 2 : 0))),
         }
@@ -513,7 +658,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
             ),
           ),
           clarity: Math.max(0, 8 - (overloaded ? 2 : 0) - (constraintsPresent ? 0 : 2)),
-          constraintQuality: constraintsPresent ? 7 : 2,
+          constraintQuality: computeConstraintQualityScore(prompt, context, constraintsPresent, false),
           genericOutputRisk,
           tokenWasteRisk: Math.min(10, Math.max(0, 3 + (overloaded ? 2 : 0) + (prompt.length > 1000 ? 3 : 1))),
         };
