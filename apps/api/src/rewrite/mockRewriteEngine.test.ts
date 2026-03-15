@@ -114,7 +114,7 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(rewrite.rewrittenPrompt).not.toMatch(/\.\s*for\b/i);
   });
 
-  it('adds structure, trade-off frame, and exclusion for broad technical guides', async () => {
+  it('adds trade-off frame and exclusion for broad technical guides with present topical constraints', async () => {
     const prompt =
       'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, and a conclusion for different kinds of businesses.';
     const analysis = analyzePrompt({
@@ -133,20 +133,17 @@ describe('MockRewriteEngine marketer behavior', () => {
       analysis,
     });
 
-    expect(rewrite.rewrittenPrompt).toContain('Structure the guide in sections covering architecture');
     expect(rewrite.rewrittenPrompt).toContain(
       'Explain when Kubernetes is worth the operational complexity and when simpler options are better.',
     );
     expect(rewrite.rewrittenPrompt).toContain('Avoid vendor-marketing language and unsupported superlatives.');
-    const structureIndex = rewrite.rewrittenPrompt.indexOf('Structure the guide in sections covering architecture');
     const boundaryIndex = rewrite.rewrittenPrompt.indexOf(
       'Explain when Kubernetes is worth the operational complexity and when simpler options are better.',
     );
     const exclusionIndex = rewrite.rewrittenPrompt.indexOf(
       'Avoid vendor-marketing language and unsupported superlatives.',
     );
-    expect(structureIndex).toBeGreaterThan(-1);
-    expect(boundaryIndex).toBeGreaterThan(structureIndex);
+    expect(boundaryIndex).toBeGreaterThan(-1);
     expect(exclusionIndex).toBeGreaterThan(boundaryIndex);
   });
 
