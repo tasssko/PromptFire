@@ -12,8 +12,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@promptfire/db": "workspace:*",
     "@promptfire/heuristics": "workspace:*",
     "@promptfire/shared": "workspace:*",
+    "drizzle-orm": "^0.44.6",
     "dotenv": "^16.4.7"
   },
   "devDependencies": {

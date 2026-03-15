@@ -1,4 +1,6 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { and, eq, gt, isNull } from 'drizzle-orm';
+import { getDb, hasDatabaseUrl, magicLinkTokens, passkeyCredentials, sessions, users } from '@promptfire/db';
 
 interface UserRecord {
   id: string;
@@ -39,123 +41,294 @@ function nowMs(): number {
   return Date.now();
 }
 
-function findOrCreateUserByEmail(email: string): UserRecord {
-  const normalizedEmail = email.trim().toLowerCase();
-  const existingUserId = usersByEmail.get(normalizedEmail);
-  if (existingUserId) {
-    const user = usersById.get(existingUserId);
-    if (user) {
-      return user;
-    }
-  }
-
-  const user: UserRecord = {
-    id: `usr_${randomUUID()}`,
-    email: normalizedEmail,
-    createdAt: nowMs(),
-    lastSignInAt: nowMs(),
-  };
-
-  usersById.set(user.id, user);
-  usersByEmail.set(user.email, user.id);
-  return user;
-}
-
-function createSession(userId: string): SessionRecord {
-  const ttlMs = Number(process.env.AUTH_SESSION_TTL_MS ?? 1000 * 60 * 60 * 24 * 14);
-  const session: SessionRecord = {
-    id: `ses_${randomUUID()}`,
-    userId,
-    createdAt: nowMs(),
-    expiresAt: nowMs() + ttlMs,
-  };
-
-  sessionsById.set(session.id, session);
-  const user = usersById.get(userId);
-  if (user) {
-    user.lastSignInAt = nowMs();
-    usersById.set(user.id, user);
-  }
-
-  return session;
-}
-
-function sessionIsActive(session: SessionRecord): boolean {
-  return session.expiresAt > nowMs();
+function nowDate(): Date {
+  return new Date();
 }
 
 function randomToken(prefix: string): string {
   return `${prefix}_${randomBytes(24).toString('base64url')}`;
 }
 
-export function createMagicLink(email: string): { token: string } {
-  const user = findOrCreateUserByEmail(email);
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+async function findOrCreateUserByEmail(email: string): Promise<UserRecord> {
+  const normalizedEmail = normalizeEmail(email);
+
+  if (!hasDatabaseUrl()) {
+    const existingUserId = usersByEmail.get(normalizedEmail);
+    if (existingUserId) {
+      const user = usersById.get(existingUserId);
+      if (user) {
+        return user;
+      }
+    }
+
+    const user: UserRecord = {
+      id: `usr_${randomUUID()}`,
+      email: normalizedEmail,
+      createdAt: nowMs(),
+      lastSignInAt: nowMs(),
+    };
+
+    usersById.set(user.id, user);
+    usersByEmail.set(user.email, user.id);
+    return user;
+  }
+
+  const db = getDb();
+  const existing = await db.query.users.findFirst({
+    where: (table, operators) => operators.eq(table.email, normalizedEmail),
+  });
+
+  if (existing) {
+    return {
+      id: existing.id,
+      email: existing.email,
+      createdAt: existing.createdAt.getTime(),
+      lastSignInAt: existing.lastLoginAt?.getTime() ?? existing.createdAt.getTime(),
+    };
+  }
+
+  const timestamp = nowDate();
+  const userId = `usr_${randomUUID()}`;
+  await db.insert(users).values({
+    id: userId,
+    email: normalizedEmail,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    lastLoginAt: timestamp,
+  });
+
+  return {
+    id: userId,
+    email: normalizedEmail,
+    createdAt: timestamp.getTime(),
+    lastSignInAt: timestamp.getTime(),
+  };
+}
+
+async function createSession(userId: string): Promise<{ id: string; expiresAt: Date }> {
+  const ttlMs = Number(process.env.AUTH_SESSION_TTL_MS ?? 1000 * 60 * 60 * 24 * 14);
+  const sessionId = `ses_${randomUUID()}`;
+  const expiresAt = new Date(nowMs() + ttlMs);
+
+  if (!hasDatabaseUrl()) {
+    const session: SessionRecord = {
+      id: sessionId,
+      userId,
+      createdAt: nowMs(),
+      expiresAt: expiresAt.getTime(),
+    };
+    sessionsById.set(session.id, session);
+
+    const user = usersById.get(userId);
+    if (user) {
+      user.lastSignInAt = nowMs();
+      usersById.set(user.id, user);
+    }
+
+    return { id: sessionId, expiresAt };
+  }
+
+  const db = getDb();
+  const timestamp = nowDate();
+  await db.insert(sessions).values({
+    id: sessionId,
+    userId,
+    createdAt: timestamp,
+    expiresAt,
+    lastSeenAt: timestamp,
+  });
+
+  await db
+    .update(users)
+    .set({
+      lastLoginAt: timestamp,
+      updatedAt: timestamp,
+    })
+    .where(eq(users.id, userId));
+
+  return { id: sessionId, expiresAt };
+}
+
+export async function createMagicLink(email: string): Promise<{ token: string }> {
+  const user = await findOrCreateUserByEmail(email);
   const ttlMs = Number(process.env.AUTH_MAGIC_LINK_TTL_MS ?? 1000 * 60 * 15);
   const token = randomToken('mlt');
-  magicTokens.set(token, {
-    token,
+
+  if (!hasDatabaseUrl()) {
+    magicTokens.set(token, {
+      token,
+      userId: user.id,
+      expiresAt: nowMs() + ttlMs,
+    });
+    return { token };
+  }
+
+  const db = getDb();
+  await db.insert(magicLinkTokens).values({
+    id: `mlk_${randomUUID()}`,
     userId: user.id,
-    expiresAt: nowMs() + ttlMs,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(nowMs() + ttlMs),
+    createdAt: nowDate(),
   });
 
   return { token };
 }
 
-export function verifyMagicLink(token: string): { sessionId: string; user: UserRecord } | null {
-  const record = magicTokens.get(token);
-  if (!record || record.usedAt || record.expiresAt <= nowMs()) {
+export async function verifyMagicLink(token: string): Promise<{ sessionId: string; user: UserRecord } | null> {
+  if (!hasDatabaseUrl()) {
+    const record = magicTokens.get(token);
+    if (!record || record.usedAt || record.expiresAt <= nowMs()) {
+      return null;
+    }
+
+    const user = usersById.get(record.userId);
+    if (!user) {
+      return null;
+    }
+
+    record.usedAt = nowMs();
+    magicTokens.set(token, record);
+
+    const session = await createSession(user.id);
+    return { sessionId: session.id, user };
+  }
+
+  const db = getDb();
+  const tokenHash = hashToken(token);
+  const record = await db.query.magicLinkTokens.findFirst({
+    where: and(eq(magicLinkTokens.tokenHash, tokenHash), isNull(magicLinkTokens.usedAt), gt(magicLinkTokens.expiresAt, nowDate())),
+  });
+
+  if (!record) {
     return null;
   }
 
-  const user = usersById.get(record.userId);
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, record.userId),
+  });
+
   if (!user) {
     return null;
   }
 
-  record.usedAt = nowMs();
-  magicTokens.set(token, record);
+  const updated = await db
+    .update(magicLinkTokens)
+    .set({ usedAt: nowDate() })
+    .where(and(eq(magicLinkTokens.id, record.id), isNull(magicLinkTokens.usedAt)))
+    .returning({ id: magicLinkTokens.id });
 
-  const session = createSession(user.id);
-  return { sessionId: session.id, user };
+  if (updated.length === 0) {
+    return null;
+  }
+
+  const session = await createSession(user.id);
+
+  return {
+    sessionId: session.id,
+    user: {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt.getTime(),
+      lastSignInAt: user.lastLoginAt?.getTime() ?? user.createdAt.getTime(),
+    },
+  };
 }
 
-export function getSessionUser(sessionId: string | undefined): UserRecord | null {
+export async function getSessionUser(sessionId: string | undefined): Promise<UserRecord | null> {
   if (!sessionId) {
     return null;
   }
 
-  const session = sessionsById.get(sessionId);
+  if (!hasDatabaseUrl()) {
+    const session = sessionsById.get(sessionId);
+    if (!session) {
+      return null;
+    }
+
+    if (session.expiresAt <= nowMs()) {
+      sessionsById.delete(sessionId);
+      return null;
+    }
+
+    return usersById.get(session.userId) ?? null;
+  }
+
+  const db = getDb();
+  const session = await db.query.sessions.findFirst({
+    where: and(eq(sessions.id, sessionId), gt(sessions.expiresAt, nowDate())),
+  });
+
   if (!session) {
     return null;
   }
 
-  if (!sessionIsActive(session)) {
-    sessionsById.delete(sessionId);
+  await db
+    .update(sessions)
+    .set({ lastSeenAt: nowDate() })
+    .where(eq(sessions.id, session.id));
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, session.userId),
+  });
+
+  if (!user) {
     return null;
   }
 
-  return usersById.get(session.userId) ?? null;
+  return {
+    id: user.id,
+    email: user.email,
+    createdAt: user.createdAt.getTime(),
+    lastSignInAt: user.lastLoginAt?.getTime() ?? user.createdAt.getTime(),
+  };
 }
 
-export function invalidateSession(sessionId: string | undefined): void {
+export async function invalidateSession(sessionId: string | undefined): Promise<void> {
   if (!sessionId) {
     return;
   }
-  sessionsById.delete(sessionId);
+
+  if (!hasDatabaseUrl()) {
+    sessionsById.delete(sessionId);
+    return;
+  }
+
+  const db = getDb();
+  await db.delete(sessions).where(eq(sessions.id, sessionId));
 }
 
-export function hasValidSession(sessionId: string | undefined): boolean {
-  return getSessionUser(sessionId) !== null;
+export async function hasValidSession(sessionId: string | undefined): Promise<boolean> {
+  return (await getSessionUser(sessionId)) !== null;
 }
 
-export function getUserSummary(user: UserRecord): {
+export async function getUserSummary(user: UserRecord): Promise<{
   id: string;
   email: string;
   createdAt: string;
   lastSignInAt: string;
   passkeyCount: number;
-} {
-  const passkeyCount = passkeysByUserId.get(user.id)?.size ?? 0;
+}> {
+  let passkeyCount = 0;
+
+  if (!hasDatabaseUrl()) {
+    passkeyCount = passkeysByUserId.get(user.id)?.size ?? 0;
+  } else {
+    const db = getDb();
+    const list = await db.query.passkeyCredentials.findMany({
+      where: eq(passkeyCredentials.userId, user.id),
+      columns: { id: true },
+    });
+    passkeyCount = list.length;
+  }
 
   return {
     id: user.id,
@@ -178,32 +351,80 @@ export function createPasskeyRegistrationOptions(userId: string): {
   };
 }
 
-export function verifyPasskeyRegistration(userId: string, credentialId: string, label?: string): { ok: true } {
-  const record: PasskeyRecord = {
-    id: credentialId,
-    userId,
-    label: label?.trim() || 'Passkey',
-    createdAt: nowMs(),
-  };
+export async function verifyPasskeyRegistration(
+  userId: string,
+  credentialId: string,
+  label?: string,
+): Promise<{ ok: true }> {
+  if (!hasDatabaseUrl()) {
+    const record: PasskeyRecord = {
+      id: credentialId,
+      userId,
+      label: label?.trim() || 'Passkey',
+      createdAt: nowMs(),
+    };
 
-  passkeysById.set(record.id, record);
-  const current = passkeysByUserId.get(userId) ?? new Set<string>();
-  current.add(record.id);
-  passkeysByUserId.set(userId, current);
+    passkeysById.set(record.id, record);
+    const current = passkeysByUserId.get(userId) ?? new Set<string>();
+    current.add(record.id);
+    passkeysByUserId.set(userId, current);
+
+    return { ok: true };
+  }
+
+  const db = getDb();
+  await db
+    .insert(passkeyCredentials)
+    .values({
+      id: `pkc_${randomUUID()}`,
+      userId,
+      credentialId,
+      publicKey: 'placeholder-public-key',
+      counter: 0,
+      transports: null,
+      deviceName: label?.trim() || null,
+      createdAt: nowDate(),
+      lastUsedAt: null,
+    })
+    .onConflictDoNothing({ target: passkeyCredentials.credentialId });
 
   return { ok: true };
 }
 
-export function createPasskeyAuthenticationOptions(email?: string): {
+export async function createPasskeyAuthenticationOptions(email?: string): Promise<{
   challenge: string;
   allowCredentials: string[];
-} {
+}> {
+  if (!hasDatabaseUrl()) {
+    let allowCredentials: string[] = [];
+
+    if (email) {
+      const userId = usersByEmail.get(normalizeEmail(email));
+      if (userId) {
+        allowCredentials = [...(passkeysByUserId.get(userId) ?? [])];
+      }
+    }
+
+    return {
+      challenge: randomToken('challenge'),
+      allowCredentials,
+    };
+  }
+
+  const db = getDb();
   let allowCredentials: string[] = [];
 
   if (email) {
-    const userId = usersByEmail.get(email.trim().toLowerCase());
-    if (userId) {
-      allowCredentials = [...(passkeysByUserId.get(userId) ?? [])];
+    const user = await db.query.users.findFirst({
+      where: eq(users.email, normalizeEmail(email)),
+      columns: { id: true },
+    });
+    if (user) {
+      const credentials = await db.query.passkeyCredentials.findMany({
+        where: eq(passkeyCredentials.userId, user.id),
+        columns: { credentialId: true },
+      });
+      allowCredentials = credentials.map((credential) => credential.credentialId);
     }
   }
 
@@ -213,26 +434,66 @@ export function createPasskeyAuthenticationOptions(email?: string): {
   };
 }
 
-export function verifyPasskeyAuthentication(params: {
+export async function verifyPasskeyAuthentication(params: {
   email?: string;
   credentialId: string;
-}): { sessionId: string; user: UserRecord } | null {
-  const passkey = passkeysById.get(params.credentialId);
+}): Promise<{ sessionId: string; user: UserRecord } | null> {
+  if (!hasDatabaseUrl()) {
+    const passkey = passkeysById.get(params.credentialId);
+    if (!passkey) {
+      return null;
+    }
+
+    const user = usersById.get(passkey.userId);
+    if (!user) {
+      return null;
+    }
+
+    if (params.email && user.email !== normalizeEmail(params.email)) {
+      return null;
+    }
+
+    const session = await createSession(user.id);
+    return { sessionId: session.id, user };
+  }
+
+  const db = getDb();
+  const passkey = await db.query.passkeyCredentials.findFirst({
+    where: eq(passkeyCredentials.credentialId, params.credentialId),
+  });
+
   if (!passkey) {
     return null;
   }
 
-  const user = usersById.get(passkey.userId);
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, passkey.userId),
+  });
+
   if (!user) {
     return null;
   }
 
-  if (params.email && user.email !== params.email.trim().toLowerCase()) {
+  if (params.email && user.email !== normalizeEmail(params.email)) {
     return null;
   }
 
-  const session = createSession(user.id);
-  return { sessionId: session.id, user };
+  await db
+    .update(passkeyCredentials)
+    .set({ lastUsedAt: nowDate() })
+    .where(eq(passkeyCredentials.id, passkey.id));
+
+  const session = await createSession(user.id);
+
+  return {
+    sessionId: session.id,
+    user: {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt.getTime(),
+      lastSignInAt: user.lastLoginAt?.getTime() ?? user.createdAt.getTime(),
+    },
+  };
 }
 
 export function parseSessionIdFromCookie(cookieHeader: string | undefined): string | undefined {

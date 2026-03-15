@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: promptfire-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-promptfire}
+      POSTGRES_USER: ${POSTGRES_USER:-promptfire}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-promptfire}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - promptfire-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-promptfire} -d ${POSTGRES_DB:-promptfire}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  promptfire-postgres-data:
+
+# Default local connection string:
+# postgres://promptfire:promptfire@localhost:5432/promptfire

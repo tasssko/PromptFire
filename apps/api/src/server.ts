@@ -354,7 +354,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
     }
 
-    const { token } = createMagicLink(parsed.data.email);
+    const { token } = await createMagicLink(parsed.data.email);
     const includeDebugToken = process.env.AUTH_INCLUDE_DEBUG_TOKEN === 'true';
     const payload = includeDebugToken
       ? { ok: true, message: 'If the email is valid, a sign-in link has been sent.', debugToken: token }
@@ -364,7 +364,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
 
   if (request.method === 'GET' && pathname === '/v1/auth/magic-link/verify') {
     const token = requestUrl.searchParams.get('token') ?? '';
-    const result = verifyMagicLink(token);
+    const result = await verifyMagicLink(token);
     if (!result) {
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
       return errorResponse(400, 'INVALID_REQUEST', 'Invalid or expired magic-link token.', meta, headers);
@@ -375,7 +375,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       {
         ok: true,
         authenticated: true,
-        user: getUserSummary(result.user),
+        user: await getUserSummary(result.user),
       },
       headers,
     );
@@ -384,22 +384,22 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
   }
 
   if (request.method === 'GET' && pathname === '/v1/auth/session') {
-    const user = getSessionUser(sessionId);
+    const user = await getSessionUser(sessionId);
     if (!user) {
       return jsonResponse(200, { authenticated: false }, headers);
     }
-    return jsonResponse(200, { authenticated: true, user: getUserSummary(user) }, headers);
+    return jsonResponse(200, { authenticated: true, user: await getUserSummary(user) }, headers);
   }
 
   if (request.method === 'POST' && pathname === '/v1/auth/logout') {
-    invalidateSession(sessionId);
+    await invalidateSession(sessionId);
     const response = jsonResponse(200, { ok: true }, headers);
     response.headers['set-cookie'] = clearSessionCookie();
     return response;
   }
 
   if (request.method === 'POST' && pathname === '/v1/auth/passkey/register/options') {
-    const user = getSessionUser(sessionId);
+    const user = await getSessionUser(sessionId);
     if (!user) {
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
       return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
@@ -408,7 +408,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
   }
 
   if (request.method === 'POST' && pathname === '/v1/auth/passkey/register/verify') {
-    const user = getSessionUser(sessionId);
+    const user = await getSessionUser(sessionId);
     if (!user) {
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
       return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
@@ -428,7 +428,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
     }
 
-    verifyPasskeyRegistration(user.id, parsed.data.credentialId, parsed.data.label);
+    await verifyPasskeyRegistration(user.id, parsed.data.credentialId, parsed.data.label);
     return jsonResponse(200, { ok: true }, headers);
   }
 
@@ -448,7 +448,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
     }
 
-    return jsonResponse(200, { ok: true, ...createPasskeyAuthenticationOptions(parsed.data.email) }, headers);
+    return jsonResponse(200, { ok: true, ...(await createPasskeyAuthenticationOptions(parsed.data.email)) }, headers);
   }
 
   if (request.method === 'POST' && pathname === '/v1/auth/passkey/authenticate/verify') {
@@ -467,7 +467,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
     }
 
-    const result = verifyPasskeyAuthentication(parsed.data);
+    const result = await verifyPasskeyAuthentication(parsed.data);
     if (!result) {
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
       return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
@@ -478,7 +478,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       {
         ok: true,
         authenticated: true,
-        user: getUserSummary(result.user),
+        user: await getUserSummary(result.user),
       },
       headers,
     );
@@ -486,7 +486,11 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     return response;
   }
 
-  if ((pathname === '/v1/analyze-and-rewrite' || pathname === '/v2/analyze-and-rewrite') && !isAuthorized(headers) && !hasValidSession(sessionId)) {
+  if (
+    (pathname === '/v1/analyze-and-rewrite' || pathname === '/v2/analyze-and-rewrite') &&
+    !isAuthorized(headers) &&
+    !(await hasValidSession(sessionId))
+  ) {
     const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
     const response = errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
     logRequest({
