@@ -3,6 +3,10 @@ import {
   AnalyzeAndRewriteV2RequestSchema,
   AnalyzeAndRewriteRequestSchema,
   API_VERSION,
+  MagicLinkRequestSchema,
+  PasskeyAuthenticateOptionsRequestSchema,
+  PasskeyAuthenticateVerifyRequestSchema,
+  PasskeyRegisterVerifyRequestSchema,
   normalizePreferences,
   type AnalyzeAndRewriteResponse,
   type AnalyzeAndRewriteV2Request,
@@ -14,6 +18,21 @@ import {
   type ScoreBand,
   type ScoreSet,
 } from '@promptfire/shared';
+import {
+  clearSessionCookie,
+  createMagicLink,
+  createPasskeyAuthenticationOptions,
+  createPasskeyRegistrationOptions,
+  createSessionCookie,
+  getSessionUser,
+  getUserSummary,
+  hasValidSession,
+  invalidateSession,
+  parseSessionIdFromCookie,
+  verifyMagicLink,
+  verifyPasskeyAuthentication,
+  verifyPasskeyRegistration,
+} from './auth';
 import { getAuthBypassEnabled, getProviderMode, getStaticApiKey } from './lib/env';
 import {
   createMeta,
@@ -46,6 +65,14 @@ function isAuthorized(headers: Record<string, string>): boolean {
 
 function contentTypeIsJson(headers: Record<string, string>): boolean {
   return (headers['content-type'] ?? '').toLowerCase().includes('application/json');
+}
+
+function parseJsonBody(request: HttpRequest): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: request.body ? JSON.parse(request.body) : {} };
+  } catch {
+    return { ok: false };
+  }
 }
 
 function logRequest(params: {
@@ -271,12 +298,15 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
   const requestId = requestIdFromHeaders(request.headers);
   const providerMode = getProviderMode();
   const providerConfig = getProviderConfig();
+  const requestUrl = new URL(request.path, 'http://localhost');
+  const pathname = requestUrl.pathname;
+  const sessionId = parseSessionIdFromCookie(headers.cookie);
 
   if (request.method === 'OPTIONS') {
     return emptyResponse(204, headers);
   }
 
-  if (request.method === 'GET' && request.path === '/v1/health') {
+  if (request.method === 'GET' && pathname === '/v1/health') {
     const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
     const response = jsonResponse(200, { status: 'ok', meta }, headers);
     logRequest({
@@ -291,7 +321,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     return response;
   }
 
-  if (request.method === 'GET' && request.path === '/v2/health') {
+  if (request.method === 'GET' && pathname === '/v2/health') {
     const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
     const response = jsonResponse(200, { status: 'ok', meta }, headers);
     logRequest({
@@ -306,12 +336,162 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     return response;
   }
 
-  if (!isAuthorized(headers)) {
+  if (request.method === 'POST' && pathname === '/v1/auth/magic-link/request') {
+    if (!contentTypeIsJson(headers)) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(415, 'UNSUPPORTED_CONTENT_TYPE', 'Content-Type must be application/json.', meta, headers);
+    }
+
+    const parsedBody = parseJsonBody(request);
+    if (!parsedBody.ok) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
+    }
+
+    const parsed = MagicLinkRequestSchema.safeParse(parsedBody.value);
+    if (!parsed.success) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
+    }
+
+    const { token } = createMagicLink(parsed.data.email);
+    const includeDebugToken = process.env.AUTH_INCLUDE_DEBUG_TOKEN === 'true';
+    const payload = includeDebugToken
+      ? { ok: true, message: 'If the email is valid, a sign-in link has been sent.', debugToken: token }
+      : { ok: true, message: 'If the email is valid, a sign-in link has been sent.' };
+    return jsonResponse(200, payload, headers);
+  }
+
+  if (request.method === 'GET' && pathname === '/v1/auth/magic-link/verify') {
+    const token = requestUrl.searchParams.get('token') ?? '';
+    const result = verifyMagicLink(token);
+    if (!result) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Invalid or expired magic-link token.', meta, headers);
+    }
+
+    const response = jsonResponse(
+      200,
+      {
+        ok: true,
+        authenticated: true,
+        user: getUserSummary(result.user),
+      },
+      headers,
+    );
+    response.headers['set-cookie'] = createSessionCookie(result.sessionId);
+    return response;
+  }
+
+  if (request.method === 'GET' && pathname === '/v1/auth/session') {
+    const user = getSessionUser(sessionId);
+    if (!user) {
+      return jsonResponse(200, { authenticated: false }, headers);
+    }
+    return jsonResponse(200, { authenticated: true, user: getUserSummary(user) }, headers);
+  }
+
+  if (request.method === 'POST' && pathname === '/v1/auth/logout') {
+    invalidateSession(sessionId);
+    const response = jsonResponse(200, { ok: true }, headers);
+    response.headers['set-cookie'] = clearSessionCookie();
+    return response;
+  }
+
+  if (request.method === 'POST' && pathname === '/v1/auth/passkey/register/options') {
+    const user = getSessionUser(sessionId);
+    if (!user) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
+    }
+    return jsonResponse(200, { ok: true, ...createPasskeyRegistrationOptions(user.id) }, headers);
+  }
+
+  if (request.method === 'POST' && pathname === '/v1/auth/passkey/register/verify') {
+    const user = getSessionUser(sessionId);
+    if (!user) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
+    }
+    if (!contentTypeIsJson(headers)) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(415, 'UNSUPPORTED_CONTENT_TYPE', 'Content-Type must be application/json.', meta, headers);
+    }
+    const parsedBody = parseJsonBody(request);
+    if (!parsedBody.ok) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
+    }
+    const parsed = PasskeyRegisterVerifyRequestSchema.safeParse(parsedBody.value);
+    if (!parsed.success) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
+    }
+
+    verifyPasskeyRegistration(user.id, parsed.data.credentialId, parsed.data.label);
+    return jsonResponse(200, { ok: true }, headers);
+  }
+
+  if (request.method === 'POST' && pathname === '/v1/auth/passkey/authenticate/options') {
+    if (!contentTypeIsJson(headers)) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(415, 'UNSUPPORTED_CONTENT_TYPE', 'Content-Type must be application/json.', meta, headers);
+    }
+    const parsedBody = parseJsonBody(request);
+    if (!parsedBody.ok) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
+    }
+    const parsed = PasskeyAuthenticateOptionsRequestSchema.safeParse(parsedBody.value);
+    if (!parsed.success) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
+    }
+
+    return jsonResponse(200, { ok: true, ...createPasskeyAuthenticationOptions(parsed.data.email) }, headers);
+  }
+
+  if (request.method === 'POST' && pathname === '/v1/auth/passkey/authenticate/verify') {
+    if (!contentTypeIsJson(headers)) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(415, 'UNSUPPORTED_CONTENT_TYPE', 'Content-Type must be application/json.', meta, headers);
+    }
+    const parsedBody = parseJsonBody(request);
+    if (!parsedBody.ok) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
+    }
+    const parsed = PasskeyAuthenticateVerifyRequestSchema.safeParse(parsedBody.value);
+    if (!parsed.success) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
+    }
+
+    const result = verifyPasskeyAuthentication(parsed.data);
+    if (!result) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
+    }
+
+    const response = jsonResponse(
+      200,
+      {
+        ok: true,
+        authenticated: true,
+        user: getUserSummary(result.user),
+      },
+      headers,
+    );
+    response.headers['set-cookie'] = createSessionCookie(result.sessionId);
+    return response;
+  }
+
+  if ((pathname === '/v1/analyze-and-rewrite' || pathname === '/v2/analyze-and-rewrite') && !isAuthorized(headers) && !hasValidSession(sessionId)) {
     const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
     const response = errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
     logRequest({
       requestId,
-      endpoint: request.path,
+      endpoint: pathname,
       method: request.method,
       statusCode: response.statusCode,
       latencyMs: meta.latencyMs,
@@ -322,7 +502,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     return response;
   }
 
-  if (request.method === 'POST' && request.path === '/v1/analyze-and-rewrite') {
+  if (request.method === 'POST' && pathname === '/v1/analyze-and-rewrite') {
     if (!contentTypeIsJson(headers)) {
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
       const response = errorResponse(
@@ -334,7 +514,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       );
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
@@ -353,7 +533,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const response = errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
@@ -391,7 +571,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       );
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
@@ -460,7 +640,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const response = jsonResponse(200, payload, headers);
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         role: input.role,
         mode: input.mode,
@@ -486,7 +666,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         );
         logRequest({
           requestId,
-          endpoint: request.path,
+          endpoint: pathname,
           method: request.method,
           role: input.role,
           mode: input.mode,
@@ -509,7 +689,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         );
         logRequest({
           requestId,
-          endpoint: request.path,
+          endpoint: pathname,
           method: request.method,
           role: input.role,
           mode: input.mode,
@@ -525,7 +705,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const response = errorResponse(500, 'INTERNAL_ERROR', 'Internal server error.', meta, headers);
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         role: input.role,
         mode: input.mode,
@@ -539,7 +719,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     }
   }
 
-  if (request.method === 'POST' && request.path === '/v2/analyze-and-rewrite') {
+  if (request.method === 'POST' && pathname === '/v2/analyze-and-rewrite') {
     if (!contentTypeIsJson(headers)) {
       const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
       const response = errorResponse(
@@ -551,7 +731,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       );
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
@@ -570,7 +750,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const response = errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
@@ -601,7 +781,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       });
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
@@ -730,7 +910,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const response = jsonResponse(200, payload, headers);
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         role: input.role,
         mode: input.mode,
@@ -756,7 +936,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         );
         logRequest({
           requestId,
-          endpoint: request.path,
+          endpoint: pathname,
           method: request.method,
           role: input.role,
           mode: input.mode,
@@ -779,7 +959,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         );
         logRequest({
           requestId,
-          endpoint: request.path,
+          endpoint: pathname,
           method: request.method,
           role: input.role,
           mode: input.mode,
@@ -795,7 +975,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const response = errorResponse(500, 'INTERNAL_ERROR', 'Internal server error.', meta, headers);
       logRequest({
         requestId,
-        endpoint: request.path,
+        endpoint: pathname,
         method: request.method,
         role: input.role,
         mode: input.mode,

@@ -192,6 +192,58 @@ export const HealthResponseSchema = z.object({
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 
+export const EmailSchema = z.string().trim().email('Invalid email address.');
+export type Email = z.infer<typeof EmailSchema>;
+
+export const AuthUserSchema = z.object({
+  id: z.string().startsWith('usr_'),
+  email: EmailSchema,
+  createdAt: z.string().datetime(),
+  lastSignInAt: z.string().datetime(),
+  passkeyCount: z.number().int().nonnegative(),
+});
+export type AuthUser = z.infer<typeof AuthUserSchema>;
+
+export const MagicLinkRequestSchema = z.object({
+  email: EmailSchema,
+});
+export type MagicLinkRequest = z.infer<typeof MagicLinkRequestSchema>;
+
+export const MagicLinkVerifyResponseSchema = z.object({
+  ok: z.literal(true),
+  authenticated: z.literal(true),
+  user: AuthUserSchema,
+});
+export type MagicLinkVerifyResponse = z.infer<typeof MagicLinkVerifyResponseSchema>;
+
+export const SessionResponseSchema = z.object({
+  authenticated: z.boolean(),
+  user: AuthUserSchema.optional(),
+});
+export type SessionResponse = z.infer<typeof SessionResponseSchema>;
+
+export const LogoutResponseSchema = z.object({
+  ok: z.literal(true),
+});
+export type LogoutResponse = z.infer<typeof LogoutResponseSchema>;
+
+export const PasskeyRegisterVerifyRequestSchema = z.object({
+  credentialId: z.string().trim().min(1),
+  label: z.string().trim().min(1).max(100).optional(),
+});
+export type PasskeyRegisterVerifyRequest = z.infer<typeof PasskeyRegisterVerifyRequestSchema>;
+
+export const PasskeyAuthenticateOptionsRequestSchema = z.object({
+  email: EmailSchema.optional(),
+});
+export type PasskeyAuthenticateOptionsRequest = z.infer<typeof PasskeyAuthenticateOptionsRequestSchema>;
+
+export const PasskeyAuthenticateVerifyRequestSchema = z.object({
+  email: EmailSchema.optional(),
+  credentialId: z.string().trim().min(1),
+});
+export type PasskeyAuthenticateVerifyRequest = z.infer<typeof PasskeyAuthenticateVerifyRequestSchema>;
+
 export const AnalyzeAndRewriteResponseSchema = z.object({
   id: z.string().startsWith('par_'),
   analysis: AnalysisSchema,

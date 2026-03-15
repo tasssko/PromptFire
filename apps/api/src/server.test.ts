@@ -52,6 +52,164 @@ describe('API vertical slice', () => {
     expect(body.meta.version).toBe('2');
   });
 
+  it('supports magic-link login, session lookup, and logout', async () => {
+    process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
+
+    const requestResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/magic-link/request',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'user@example.com' }),
+    });
+    const requestBody = JSON.parse(requestResponse.body);
+    expect(requestResponse.statusCode).toBe(200);
+    expect(typeof requestBody.debugToken).toBe('string');
+
+    const verifyResponse = await handleHttpRequest({
+      method: 'GET',
+      path: `/v1/auth/magic-link/verify?token=${encodeURIComponent(requestBody.debugToken)}`,
+    });
+    const verifyBody = JSON.parse(verifyResponse.body);
+    const cookie = verifyResponse.headers['set-cookie'];
+
+    expect(verifyResponse.statusCode).toBe(200);
+    expect(verifyBody.authenticated).toBe(true);
+    expect(verifyBody.user.email).toBe('user@example.com');
+    expect(cookie).toContain('pf_session=');
+
+    const sessionResponse = await handleHttpRequest({
+      method: 'GET',
+      path: '/v1/auth/session',
+      headers: { cookie },
+    });
+    const sessionBody = JSON.parse(sessionResponse.body);
+    expect(sessionResponse.statusCode).toBe(200);
+    expect(sessionBody.authenticated).toBe(true);
+    expect(sessionBody.user.email).toBe('user@example.com');
+
+    const logoutResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/logout',
+      headers: { cookie, 'content-type': 'application/json' },
+    });
+    expect(logoutResponse.statusCode).toBe(200);
+    expect(logoutResponse.headers['set-cookie']).toContain('Max-Age=0');
+
+    const postLogoutSessionResponse = await handleHttpRequest({
+      method: 'GET',
+      path: '/v1/auth/session',
+      headers: { cookie },
+    });
+    const postLogoutSessionBody = JSON.parse(postLogoutSessionResponse.body);
+    expect(postLogoutSessionBody.authenticated).toBe(false);
+  });
+
+  it('supports passkey registration and passkey authentication', async () => {
+    process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
+
+    const requestResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/magic-link/request',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'passkey-user@example.com' }),
+    });
+    const requestBody = JSON.parse(requestResponse.body);
+
+    const verifyResponse = await handleHttpRequest({
+      method: 'GET',
+      path: `/v1/auth/magic-link/verify?token=${encodeURIComponent(requestBody.debugToken)}`,
+    });
+    const cookie = verifyResponse.headers['set-cookie'];
+
+    const registerOptionsResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/passkey/register/options',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(registerOptionsResponse.statusCode).toBe(200);
+
+    const registerVerifyResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/passkey/register/verify',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ credentialId: 'cred_1', label: 'Laptop' }),
+    });
+    expect(registerVerifyResponse.statusCode).toBe(200);
+
+    await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/logout',
+      headers: { cookie, 'content-type': 'application/json' },
+    });
+
+    const authOptionsResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/passkey/authenticate/options',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'passkey-user@example.com' }),
+    });
+    const authOptionsBody = JSON.parse(authOptionsResponse.body);
+    expect(authOptionsResponse.statusCode).toBe(200);
+    expect(authOptionsBody.allowCredentials).toContain('cred_1');
+
+    const authVerifyResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/passkey/authenticate/verify',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'passkey-user@example.com', credentialId: 'cred_1' }),
+    });
+    const authVerifyBody = JSON.parse(authVerifyResponse.body);
+    expect(authVerifyResponse.statusCode).toBe(200);
+    expect(authVerifyBody.authenticated).toBe(true);
+    expect(authVerifyResponse.headers['set-cookie']).toContain('pf_session=');
+  });
+
+  it('authorizes analyze endpoint with a session cookie when static API auth is enforced', async () => {
+    process.env.API_AUTH_BYPASS = 'false';
+    process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const unauthorizedResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write landing page copy for our IAM platform.',
+        role: 'marketer',
+        mode: 'high_contrast',
+      }),
+    });
+    expect(unauthorizedResponse.statusCode).toBe(401);
+
+    const requestResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/magic-link/request',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'session-user@example.com' }),
+    });
+    const requestBody = JSON.parse(requestResponse.body);
+
+    const verifyResponse = await handleHttpRequest({
+      method: 'GET',
+      path: `/v1/auth/magic-link/verify?token=${encodeURIComponent(requestBody.debugToken)}`,
+    });
+    const cookie = verifyResponse.headers['set-cookie'];
+
+    const authorizedResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json', cookie },
+      body: JSON.stringify({
+        prompt: 'Write landing page copy for our IAM platform.',
+        role: 'marketer',
+        mode: 'high_contrast',
+      }),
+    });
+
+    expect(authorizedResponse.statusCode).toBe(200);
+  });
+
   it('validates analyze-and-rewrite response shape and role/mode handling', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 
