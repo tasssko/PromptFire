@@ -10,6 +10,14 @@ import type {
   ScoreBand,
 } from '@promptfire/shared';
 import { fixtures, modes, roles } from './config';
+import {
+  ImpactBadge,
+  MetricTile,
+  Section,
+  SurfaceCard,
+  TechnicalMetric,
+  sectionTitleClass,
+} from './components/ui';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -52,7 +60,7 @@ function heroCopy(result: AnalyzeAndRewriteV2Response): {
         headline: 'Rewrite recommended',
         supporting:
           'This prompt is likely to produce generic output unless it is narrowed and better directed.',
-        primaryAction: result.rewrite ? 'Use rewritten prompt' : 'Generate rewrite',
+        primaryAction: result.rewrite ? 'Copy rewritten prompt' : 'Generate rewrite',
       };
   }
 }
@@ -138,6 +146,22 @@ function formatSuggestionTitle(suggestion: ImprovementSuggestion): string {
   return suggestion.title.charAt(0).toUpperCase() + suggestion.title.slice(1);
 }
 
+function heroBandClass(scoreBand: ScoreBand): string {
+  switch (scoreBand) {
+    case 'poor':
+      return 'bg-hero-poor';
+    case 'weak':
+      return 'bg-hero-weak';
+    case 'usable':
+      return 'bg-hero-usable';
+    case 'excellent':
+      return 'bg-hero-excellent';
+    case 'strong':
+    default:
+      return 'bg-hero-strong';
+  }
+}
+
 export function App() {
   const [prompt, setPrompt] = useState(fixtures.general);
   const [role, setRole] = useState<Role>('general');
@@ -205,19 +229,23 @@ export function App() {
   const evaluation = result?.evaluation ?? null;
 
   return (
-    <main className="page">
-      <section className="panel">
-        <h1>PromptFire</h1>
-        <p>Paste a prompt, get one clear score, and only see rewrites when they are worth using.</p>
+    <main className="mx-auto grid max-w-[980px] gap-4 p-6 text-pf-text-primary max-sm:p-3">
+      <section className="grid gap-4 rounded-xl border border-pf-border-subtle bg-shell p-6 shadow-none max-sm:p-4">
+        <header className="grid gap-2">
+          <h1 className="text-[clamp(1.5rem,2vw,1.8rem)] font-bold">PeakPrompt</h1>
+          <p className="text-pf-text-secondary">
+            Paste a prompt, get one clear score, and only see rewrites when they are worth using.
+          </p>
+        </header>
 
-        <form onSubmit={handleSubmit} className="form">
-          <label>
+        <form onSubmit={handleSubmit} className="grid gap-3">
+          <label className="grid w-full gap-1 font-semibold">
             Prompt
             <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={7} />
           </label>
 
-          <div className="row">
-            <label>
+          <div className="grid grid-cols-3 gap-2 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
+            <label className="grid w-auto gap-1 font-semibold">
               Role
               <select value={role} onChange={(e) => setRole(e.target.value as Role)}>
                 {roles.map((item) => (
@@ -228,7 +256,7 @@ export function App() {
               </select>
             </label>
 
-            <label>
+            <label className="grid w-auto gap-1 font-semibold">
               Mode
               <select value={mode} onChange={(e) => setMode(e.target.value as Mode)}>
                 {modes.map((item) => (
@@ -239,7 +267,7 @@ export function App() {
               </select>
             </label>
 
-            <label>
+            <label className="grid w-auto gap-1 font-semibold">
               Rewrite preference
               <select
                 value={rewritePreference}
@@ -252,15 +280,15 @@ export function App() {
             </label>
           </div>
 
-          <div className="row">
+          <div className="flex flex-wrap justify-center gap-2">
             <button type="submit" disabled={!canSubmit}>
               {loading ? 'Analyzing…' : 'Analyze prompt'}
             </button>
           </div>
 
-          <details className="examples">
-            <summary>Load example</summary>
-            <div className="example-buttons">
+          <details className="border-t border-pf-border-divider pt-3">
+            <summary className="cursor-pointer text-[#3f5066]">Load example</summary>
+            <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -292,23 +320,27 @@ export function App() {
           </details>
         </form>
 
-        {error && <p className="error">{error}</p>}
+        {error && <p className="text-[#b00020]">{error}</p>}
       </section>
 
       {result && hero && state && (
-        <section className="panel">
-          <section className={`score-hero score-hero-${state}`}>
-            <p className="eyebrow">Overall Score</p>
-            <div className="score-line">
-              <strong className="score-value">{result.overallScore}</strong>
-              <span className={`score-band score-band-${result.scoreBand}`}>{bandLabel(result.scoreBand)}</span>
+        <section className="grid gap-4 rounded-xl border border-pf-border-default bg-white p-6 shadow-md max-sm:p-4">
+          <section className={`grid gap-2 rounded-lg p-4 text-[#f7f4ea] ${heroBandClass(result.scoreBand)}`}>
+            <p className="text-[0.8rem] uppercase tracking-[0.08em] opacity-80">Overall Score</p>
+            <div className="flex flex-wrap items-end gap-4">
+              <strong className="text-[clamp(3rem,9vw,5rem)] font-bold leading-[0.9] max-sm:text-[clamp(2.4rem,16vw,4rem)]">
+                {result.overallScore}
+              </strong>
+              <span className="rounded-[999px] border border-[rgba(247,244,234,0.25)] bg-[rgba(247,244,234,0.14)] px-3 py-1 capitalize">
+                {bandLabel(result.scoreBand)}
+              </span>
             </div>
-            <p className="hero-title">{hero.headline}</p>
-            <p className="score-summary">{hero.supporting}</p>
-            <div className="hero-actions">
+            <p className="text-2xl font-bold">{hero.headline}</p>
+            <p className="max-w-[42rem]">{hero.supporting}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="hero-primary"
+                className="border-transparent bg-[#f7f4ea] text-[#1b2e49] hover:bg-[#efe9d8]"
                 onClick={() => {
                   if (state === 'strong') {
                     copyText(prompt);
@@ -329,61 +361,47 @@ export function App() {
                 {hero.primaryAction}
               </button>
               {state === 'strong' && (
-                <button type="button" className="hero-secondary" onClick={() => void handleForceRewrite()}>
+                <button
+                  type="button"
+                  className="border-[rgba(247,244,234,0.4)] bg-transparent text-[#f7f4ea] hover:bg-[rgba(247,244,234,0.12)]"
+                  onClick={() => void handleForceRewrite()}
+                >
                   Generate rewrite anyway
                 </button>
               )}
             </div>
           </section>
 
-          <section>
-            <h2>Key findings</h2>
-            <ul className="findings">
+          <Section title="Key findings">
+            <ul className="grid list-disc gap-2 pl-[1.2rem]">
               {findings.map((finding) => (
-                <li key={finding}>{finding}</li>
+                <li key={finding} className="text-[#253750]">
+                  {finding}
+                </li>
               ))}
             </ul>
-          </section>
+          </Section>
 
-          <section>
-            <h2>Sub-scores</h2>
-            <div className="subscores">
-              <article className="score-tile">
-                <p className="tile-label">Scope</p>
-                <p className="tile-value">{result.analysis.scores.scope}</p>
-              </article>
-              <article className="score-tile">
-                <p className="tile-label">Contrast</p>
-                <p className="tile-value">{result.analysis.scores.contrast}</p>
-              </article>
-              <article className="score-tile">
-                <p className="tile-label">Clarity</p>
-                <p className="tile-value">{result.analysis.scores.clarity}</p>
-              </article>
-              <article className="score-tile">
-                <p className="tile-label">Constraint quality</p>
-                <p className="tile-value">{result.analysis.scores.constraintQuality}</p>
-              </article>
-              <article className="score-tile">
-                <p className="tile-label">Generic output risk</p>
-                <p className="tile-value">{result.analysis.scores.genericOutputRisk}</p>
-              </article>
-              <article className="score-tile">
-                <p className="tile-label">Token waste risk</p>
-                <p className="tile-value">{result.analysis.scores.tokenWasteRisk}</p>
-              </article>
+          <Section title="Sub-scores">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
+              <MetricTile label="Scope" value={result.analysis.scores.scope} />
+              <MetricTile label="Contrast" value={result.analysis.scores.contrast} />
+              <MetricTile label="Clarity" value={result.analysis.scores.clarity} />
+              <MetricTile label="Constraint quality" value={result.analysis.scores.constraintQuality} />
+              <MetricTile label="Generic output risk" value={result.analysis.scores.genericOutputRisk} />
+              <MetricTile label="Token waste risk" value={result.analysis.scores.tokenWasteRisk} />
             </div>
-          </section>
+          </Section>
 
           {state === 'strong' && (
-            <section className="decision-panel">
-              <h2>Why no rewrite?</h2>
+            <SurfaceCard tone="default">
+              <h2 className={sectionTitleClass}>Why no rewrite?</h2>
               <p>
                 {result.gating.rewritePreference === 'suppress'
                   ? 'Rewrite suppressed by your preference.'
                   : 'No rewrite needed because this prompt is already strong and expected gains are low.'}
               </p>
-              <div className="row">
+              <div className="flex flex-wrap gap-2">
                 <button type="button" onClick={() => copyText(prompt)}>
                   Copy original
                 </button>
@@ -391,12 +409,12 @@ export function App() {
                   Generate rewrite anyway
                 </button>
               </div>
-            </section>
+            </SurfaceCard>
           )}
 
           {state === 'usable' && (
-            <section className="decision-panel">
-              <h2>Suggested improvement</h2>
+            <SurfaceCard tone="default">
+              <h2 className={sectionTitleClass}>Suggested improvement</h2>
               {topSuggestions.length > 0 ? (
                 <ul>
                   {topSuggestions.map((suggestion) => (
@@ -414,13 +432,13 @@ export function App() {
                     {showOptionalRewrite ? 'Hide rewrite preview' : 'Show rewrite preview'}
                   </button>
                   {showOptionalRewrite && (
-                    <div className="rewrite-panel">
+                    <SurfaceCard tone="rewrite" className="mt-1">
                       <pre>{result.rewrite.rewrittenPrompt}</pre>
                       {result.rewrite.explanation && <p>{result.rewrite.explanation}</p>}
                       <button type="button" onClick={() => copyText(result.rewrite!.rewrittenPrompt)}>
                         Copy rewritten prompt
                       </button>
-                    </div>
+                    </SurfaceCard>
                   )}
                 </>
               ) : (
@@ -428,12 +446,12 @@ export function App() {
                   Generate rewrite
                 </button>
               )}
-            </section>
+            </SurfaceCard>
           )}
 
           {state === 'weak' && (
-            <section className="decision-panel rewrite-panel">
-              <h2>Recommended rewrite</h2>
+            <SurfaceCard tone="rewrite">
+              <h2 className={sectionTitleClass}>Recommended rewrite</h2>
               {result.rewrite ? (
                 <>
                   <pre>{result.rewrite.rewrittenPrompt}</pre>
@@ -447,18 +465,18 @@ export function App() {
                   Generate rewrite
                 </button>
               )}
-            </section>
+            </SurfaceCard>
           )}
 
           {result.rewrite && evaluation && (
-            <section className="verdict">
-              <h2>Rewrite verdict</h2>
-              <p className="verdict-title">{verdictCopy(evaluation).label}</p>
+            <SurfaceCard tone="verdict">
+              <h2 className={sectionTitleClass}>Rewrite verdict</h2>
+              <p className="font-bold">{verdictCopy(evaluation).label}</p>
               <p>{verdictCopy(evaluation).recommendation}</p>
               <p>
                 Overall delta: <code>{evaluation.overallDelta}</code>
               </p>
-              <div className="comparison">
+              <div className="grid gap-1">
                 {(['scope', 'contrast', 'clarity'] as const).map((dimension) => (
                   <p key={dimension}>
                     {scoreDimensionLabel(dimension)}: <code>{evaluation.scoreComparison.original[dimension]}</code>{' '}
@@ -466,67 +484,66 @@ export function App() {
                   </p>
                 ))}
               </div>
-            </section>
+            </SurfaceCard>
           )}
 
           {state !== 'strong' && (
-            <section>
-              <h2>How to improve this prompt</h2>
+            <Section title="How to improve this prompt">
               {result.improvementSuggestions.length > 0 ? (
-                <div className="suggestions">
+                <div className="grid gap-3">
                   {result.improvementSuggestions.map((suggestion) => (
-                    <article key={suggestion.id} className="suggestion-card">
-                      <div className="suggestion-header">
-                        <h3>{formatSuggestionTitle(suggestion)}</h3>
-                        <span className={`impact impact-${suggestion.impact}`}>{suggestion.impact}</span>
+                    <SurfaceCard key={suggestion.id} tone="suggestion" className="gap-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-base">{formatSuggestionTitle(suggestion)}</h3>
+                        <ImpactBadge impact={suggestion.impact} />
                       </div>
-                      <p>{suggestion.reason}</p>
-                      <p>Improves: {suggestion.targetScores.map(scoreDimensionLabel).join(', ')}</p>
-                      {suggestion.exampleChange && <p>Example: {suggestion.exampleChange}</p>}
-                    </article>
+                      <p className="mt-2">{suggestion.reason}</p>
+                      <p className="mt-2">Improves: {suggestion.targetScores.map(scoreDimensionLabel).join(', ')}</p>
+                      {suggestion.exampleChange && <p className="mt-2">Example: {suggestion.exampleChange}</p>}
+                    </SurfaceCard>
                   ))}
                 </div>
               ) : (
                 <p>No specific follow-up suggestions for this prompt.</p>
               )}
-            </section>
+            </Section>
           )}
 
-          <details className="technical-details">
-            <summary>Technical details</summary>
-            <div className="metrics">
-              <p>
+          <details className="border-t border-pf-border-divider pt-3">
+            <summary className="cursor-pointer text-[#3f5066]">Technical details</summary>
+            <div className="my-3 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-x-4 gap-y-2">
+              <TechnicalMetric>
                 Recommendation <strong>{result.rewriteRecommendation}</strong>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Rewrite preference <code>{result.gating.rewritePreference}</code>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Expected improvement <code>{result.gating.expectedImprovement}</code>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Major blocking issues <code>{result.gating.majorBlockingIssues ? 'true' : 'false'}</code>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Issue codes <code>{result.analysis.detectedIssueCodes.length}</code>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Evaluation signals <code>{result.evaluation?.signals.length ?? 0}</code>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Request ID <code>{result.meta.requestId}</code>
-              </p>
-              <p>
+              </TechnicalMetric>
+              <TechnicalMetric>
                 Provider <code>{result.meta.providerMode}</code>
-              </p>
+              </TechnicalMetric>
               {result.meta.providerModel && (
-                <p>
+                <TechnicalMetric>
                   Model <code>{result.meta.providerModel}</code>
-                </p>
+                </TechnicalMetric>
               )}
-              <p>
+              <TechnicalMetric>
                 Latency <code>{result.meta.latencyMs}ms</code>
-              </p>
+              </TechnicalMetric>
             </div>
             {result.analysis.detectedIssueCodes.length > 0 && (
               <p>
