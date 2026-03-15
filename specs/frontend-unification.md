@@ -1278,7 +1278,144 @@ Do not invent alternate section names casually.
 
 ---
 
-## 17.8 Implementation policy
+## 17.8 UI architecture
+
+### Purpose
+
+The frontend should separate:
+
+* page orchestration
+* reusable UI primitives
+* domain-specific composed result components
+
+This prevents `App.tsx` from becoming the default home for layout, styling, rendering branches, and repeated component structure.
+
+### Layer 1: App-level orchestration
+
+`App.tsx` should own:
+
+* top-level page composition
+* request lifecycle and loading state
+* API submission and error handling
+* result presence/absence branching
+* strong / usable / weak state routing
+* wiring props into composed components
+
+`App.tsx` should **not** be the long-term home for repeated presentational markup.
+
+### Layer 2: Reusable UI primitives
+
+Reusable presentation primitives should live under:
+
+* `apps/web/src/components/ui`
+
+These primitives should represent general UI building blocks that can be reused across the PeakPrompt frontend.
+
+Examples include:
+
+* `Section`
+* `SurfaceCard`
+* `MetricTile`
+* `ImpactBadge`
+* `TechnicalMetric`
+* shared title or rhythm classes such as `sectionTitleClass`
+
+#### Rule for `components/ui`
+
+A component belongs in `components/ui` when it is:
+
+* generic
+* reusable
+* styling-led rather than domain-led
+* useful in more than one result section or page area
+
+These components should centralize:
+
+* spacing rhythm
+* surface framing
+* heading treatment
+* badge behavior
+* low-level presentational consistency
+
+### Layer 3: Domain-specific composed components
+
+PeakPrompt-specific result compositions should live separately from generic UI primitives.
+
+Recommended location:
+
+* `apps/web/src/components/results`
+* or `apps/web/src/components/peakprompt`
+
+These components should compose the UI primitives into product-specific sections such as:
+
+* `ScoreHero`
+* `KeyFindingsList`
+* `SubScoreGrid`
+* `RewriteCard`
+* `RewriteVerdictCard`
+* `ImprovementCardList`
+* `TopShell`
+* `ResultsCard`
+
+#### Rule for domain-specific components
+
+A component belongs in the domain layer when it:
+
+* represents a PeakPrompt product concept
+* depends on score/rewrite/result semantics
+* encodes section-level rendering rules
+* is not intended to be reused as a generic primitive elsewhere
+
+### Architectural rules
+
+#### Rule 1
+
+No new result section should be added directly in `App.tsx` if it is large enough to be its own reusable or domain-specific component.
+
+#### Rule 2
+
+Shared surface treatment, section spacing, badge styling, and title rhythm should be changed centrally through primitives or tokens, not through repeated inline markup.
+
+#### Rule 3
+
+If two sections share the same framing or internal rhythm, they should use the same primitive rather than separate hand-built wrappers.
+
+#### Rule 4
+
+A component should not mix domain logic and low-level visual styling unless there is a strong reason.
+
+#### Rule 5
+
+Any new card style must either:
+
+* map to an existing surface variant, or
+* be added to the UI specification before implementation
+
+### Migration guidance
+
+The current extraction of reusable primitives out of `App.tsx` is the correct first step.
+
+Suggested next architecture sequence:
+
+1. keep `App.tsx` as orchestration only
+2. stabilize `components/ui` primitives
+3. introduce domain-specific composed result components
+4. migrate repeated result sections out of `App.tsx`
+5. connect all of the above to the token system or Tailwind utilities
+
+### Acceptance criteria
+
+This architecture is successful when:
+
+* `App.tsx` reads primarily as page orchestration rather than detailed markup
+* generic UI pieces live in `components/ui`
+* PeakPrompt-specific result sections live in a domain layer
+* surface and spacing changes can be made centrally
+* adding a new result section does not require inventing a new local styling pattern
+
+---
+
+## 17.9 Implementation policy
 
 ### Preferred implementation
 
@@ -1315,7 +1452,7 @@ It may proceed in phases:
 
 ---
 
-## 17.9 Non-goals
+## 17.10 Non-goals
 
 This change does not include:
 
@@ -1327,7 +1464,7 @@ This change does not include:
 
 ---
 
-## 17.10 Deliverables
+## 17.11 Deliverables
 
 `0.5.7` should produce:
 
@@ -1340,7 +1477,7 @@ This change does not include:
 
 ---
 
-## 17.11 Acceptance criteria
+## 17.12 Acceptance criteria
 
 This change is successful when:
 
