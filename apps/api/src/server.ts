@@ -201,27 +201,27 @@ function withV2Scores(analysis: Analysis, prompt: string, context?: Record<strin
 
 function computeOverallScore(scores: ScoreSet): number {
   const raw =
-    2.5 * scores.scope +
-    2.0 * scores.contrast +
-    2.0 * scores.clarity +
-    1.5 * scores.constraintQuality +
-    (10 - scores.genericOutputRisk) +
-    (10 - scores.tokenWasteRisk);
+    2.75 * scores.scope +
+    2.25 * scores.contrast +
+    1.25 * scores.clarity +
+    2.0 * scores.constraintQuality +
+    1.5 * (10 - scores.genericOutputRisk) +
+    0.5 * (10 - scores.tokenWasteRisk);
 
   return Math.max(0, Math.min(100, Math.round(raw)));
 }
 
 function scoreBandFromOverallScore(overallScore: number): ScoreBand {
-  if (overallScore >= 90) {
+  if (overallScore >= 85) {
     return 'excellent';
   }
   if (overallScore >= 75) {
     return 'strong';
   }
-  if (overallScore >= 55) {
+  if (overallScore >= 60) {
     return 'usable';
   }
-  if (overallScore >= 35) {
+  if (overallScore >= 40) {
     return 'weak';
   }
   return 'poor';
@@ -263,13 +263,13 @@ function recommendationFromState(params: {
   if (params.shouldSuppress) {
     return 'no_rewrite_needed';
   }
-  if (params.overallScore <= 54) {
+  if (params.overallScore <= 59) {
     return params.rewritePreference === 'suppress' ? 'rewrite_optional' : 'rewrite_recommended';
   }
-  if (params.overallScore <= 79) {
+  if (params.overallScore <= 74) {
     return 'rewrite_optional';
   }
-  return params.expectedImprovementLow ? 'rewrite_optional' : 'no_rewrite_needed';
+  return 'rewrite_optional';
 }
 
 function summaryForV2(params: {
@@ -807,7 +807,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const majorBlockingIssues = hasMajorBlockingIssues(originalAnalysis.issues);
     const cleanStrongPrompt = expectedImprovement === 'low' && originalAnalysis.issues.length === 0;
     const shouldSuppressByStrength =
-      (overallScore >= 80 || cleanStrongPrompt) &&
+      (overallScore >= 75 || cleanStrongPrompt) &&
       !majorBlockingIssues &&
       expectedImprovement === 'low' &&
       input.rewritePreference !== 'force';

@@ -277,7 +277,7 @@ function hasAudience(prompt: string, context?: Record<string, unknown>) {
   }
 
   const explicitAudience =
-    /\b(for|aimed at|target(?:ing|ed at)?|tailored for)\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,6}(?:cto|ctos|it decision-makers?|decision-makers?|enterprise buyers?|buyers?|developers?|engineers?|directors?|managers?|leaders?|admins?|business(?:es)?|companies|organizations|teams|startups?|scaleups?|enterprises?|smbs?|small(?:\s+to\s+medium-sized)?\s+business(?:es)?|mid-sized\s+business(?:es)?)\b/i;
+    /\b(for|to|aimed at|target(?:ing|ed at)?|tailored for)\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,6}(?:cto|ctos|it decision-makers?|decision-makers?|enterprise buyers?|buyers?|developers?|engineers?|directors?|managers?|leaders?|admins?|business(?:es)?|companies|organizations|teams|startups?|scaleups?|enterprises?|smbs?|small(?:\s+to\s+medium-sized)?\s+business(?:es)?|mid-sized\s+business(?:es)?)\b/i;
   const genericAudience = /\b(audience|target\s+user)\b/i;
   return explicitAudience.test(prompt) || genericAudience.test(prompt);
 }
@@ -363,6 +363,20 @@ function hasContrastBoundary(prompt: string, context?: Record<string, unknown>):
   return (
     hasExclusions(prompt, context) ||
     /\b(tailored for|specific to|for smb|for smbs|for startups|for enterprises|rather than|instead of)\b/i.test(prompt)
+  );
+}
+
+function hasTradeoffFraming(prompt: string): boolean {
+  return /\b(trade[-\s]?off|rather than|instead of|when .+ and when .+|pros and cons)\b/i.test(prompt);
+}
+
+function hasComparisonFraming(prompt: string): boolean {
+  return /\b(vs\.?|versus|compare|comparison|one .+ and one .+)\b/i.test(prompt);
+}
+
+function hasScenarioContext(prompt: string): boolean {
+  return /\b(audit pressure|identity sprawl|admin overhead|after acquisitions?|operational overhead|handoff friction|delivery bottlenecks|compliance readiness|governance)\b/i.test(
+    prompt,
   );
 }
 
@@ -453,6 +467,129 @@ function hasWeakConstraints(prompt: string, context?: Record<string, unknown>): 
     );
   const highDifferentiation = /\b(audit|sprawl|overhead|regulatory|governance)\b/i.test(prompt);
   return !specific && !highDifferentiation;
+}
+
+function audienceDifferentiationScore(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 {
+  if (!hasAudience(prompt, context)) {
+    return 0;
+  }
+
+  const explicitRole = /\b(cto|vp|director|architect|administrator|manager|leaders?)\b/i.test(prompt);
+  if (explicitRole) {
+    return 2;
+  }
+
+  const specificity = audienceOrContextSpecificity(prompt, context);
+  if (specificity >= 2) {
+    return 2;
+  }
+
+  return 1;
+}
+
+function framingDistinctivenessScore(prompt: string): 0 | 1 | 2 | 3 {
+  const leadAngle = hasLeadAngle(prompt);
+  const tradeoff = hasTradeoffFraming(prompt);
+  const comparison = hasComparisonFraming(prompt);
+  if (leadAngle && (tradeoff || comparison)) {
+    return 3;
+  }
+
+  if (leadAngle || tradeoff || comparison) {
+    return 2;
+  }
+
+  if (/\b(focus on|prioritize|center on|highlight)\b/i.test(prompt)) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function exclusionDistinctivenessScore(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 {
+  if (!hasExclusions(prompt, context)) {
+    return 0;
+  }
+
+  const strongExclusion =
+    Boolean(context?.mustAvoid) ||
+    /\b(avoid|exclude|excluding|without|do not|don't)\b.{0,80}\b(generic|buzzwords?|hype|fear[-\s]?based|default|vague|jargon)\b/i.test(
+      prompt,
+    );
+  return strongExclusion ? 2 : 1;
+}
+
+function contextSpecificityScore(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 {
+  if (hasScenarioContext(prompt) && audienceOrContextSpecificity(prompt, context) >= 2) {
+    return 2;
+  }
+
+  if (
+    hasScenarioContext(prompt) ||
+    hasOrgFitSpecificity(prompt) ||
+    audienceOrContextSpecificity(prompt, context) >= 2 ||
+    /\b(kubernetes|iam|identity and access management|typescript|ci\/cd|platform engineering|microservices)\b/i.test(prompt)
+  ) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function supportingDifferentiatorsScore(prompt: string, framingScore: number, exclusionScore: number): 0 | 1 {
+  const supportSignals =
+    hasProofRequest(prompt) || /\b(example|examples|measurable|quantifiable|metric|outcome)\b/i.test(prompt);
+  return supportSignals && (framingScore >= 2 || exclusionScore >= 1) ? 1 : 0;
+}
+
+function genericFramingPenaltyScore(
+  prompt: string,
+  context: Record<string, unknown> | undefined,
+  foundGenericPhrases: string[],
+  audiencePresent: boolean,
+  marketerSignals?: MarketerSignals,
+): 0 | 1 | 2 {
+  let penalty = 0;
+  const categoryDefaultFraming =
+    countCategoryTerms(prompt) >= 3 && !hasLeadAngle(prompt) && !hasTradeoffFraming(prompt) && !hasExclusions(prompt, context);
+  if (foundGenericPhrases.length > 0 || categoryDefaultFraming) {
+    penalty += 1;
+  }
+
+  const diffuseFraming =
+    !audiencePresent ||
+    (Boolean(marketerSignals?.audienceSpecificityLow) && !hasTradeoffFraming(prompt)) ||
+    Boolean(marketerSignals?.genericValuePropDensityHigh);
+  if (diffuseFraming) {
+    penalty += 1;
+  }
+
+  return clamp(penalty, 0, 2) as 0 | 1 | 2;
+}
+
+function computeContrastScore(input: {
+  prompt: string;
+  context?: Record<string, unknown>;
+  mode: AnalyzeAndRewriteRequest['mode'];
+  foundGenericPhrases: string[];
+  audiencePresent: boolean;
+  marketerSignals?: MarketerSignals;
+}): number {
+  const audience = audienceDifferentiationScore(input.prompt, input.context);
+  const framing = framingDistinctivenessScore(input.prompt);
+  const exclusions = exclusionDistinctivenessScore(input.prompt, input.context);
+  const context = contextSpecificityScore(input.prompt, input.context);
+  const support = supportingDifferentiatorsScore(input.prompt, framing, exclusions);
+  const genericPenalty = genericFramingPenaltyScore(
+    input.prompt,
+    input.context,
+    input.foundGenericPhrases,
+    input.audiencePresent,
+    input.marketerSignals,
+  );
+
+  const highContrastBoost = input.mode === 'high_contrast' && framing >= 2 && (audience >= 1 || exclusions >= 1) ? 1 : 0;
+  return clamp(audience + framing + exclusions + context + support + highContrastBoost - genericPenalty, 0, 10);
 }
 
 function deriveMarketerSignals(prompt: string, context?: Record<string, unknown>): MarketerSignals {
@@ -607,29 +744,14 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
     input.role === 'marketer'
       ? {
           scope: computeScopeScore({ prompt, context, constraintsPresent, overloaded }),
-          contrast: Math.min(
-            10,
-            Math.max(
-              0,
-              4 +
-                (audiencePresent ? 1 : 0) +
-                (marketerSignals?.audienceSpecificityHigh ? 1 : 0) +
-                (marketerSignals?.leadAnglePresent ? 1 : 0) +
-                (marketerSignals?.proofRequested ? 1 : 0) +
-                (marketerSignals?.proofSpecificityHigh ? 1 : 0) +
-                (marketerSignals?.orgFitSpecificityHigh ? 1 : 0) +
-                (marketerSignals?.differentiationInstructionsPresent ? 1 : 0) +
-                Math.min(2, Math.floor((marketerSignals?.functionalCompositionScore ?? 0) / 3)) +
-                (input.mode === 'high_contrast' && marketerSignals?.leadAnglePresent ? 1 : 0) +
-                (input.mode === 'high_contrast' && marketerSignals?.differentiationInstructionsPresent ? 1 : 0) -
-                (audiencePresent ? 0 : 2) -
-                (marketerSignals?.audienceSpecificityLow ? 1 : 0) -
-                (marketerSignals?.positioningWeak ? 1 : 0) -
-                (marketerSignals?.contextContrastLow ? 1 : 0) -
-                (marketerSignals?.genericValuePropDensityHigh ? 1 : 0) -
-                (foundGenericPhrases.length > 0 ? 1 : 0),
-            ),
-          ),
+          contrast: computeContrastScore({
+            prompt,
+            context,
+            mode: input.mode,
+            foundGenericPhrases,
+            audiencePresent,
+            marketerSignals,
+          }),
           clarity: Math.max(
             0,
             8 - (marketerSignals?.proofWeak ? 1 : 0) - (marketerSignals?.constraintsWeak ? 1 : 0) - (overloaded ? 2 : 0),
@@ -645,40 +767,18 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
         }
       : {
           scope: computeScopeScore({ prompt, context, constraintsPresent, overloaded }),
-          contrast: Math.min(
-            10,
-            Math.max(
-              0,
-              (audiencePresent ? 2 : 0) +
-                audienceOrContextSpecificity(prompt, context) +
-                (hasContrastBoundary(prompt, context) ? 2 : 0) +
-                (constraintsPresent ? 1 : 0) -
-                (foundGenericPhrases.length > 0 ? 4 : 0) -
-                (overloaded ? 1 : 0),
-            ),
-          ),
+          contrast: computeContrastScore({
+            prompt,
+            context,
+            mode: input.mode,
+            foundGenericPhrases,
+            audiencePresent,
+          }),
           clarity: Math.max(0, 8 - (overloaded ? 2 : 0) - (constraintsPresent ? 0 : 2)),
           constraintQuality: computeConstraintQualityScore(prompt, context, constraintsPresent, false),
           genericOutputRisk,
           tokenWasteRisk: Math.min(10, Math.max(0, 3 + (overloaded ? 2 : 0) + (prompt.length > 1000 ? 3 : 1))),
         };
-
-  if (input.role === 'marketer' && input.mode === 'high_contrast' && marketerSignals) {
-    const hasRequiredDifferentiators =
-      audiencePresent &&
-      marketerSignals.leadAnglePresent &&
-      (marketerSignals.proofRequested || marketerSignals.proofSpecificityHigh);
-
-    const clearlyMoreGenericOverall =
-      genericOutputRisk >= 8 &&
-      marketerSignals.genericValuePropDensityHigh &&
-      !exclusionsPresent &&
-      !marketerSignals.differentiationInstructionsPresent;
-
-    if (hasRequiredDifferentiators && !clearlyMoreGenericOverall) {
-      scores.contrast = Math.max(scores.contrast, 5);
-    }
-  }
 
   const uniqueCodes = [...new Set(issues.map((issue) => issue.code))];
   const summary =

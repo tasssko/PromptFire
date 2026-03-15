@@ -4,27 +4,27 @@ import { generateImprovementSuggestions } from './improvementSuggestions';
 
 function overallScore(scores: ReturnType<typeof analyzePrompt>['scores']): number {
   const raw =
-    2.5 * scores.scope +
-    2.0 * scores.contrast +
-    2.0 * scores.clarity +
-    1.5 * scores.constraintQuality +
-    (10 - scores.genericOutputRisk) +
-    (10 - scores.tokenWasteRisk);
+    2.75 * scores.scope +
+    2.25 * scores.contrast +
+    1.25 * scores.clarity +
+    2.0 * scores.constraintQuality +
+    1.5 * (10 - scores.genericOutputRisk) +
+    0.5 * (10 - scores.tokenWasteRisk);
 
   return Math.round(Math.max(0, Math.min(100, raw)));
 }
 
 function scoreBand(score: number): 'poor' | 'weak' | 'usable' | 'strong' | 'excellent' {
-  if (score >= 90) {
+  if (score >= 85) {
     return 'excellent';
   }
   if (score >= 75) {
     return 'strong';
   }
-  if (score >= 55) {
+  if (score >= 60) {
     return 'usable';
   }
-  if (score >= 35) {
+  if (score >= 40) {
     return 'weak';
   }
   return 'poor';
@@ -62,7 +62,7 @@ describe('generateImprovementSuggestions', () => {
     ).toBe(true);
   });
 
-  it('returns 2-4 suggestions for usable prompts tied to lower-value dimensions', () => {
+  it('returns 2-5 suggestions for mid-quality prompts tied to lower-value dimensions', () => {
     const suggestions = suggestionsFor(
       {
         prompt:
@@ -74,7 +74,7 @@ describe('generateImprovementSuggestions', () => {
     );
 
     expect(suggestions.length).toBeGreaterThanOrEqual(2);
-    expect(suggestions.length).toBeLessThanOrEqual(4);
+    expect(suggestions.length).toBeLessThanOrEqual(5);
     expect(suggestions.some((suggestion) => suggestion.targetScores.includes('contrast'))).toBe(true);
     expect(suggestions.some((suggestion) => suggestion.targetScores.includes('genericOutputRisk'))).toBe(true);
   });

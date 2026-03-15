@@ -89,7 +89,7 @@ describe('analyzePrompt', () => {
     });
 
     expect(result.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
-    expect(result.scores.contrast).toBeGreaterThanOrEqual(5);
+    expect(result.scores.contrast).toBeGreaterThanOrEqual(4);
     expect(result.scores.clarity).toBeGreaterThanOrEqual(8);
   });
 
@@ -294,16 +294,16 @@ describe('analyzePrompt', () => {
 
   describe('calibration fixtures', () => {
     const scoreBandFromOverallScore = (overallScore: number) => {
-      if (overallScore >= 90) {
+      if (overallScore >= 85) {
         return 'excellent';
       }
       if (overallScore >= 75) {
         return 'strong';
       }
-      if (overallScore >= 55) {
+      if (overallScore >= 60) {
         return 'usable';
       }
-      if (overallScore >= 35) {
+      if (overallScore >= 40) {
         return 'weak';
       }
       return 'poor';
@@ -311,12 +311,12 @@ describe('analyzePrompt', () => {
 
     const computeOverallScore = (scores: ReturnType<typeof analyzePrompt>['scores']) => {
       const rawOverallScore =
-        2.5 * scores.scope +
-        2.0 * scores.contrast +
-        2.0 * scores.clarity +
-        1.5 * scores.constraintQuality +
-        1.0 * (10 - scores.genericOutputRisk) +
-        1.0 * (10 - scores.tokenWasteRisk);
+        2.75 * scores.scope +
+        2.25 * scores.contrast +
+        1.25 * scores.clarity +
+        2.0 * scores.constraintQuality +
+        1.5 * (10 - scores.genericOutputRisk) +
+        0.5 * (10 - scores.tokenWasteRisk);
 
       return Math.round(Math.max(0, Math.min(100, rawOverallScore)));
     };
@@ -339,7 +339,7 @@ describe('analyzePrompt', () => {
           constraintQuality: 2,
           genericOutputRisk: 8,
           tokenWasteRisk: 4,
-          overallScore: 33,
+          overallScore: 29,
           scoreBand: 'poor',
           issueCodes: 'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
         },
@@ -359,7 +359,7 @@ describe('analyzePrompt', () => {
           constraintQuality: 2,
           genericOutputRisk: 10,
           tokenWasteRisk: 4,
-          overallScore: 31,
+          overallScore: 26,
           scoreBand: 'poor',
           issueCodes:
             'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_PHRASES_DETECTED|GENERIC_OUTPUT_RISK_HIGH',
@@ -375,12 +375,12 @@ describe('analyzePrompt', () => {
         },
         expected: {
           scope: 3,
-          contrast: 4,
+          contrast: 2,
           clarity: 8,
           constraintQuality: 5,
           genericOutputRisk: 4,
           tokenWasteRisk: 4,
-          overallScore: 51,
+          overallScore: 45,
           scoreBand: 'weak',
           issueCodes: 'EXCLUSIONS_MISSING',
         },
@@ -394,12 +394,12 @@ describe('analyzePrompt', () => {
         },
         expected: {
           scope: 5,
-          contrast: 4,
+          contrast: 3,
           clarity: 8,
           constraintQuality: 2,
           genericOutputRisk: 6,
           tokenWasteRisk: 2,
-          overallScore: 52,
+          overallScore: 45,
           scoreBand: 'weak',
           issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
         },
@@ -414,13 +414,13 @@ describe('analyzePrompt', () => {
         },
         expected: {
           scope: 5,
-          contrast: 4,
+          contrast: 2,
           clarity: 8,
           constraintQuality: 5,
           genericOutputRisk: 4,
           tokenWasteRisk: 4,
-          overallScore: 56,
-          scoreBand: 'usable',
+          overallScore: 50,
+          scoreBand: 'weak',
           issueCodes: 'EXCLUSIONS_MISSING',
         },
       },
@@ -433,15 +433,15 @@ describe('analyzePrompt', () => {
           mode: 'balanced' as const,
         },
         expected: {
-          scope: 4,
-          contrast: 3,
+          scope: 5,
+          contrast: 2,
           clarity: 8,
           constraintQuality: 2,
-          genericOutputRisk: 6,
+          genericOutputRisk: 5,
           tokenWasteRisk: 2,
-          overallScore: 47,
+          overallScore: 44,
           scoreBand: 'weak',
-          issueCodes: 'AUDIENCE_MISSING|CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING',
         },
       },
       {
@@ -454,12 +454,12 @@ describe('analyzePrompt', () => {
         },
         expected: {
           scope: 10,
-          contrast: 7,
+          contrast: 8,
           clarity: 8,
           constraintQuality: 7,
           genericOutputRisk: 3,
           tokenWasteRisk: 4,
-          overallScore: 79,
+          overallScore: 83,
           scoreBand: 'strong',
           issueCodes: '',
         },
@@ -478,8 +478,8 @@ describe('analyzePrompt', () => {
           constraintQuality: 8,
           genericOutputRisk: 3,
           tokenWasteRisk: 2,
-          overallScore: 88,
-          scoreBand: 'strong',
+          overallScore: 91,
+          scoreBand: 'excellent',
           issueCodes: '',
         },
       },
@@ -492,13 +492,13 @@ describe('analyzePrompt', () => {
         },
         expected: {
           scope: 10,
-          contrast: 7,
+          contrast: 10,
           clarity: 8,
           constraintQuality: 9,
           genericOutputRisk: 3,
           tokenWasteRisk: 4,
-          overallScore: 82,
-          scoreBand: 'strong',
+          overallScore: 92,
+          scoreBand: 'excellent',
           issueCodes: '',
         },
       },

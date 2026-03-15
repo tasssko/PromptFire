@@ -266,15 +266,24 @@ Contrast measures meaningful differentiation, not just lexical novelty.
 
 ## 9.2 Contrast should reward
 
-* explicit audience
+Primary signals:
+
 * audience specificity
 * business tension
-* lead angle
+* trade-off framing
+* comparison framing
+* distinctive lead angle
+* exclusions that block default category framing
+* concrete operating context
+
+Secondary support signals:
+
 * proof requirements
-* exclusions
-* differentiated framing
-* org-fit specificity
+* examples
 * measurable outcomes
+* light structure guidance when it reinforces an existing angle
+
+Secondary support signals should only add modest contrast credit.
 
 ## 9.3 Contrast should not blindly punish
 
@@ -290,8 +299,20 @@ Contrast measures meaningful differentiation, not just lexical novelty.
 * repeated category claims without narrowing function
 * decorative buzzwords
 * default category framing without tension or direction
+* prompt framing that could be reused across many near-identical tasks with minimal change
 
-## 9.5 Composition principle
+## 9.5 Contrast and constraint-quality boundary
+
+Contrast and constraint quality may share vocabulary, but they should not double-count equally.
+
+Primary-home rules:
+
+* proof, examples, measurable outcomes, output structure -> primarily `constraintQuality`
+* audience specificity, tension, trade-offs, comparison frame, anti-default exclusions, scenario context -> primarily `contrast`
+
+If one phrase contributes to both dimensions, assign a primary home and only minor spillover credit to the other dimension.
+
+## 9.6 Composition principle
 
 Common words are acceptable if they do functional work.
 
@@ -753,13 +774,13 @@ and a request field:
 ```json
 {
   "id": "par_01HXWEAK123",
-  "overallScore": 41,
+  "overallScore": 40,
   "scoreBand": "weak",
   "rewriteRecommendation": "rewrite_recommended",
   "analysis": {
     "scores": {
       "scope": 4,
-      "contrast": 3,
+      "contrast": 2,
       "clarity": 8,
       "constraintQuality": 2,
       "genericOutputRisk": 8,
@@ -825,12 +846,12 @@ and a request field:
     "scoreComparison": {
       "original": {
         "scope": 4,
-        "contrast": 3,
+        "contrast": 2,
         "clarity": 8
       },
       "rewrite": {
         "scope": 8,
-        "contrast": 7,
+        "contrast": 8,
         "clarity": 8
       }
     }
@@ -864,13 +885,13 @@ and a request field:
 ```json
 {
   "id": "par_01HXSTRONG456",
-  "overallScore": 86,
+  "overallScore": 82,
   "scoreBand": "strong",
   "rewriteRecommendation": "no_rewrite_needed",
   "analysis": {
     "scores": {
       "scope": 8,
-      "contrast": 7,
+      "contrast": 8,
       "clarity": 8,
       "constraintQuality": 8,
       "genericOutputRisk": 2,
@@ -921,13 +942,13 @@ and a request field:
 ```json
 {
   "id": "par_01HXFORCE789",
-  "overallScore": 86,
+  "overallScore": 82,
   "scoreBand": "strong",
   "rewriteRecommendation": "rewrite_optional",
   "analysis": {
     "scores": {
       "scope": 8,
-      "contrast": 7,
+      "contrast": 8,
       "clarity": 8,
       "constraintQuality": 8,
       "genericOutputRisk": 2,
@@ -967,12 +988,12 @@ and a request field:
     "scoreComparison": {
       "original": {
         "scope": 8,
-        "contrast": 7,
+        "contrast": 8,
         "clarity": 8
       },
       "rewrite": {
         "scope": 8,
-        "contrast": 7,
+        "contrast": 8,
         "clarity": 8
       }
     }
@@ -1006,13 +1027,13 @@ and a request field:
 ```json
 {
   "id": "par_01HXSUPPRESS321",
-  "overallScore": 86,
+  "overallScore": 82,
   "scoreBand": "strong",
   "rewriteRecommendation": "no_rewrite_needed",
   "analysis": {
     "scores": {
       "scope": 8,
-      "contrast": 7,
+      "contrast": 8,
       "clarity": 8,
       "constraintQuality": 8,
       "genericOutputRisk": 2,
