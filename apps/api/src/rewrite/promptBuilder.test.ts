@@ -80,4 +80,32 @@ describe('buildRewriteInstructions', () => {
     expect(instructions.system).toContain('Pattern fit: decision_rubric');
     expect(instructions.user).toContain('"primary": "decision_rubric"');
   });
+
+  it.each([
+    ['direct_instruction', 'Pattern fit: direct_instruction'],
+    ['few_shot', 'Pattern fit: few_shot'],
+    ['stepwise_reasoning', 'Pattern fit: stepwise_reasoning'],
+    ['decomposition', 'Pattern fit: decomposition'],
+    ['decision_rubric', 'Pattern fit: decision_rubric'],
+    ['context_first', 'Pattern fit: context_first'],
+  ] as const)('covers the %s guidance branch', (primary, expected) => {
+    const instructions = buildRewriteInstructions({
+      prompt: 'Placeholder prompt',
+      role: 'general',
+      mode: 'balanced',
+      preferences: {
+        includeScores: true,
+        includeExplanation: true,
+        includeAlternatives: false,
+        preserveTone: false,
+      },
+      patternFit: {
+        primary,
+        confidence: 'high',
+        reasons: ['Test reason.'],
+      },
+    });
+
+    expect(instructions.system).toContain(expected);
+  });
 });

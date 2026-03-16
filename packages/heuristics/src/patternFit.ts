@@ -1,4 +1,4 @@
-import type { Analysis, Mode, Role } from '@promptfire/shared';
+import type { Analysis, BestNextMove, Mode, Role } from '@promptfire/shared';
 
 export type PromptPattern =
   | 'direct_instruction'
@@ -29,7 +29,7 @@ export interface PatternSignals {
   hasMissingContextForSpecificity: boolean;
 }
 
-interface DetectPatternFitInput {
+export interface DetectPatternFitInput {
   prompt: string;
   role: Role;
   mode: Mode;
@@ -67,14 +67,14 @@ function countDeliverables(prompt: string): number {
 }
 
 function hasTaskOverload(prompt: string, analysis: Analysis): boolean {
-  if (analysis.detectedIssueCodes.includes('TASK_OVERLOADED')) {
-    return true;
-  }
-
   const directiveVerbCount =
     (prompt.match(/(?:^|[.;]\s+|\bthen\b\s+|\band\b\s+)(build|write|create|design|implement|analyze|optimize|draft)\b/gi) ?? [])
       .length;
   const listSeparators = (prompt.match(/,| and |;| then /gi) ?? []).length;
+
+  if (analysis.detectedIssueCodes.includes('TASK_OVERLOADED') && (directiveVerbCount >= 2 || countDeliverables(prompt) >= 2)) {
+    return true;
+  }
   return directiveVerbCount >= 3 || (directiveVerbCount >= 2 && listSeparators >= 4) || countDeliverables(prompt) >= 3;
 }
 
@@ -93,7 +93,7 @@ function detectPatternSignals(input: DetectPatternFitInput): PatternSignals {
   const formatConsistency =
     /\b(format|template|same format|consistent format|json schema|exact structure)\b/i.test(prompt);
   const tradeoffFraming = /\b(trade[-\s]?off|when .* and when .*|pros and cons)\b/i.test(prompt);
-  const comparisonIntent = /\b(compare|comparison|versus|vs\.?|choose between|whether to)\b/i.test(prompt);
+  const comparisonIntent = /\b(compare|comparison|versus|vs\.?|choose between|whether to|better than)\b/i.test(prompt);
   const evaluationIntent =
     /\b(score|rank|grade|evaluate|review|assess|criteria|rubric|policy check|qa)\b/i.test(prompt);
   const decisionIntent = /\b(decide|decision|recommend|recommendation|which option)\b/i.test(prompt);
@@ -217,5 +217,99 @@ export function detectPatternFit(input: DetectPatternFitInput): PatternFit {
     confidence: confidenceForPattern(primary, signals),
     reasons: reasonsForPattern(primary, signals),
     rejectedPatterns: rejectedPatterns.length > 0 ? rejectedPatterns : undefined,
+  };
+}
+
+function hasExplicitExamplePattern(prompt: string): boolean {
+  return (
+    /\bexample\s*1\b/i.test(prompt) ||
+    /\binput:\s*/i.test(prompt) ||
+    /\boutput:\s*/i.test(prompt) ||
+    /\bfollow (?:this|these) example/i.test(prompt) ||
+    /\busing (?:this|these) example/i.test(prompt)
+  );
+}
+
+function hasExplicitStaging(prompt: string): boolean {
+  return (
+    /\b(step|phase|stage)\s*\d+\b/i.test(prompt) ||
+    /\bfirst\b[\s\S]{0,80}\bthen\b/i.test(prompt) ||
+    /\bin stages\b/i.test(prompt)
+  );
+}
+
+export function detectCurrentPattern(input: DetectPatternFitInput): PromptPattern | null {
+  const prompt = input.prompt.trim();
+  const lowered = prompt.toLowerCase();
+  const signals = detectPatternSignals(input);
+
+  if (
+    signals.hasMissingContextForSpecificity &&
+    (/\b(provided|below|attached|source|transcript|brief|notes|reference|dataset|document)\b/i.test(prompt) ||
+      hasSourceMaterialContext(input.context))
+  ) {
+    return 'context_first';
+  }
+  if (signals.hasEvaluationIntent && /\b(score|rank|grade|criteria|rubric)\b/i.test(prompt)) {
+    return 'decision_rubric';
+  }
+  if (signals.hasStyleImitationIntent && hasExplicitExamplePattern(prompt)) {
+    return 'few_shot';
+  }
+  if (signals.hasTaskOverload && hasExplicitStaging(prompt)) {
+    return 'decomposition';
+  }
+  if (
+    (signals.hasTradeoffFraming || signals.hasComparisonIntent || signals.hasDecisionIntent) &&
+    (/\b(compare|comparison|versus|vs\.?|trade[-\s]?off|when .* and when .*|which option)\b/i.test(prompt) ||
+      /\b(first|second|finally)\b/i.test(lowered))
+  ) {
+    return 'stepwise_reasoning';
+  }
+  if (
+    signals.hasClearDeliverable &&
+    signals.hasSingleDeliverable &&
+    !signals.hasTaskOverload &&
+    !signals.hasStyleImitationIntent &&
+    !signals.hasComparisonIntent &&
+    !signals.hasEvaluationIntent
+  ) {
+    return 'direct_instruction';
+  }
+
+  return null;
+}
+
+export function projectPromptPattern(pattern: PromptPattern): string {
+  switch (pattern) {
+    case 'few_shot':
+      return 'add_examples';
+    case 'stepwise_reasoning':
+      return 'break_into_steps';
+    case 'decomposition':
+      return 'split_into_stages';
+    case 'decision_rubric':
+      return 'add_evaluation_criteria';
+    case 'context_first':
+      return 'supply_missing_context';
+    case 'direct_instruction':
+    default:
+      return 'clarify_directly';
+  }
+}
+
+export function projectMethodFit(input: DetectPatternFitInput, patternFit: PatternFit): BestNextMove['methodFit'] | undefined {
+  const currentPattern = detectCurrentPattern(input);
+  const recommendedPattern = projectPromptPattern(patternFit.primary);
+  const currentProjection = currentPattern ? projectPromptPattern(currentPattern) : null;
+
+  if (currentProjection === recommendedPattern) {
+    return undefined;
+  }
+
+  return {
+    currentPattern: currentProjection,
+    recommendedPattern,
+    confidence: currentPattern ? patternFit.confidence : patternFit.confidence === 'high' ? 'medium' : patternFit.confidence,
   };
 }

@@ -4,6 +4,7 @@ import {
   bandLabel,
   formatSuggestionTitle,
   heroBandClass,
+  methodFitLabel,
   scoreDimensionLabel,
   verdictCopy,
 } from './helpers';
@@ -128,10 +129,7 @@ export function ResultsCard({
           <p>{bestNextMove.rationale}</p>
           <p>Improves: {bestNextMove.targetScores.map(scoreDimensionLabel).join(', ')}</p>
           {bestNextMove.methodFit && (
-            <p>
-              Method fit: <code>{bestNextMove.methodFit.currentPattern ?? 'unknown'}</code> {'->'}{' '}
-              <code>{bestNextMove.methodFit.recommendedPattern ?? 'unknown'}</code>
-            </p>
+            <p>Best improvement path: {methodFitLabel(bestNextMove.methodFit.recommendedPattern)}</p>
           )}
           {bestNextMove.exampleChange && <p>Example: {bestNextMove.exampleChange}</p>}
         </SurfaceCard>
