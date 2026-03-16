@@ -176,4 +176,20 @@ describe('generateImprovementSuggestions', () => {
       expect(findDiscouragedDefaultLanguage(`${suggestion.title} ${suggestion.reason} ${suggestion.exampleChange ?? ''}`)).toEqual([]);
     }
   });
+
+  it('keeps constrained developer implementation suggestions focused on execution details before audience', () => {
+    const suggestions = suggestionsFor(
+      {
+        prompt:
+          'Develop a webhook handler in Node.js that processes incoming HTTP POST requests. Ensure it validates the request payload against a predefined schema and handles errors gracefully by returning appropriate HTTP status codes. Exclude any third-party dependencies and focus solely on native Node.js functionality.',
+        role: 'developer',
+        mode: 'tight_scope',
+      },
+      'rewrite_optional',
+    );
+
+    expect(suggestions[0]?.title.toLowerCase()).not.toContain('audience');
+    const combined = suggestions.map((item) => `${item.title} ${item.reason}`).join(' ').toLowerCase();
+    expect(combined).toMatch(/payload|runtime|validation|output|boundary|status code|error handling/);
+  });
 });

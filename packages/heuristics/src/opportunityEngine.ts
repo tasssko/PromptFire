@@ -8,6 +8,7 @@ import type {
   ScoreBand,
   TargetScore,
 } from '@promptfire/shared';
+import { inferMissingContextType, type MissingContextType } from './missingContext';
 import { detectPatternFit, projectMethodFit, type PatternFit } from './patternFit';
 
 type Theme =
@@ -143,6 +144,30 @@ function lowestScoreKeys(analysis: Analysis): Array<keyof Analysis['scores']> {
     .map(([key]) => key as keyof Analysis['scores']);
 }
 
+function missingContextPriorityBoost(type: MissingContextType, candidate: OpportunityCandidate): number {
+  if (type === null) {
+    return 0;
+  }
+
+  if (
+    type === 'execution' &&
+    (candidate.id === 'add_execution_context' || candidate.id === 'define_io_contract')
+  ) {
+    return 80;
+  }
+  if (type === 'source' && candidate.id === 'supply_missing_context') {
+    return 80;
+  }
+  if (type === 'comparison' && (candidate.id === 'add_decision_criteria' || candidate.id === 'shift_to_comparison_pattern')) {
+    return 75;
+  }
+  if (type === 'audience' && (candidate.id === 'add_audience' || candidate.id === 'add_buyer_context' || candidate.id === 'shift_to_audience_outcome_pattern')) {
+    return 65;
+  }
+
+  return 0;
+}
+
 export function generateOpportunityCandidates(params: OpportunityParams): OpportunityCandidate[] {
   const prompt = params.input.prompt.trim();
   const context = params.input.context;
@@ -175,6 +200,12 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
   const candidates: OpportunityCandidate[] = [];
   const hasComparisonIntent = /\b(compare|comparison|versus|vs\.?|better than)\b/i.test(prompt);
   const hasDecisionIntent = /\b(decide|decision|which option|when .* and when .*|trade[-\s]?off)\b/i.test(prompt);
+  const missingContextType = inferMissingContextType({
+    prompt,
+    role: params.input.role,
+    patternFit,
+    analysis: params.analysis,
+  });
 
   const push = (candidate: OpportunityCandidate) => {
     candidates.push({
@@ -284,12 +315,95 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     });
   }
 
-  if (
+  if (missingContextType === 'source' && patternFit.primary !== 'context_first') {
+    push({
+      id: 'supply_missing_context',
+      suggestionTitle: 'supply the source context',
+      suggestionReason:
+        'This request depends on source material, but the prompt does not include the transcript, notes, or reference content.',
+      impact: 'high',
+      targetScores: ['constraintQuality', 'genericOutputRisk', 'scope'],
+      category: 'proof',
+      moveType: 'add_proof_requirement',
+      moveTitle: 'Supply the source context',
+      moveRationale:
+        'The model needs the source content before it can summarize or transform accurately without filling gaps.',
+      priority: 1,
+      tieGroup: 1,
+      methodFit,
+      exampleChange: 'Attach or paste the source transcript, notes, or document the output must be based on.',
+    });
+  }
+
+  if (params.input.role === 'developer' && missingContextType === 'execution') {
+    push({
+      id: 'add_execution_context',
+      suggestionTitle: 'add runtime and execution constraints',
+      suggestionReason:
+        'Implementation prompts are more useful when they specify runtime, framework assumptions, validation, and failure behavior.',
+      impact: 'high',
+      targetScores: ['constraintQuality', 'scope', 'genericOutputRisk'],
+      category: 'boundary',
+      moveType: 'clarify_output_structure',
+      moveTitle: 'Add runtime and execution constraints',
+      moveRationale:
+        'This prompt needs execution details such as runtime, interfaces, validation rules, and error/retry behavior before copy-level refinements.',
+      priority: 1,
+      tieGroup: 1,
+      methodFit,
+      exampleChange:
+        'Specify runtime/language, interface assumptions, payload validation, error status behavior, retry/idempotency, and explicit exclusions.',
+    });
+  }
+
+  if (missingContextType === 'io') {
+    push({
+      id: 'define_io_contract',
+      suggestionTitle: 'define input and output shape',
+      suggestionReason:
+        'The prompt should specify expected input and output structure to reduce ambiguity and generic responses.',
+      impact: 'high',
+      targetScores: ['constraintQuality', 'clarity', 'genericOutputRisk'],
+      category: 'structure',
+      moveType: 'clarify_output_structure',
+      moveTitle: 'Define input and output shape',
+      moveRationale:
+        'The model needs explicit input/output shape constraints so the result is directly usable instead of generic.',
+      priority: 2,
+      tieGroup: 1,
+      exampleChange: 'Define input schema, required output format, and validation requirements.',
+    });
+  }
+
+  if (missingContextType === 'operating' && params.input.role !== 'developer') {
+    push({
+      id: 'add_operating_context',
+      suggestionTitle: 'add operating context',
+      suggestionReason:
+        'The task would be more precise with environment assumptions such as production conditions, cost/latency limits, or business context.',
+      impact: 'medium',
+      targetScores: ['scope', 'contrast', 'genericOutputRisk'],
+      category: 'framing',
+      moveType: 'add_framing_boundary',
+      moveTitle: 'Add operating context',
+      moveRationale:
+        'Adding operating context narrows decisions and prevents broad default output.',
+      priority: 4,
+      tieGroup: 2,
+      exampleChange:
+        'State operating constraints such as production environment, latency/cost limits, compliance requirements, or deployment boundaries.',
+    });
+  }
+
+  const shouldSuggestAudience =
+    (params.input.role !== 'developer' || missingContextType === 'audience') &&
+    (
     !hasAudience(prompt, context) ||
     issueSet.has('AUDIENCE_MISSING') ||
     params.analysis.scores.scope <= 5 ||
     (theme === 'landing_page' && (!hasSpecificBuyerContext(prompt) || !hasResponseOutcome(prompt)))
-  ) {
+    );
+  if (shouldSuggestAudience) {
     push({
       id: theme === 'landing_page' ? 'add_buyer_context' : 'add_audience',
       suggestionTitle: theme === 'landing_page' ? 'add target buyer context' : 'add a specific audience',
@@ -518,7 +632,13 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
   }
 
   return candidates
-    .sort((a, b) => a.priority - b.priority || a.tieGroup - b.tieGroup)
+    .sort((a, b) => {
+      const boostDelta = missingContextPriorityBoost(missingContextType, b) - missingContextPriorityBoost(missingContextType, a);
+      if (boostDelta !== 0) {
+        return boostDelta;
+      }
+      return a.priority - b.priority || a.tieGroup - b.tieGroup;
+    })
     .filter((candidate, index, all) => all.findIndex((item) => item.id === candidate.id) === index);
 }
 

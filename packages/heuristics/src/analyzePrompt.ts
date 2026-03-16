@@ -5,6 +5,8 @@ import type {
   IssueCode,
   ScoreSet,
 } from '@promptfire/shared';
+import { inferMissingContextType } from './missingContext';
+import { detectPatternFit } from './patternFit';
 
 const genericPhrases = ['seamless', 'robust', 'powerful', 'innovative', 'cutting-edge'];
 const categoryTerms = ['security', 'compliance', 'integration'];
@@ -292,10 +294,15 @@ function hasConstraints(prompt: string, context?: Record<string, unknown>) {
   const toneOrStyleConstraint = /\b(keep (?:it|the tone)?\s*(?:concise|persuasive|grounded|formal|casual|practical)|tone|voice)\b/i.test(
     prompt,
   );
+  const runtimeOrValidationConstraint =
+    /\b(node\.?js|typescript|python|go|java|runtime|framework|native|payload|request body|response body|schema|validate|validation|status code|error handling|retry|idempot(?:ent|ency)|timeout)\b/i.test(
+      prompt,
+    );
   const hasPromptConstraints =
     /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
     /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt) ||
     toneOrStyleConstraint ||
+    runtimeOrValidationConstraint ||
     inclusionListConstraint ||
     /\b(include|incorporate|cover|mention|highlight|emphasize|address)\s+(?:real-world|actionable|specific|practical|one|two|\d+|examples?|best practices|steps?|checklist|conclusion)\b/i.test(
       prompt,
@@ -699,6 +706,20 @@ function pushIssue(issues: Issue[], code: IssueCode, severity: Issue['severity']
   issues.push({ code, severity, message });
 }
 
+function isAudienceMateriallyImportant(prompt: string, role: AnalyzeAndRewriteRequest['role']): boolean {
+  if (role === 'marketer') {
+    return true;
+  }
+
+  return /\b(landing page|copy|email|campaign|buyer|persona|reader|audience)\b/i.test(prompt);
+}
+
+function isImplementationOrTransformationPrompt(prompt: string): boolean {
+  return /\b(code|implement|implementation|build|develop|webhook|handler|api|extract|transformation|transform|summarize|summary)\b/i.test(
+    prompt,
+  );
+}
+
 export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
   const prompt = input.prompt.trim();
   const context = input.context;
@@ -711,11 +732,6 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
   const overloaded = input.role === 'marketer' ? isMarketerTaskOverloaded(prompt) : isTaskOverloaded(prompt);
   const foundGenericPhrases = detectGenericPhrases(prompt);
   const marketerSignals = input.role === 'marketer' ? deriveMarketerSignals(prompt, context) : undefined;
-
-  if (!audiencePresent) {
-    pushIssue(issues, 'AUDIENCE_MISSING', 'high', 'The prompt does not define a clear target audience.');
-    signals.push('No audience specified.');
-  }
 
   if (!constraintsPresent || prompt.length < 30) {
     pushIssue(
@@ -771,7 +787,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
         ]
       : [];
 
-  const genericOutputRisk =
+  const baseGenericOutputRisk =
     input.role === 'marketer'
       ? Math.min(10, Math.max(0, 3 + marketerRiskSignals.filter(Boolean).length))
       : Math.min(
@@ -788,17 +804,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
         );
 
   const marketerHighRisk = input.role === 'marketer' && marketerRiskSignals.filter(Boolean).length >= 3;
-  if (genericOutputRisk >= 7 || marketerHighRisk) {
-    pushIssue(
-      issues,
-      'GENERIC_OUTPUT_RISK_HIGH',
-      'high',
-      'The prompt is likely to produce generic output without clearer direction.',
-    );
-    signals.push('High likelihood of generic output.');
-  }
-
-  const scores: ScoreSet =
+  const baseScores: ScoreSet =
     input.role === 'marketer'
       ? {
           scope: computeScopeScore({ prompt, context, constraintsPresent, overloaded }),
@@ -817,7 +823,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
             constraintsPresent,
             Boolean(marketerSignals?.constraintsWeak),
           ),
-          genericOutputRisk,
+          genericOutputRisk: baseGenericOutputRisk,
           tokenWasteRisk: Math.min(10, Math.max(0, 2 + (overloaded ? 3 : 0) + (prompt.length > 1000 ? 2 : 0))),
         }
       : {
@@ -831,15 +837,67 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
           }),
           clarity: computeClarityScore(prompt, overloaded),
           constraintQuality: computeConstraintQualityScore(prompt, context, constraintsPresent, false),
-          genericOutputRisk,
+          genericOutputRisk: baseGenericOutputRisk,
           tokenWasteRisk: Math.min(10, Math.max(0, 3 + (overloaded ? 2 : 0) + (prompt.length > 1000 ? 3 : 1))),
         };
+
+  const preAnalysis: Analysis = {
+    scores: baseScores,
+    issues,
+    detectedIssueCodes: [...new Set(issues.map((issue) => issue.code))],
+    signals: signals.slice(0, 12),
+    summary: '',
+  };
+  const patternFit = detectPatternFit({
+    prompt,
+    role: input.role,
+    mode: input.mode,
+    analysis: preAnalysis,
+    context,
+  });
+  const missingContextType = inferMissingContextType({
+    prompt,
+    role: input.role,
+    patternFit,
+    analysis: preAnalysis,
+  });
+
+  const audienceMateriallyImportant = isAudienceMateriallyImportant(prompt, input.role);
+  const implementationOrTransform = isImplementationOrTransformationPrompt(prompt);
+  if (
+    !audiencePresent &&
+    missingContextType === 'audience' &&
+    (!implementationOrTransform || audienceMateriallyImportant)
+  ) {
+    pushIssue(issues, 'AUDIENCE_MISSING', 'high', 'The prompt does not define a clear target audience.');
+    signals.push('No audience specified.');
+  }
+
+  const genericOutputRisk = baseScores.genericOutputRisk;
+
+  if (genericOutputRisk >= 7 || marketerHighRisk) {
+    pushIssue(
+      issues,
+      'GENERIC_OUTPUT_RISK_HIGH',
+      'high',
+      'The prompt is likely to produce generic output without clearer direction.',
+    );
+    signals.push('High likelihood of generic output.');
+  }
+  if (missingContextType !== null) {
+    signals.push(`Most useful missing context appears to be ${missingContextType}.`);
+  }
+
+  const scores: ScoreSet = {
+    ...baseScores,
+    genericOutputRisk,
+  };
 
   const uniqueCodes = [...new Set(issues.map((issue) => issue.code))];
   const summary =
     issues.length === 0
       ? 'Prompt quality is acceptable with low generic-output risk.'
-      : `Detected ${issues.length} quality issue(s); tighten constraints and exclusions for better output.`;
+      : `Detected ${issues.length} quality issue(s); add the most relevant missing context and tighten boundaries for better output.`;
 
   return {
     scores,

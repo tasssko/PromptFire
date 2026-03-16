@@ -1,4 +1,5 @@
 import { substitutePreferredLanguage, type Rewrite } from '@promptfire/shared';
+import { inferMissingContextType } from '@promptfire/heuristics';
 import type { RewriteEngine, RewriteInput } from './types';
 
 type PatchKind = 'audience' | 'structure' | 'exclusion' | 'task_load' | 'example_or_comparison';
@@ -325,6 +326,15 @@ function fallbackPatchOrder(issueCodes: Set<string>): PatchKind[] {
 
 function rankedPatchKinds(input: RewriteInput): PatchKind[] {
   const issueCodes = new Set(input.analysis?.detectedIssueCodes ?? []);
+  const inferredMissingContext =
+    input.analysis
+      ? inferMissingContextType({
+          prompt: input.prompt,
+          role: input.role,
+          patternFit: input.patternFit,
+          analysis: input.analysis,
+        })
+      : null;
   const suggestions = input.improvementSuggestions ?? [];
   const fromSuggestions = suggestions
     .map((item) => patchKindFromSuggestion({ id: item.id, title: item.title, category: item.category }))
@@ -332,23 +342,44 @@ function rankedPatchKinds(input: RewriteInput): PatchKind[] {
     .filter((value, index, array) => array.indexOf(value) === index);
 
   if (fromSuggestions.length > 0) {
+    if (inferredMissingContext === 'execution' || inferredMissingContext === 'io') {
+      fromSuggestions.unshift('structure');
+    }
+    if (inferredMissingContext === 'boundary') {
+      fromSuggestions.unshift('exclusion');
+    }
+    if (inferredMissingContext === 'source' || inferredMissingContext === 'comparison') {
+      fromSuggestions.unshift('example_or_comparison');
+    }
+    if (inferredMissingContext === 'audience') {
+      fromSuggestions.unshift('audience');
+    }
     if (input.mode === 'high_contrast' && issueCodes.size > 0 && !fromSuggestions.includes('example_or_comparison')) {
       fromSuggestions.push('example_or_comparison');
     }
     if (input.role === 'marketer' && input.mode === 'high_contrast' && !fromSuggestions.includes('exclusion')) {
       fromSuggestions.push('exclusion');
     }
-    return fromSuggestions;
+    return fromSuggestions.filter((value, index, array) => array.indexOf(value) === index);
   }
 
   const fallback = fallbackPatchOrder(issueCodes);
+  if (inferredMissingContext === 'execution' || inferredMissingContext === 'io') {
+    fallback.unshift('structure');
+  } else if (inferredMissingContext === 'boundary') {
+    fallback.unshift('exclusion');
+  } else if (inferredMissingContext === 'source' || inferredMissingContext === 'comparison') {
+    fallback.unshift('example_or_comparison');
+  } else if (inferredMissingContext === 'audience') {
+    fallback.unshift('audience');
+  }
   if (input.mode === 'high_contrast' && issueCodes.size > 0 && !fallback.includes('example_or_comparison')) {
     fallback.push('example_or_comparison');
   }
   if (input.role === 'marketer' && input.mode === 'high_contrast' && !fallback.includes('exclusion')) {
     fallback.push('exclusion');
   }
-  return fallback;
+  return fallback.filter((value, index, array) => array.indexOf(value) === index);
 }
 
 function inferPatchClause(input: RewriteInput, patchKind: PatchKind): string | null {

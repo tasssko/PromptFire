@@ -1,10 +1,11 @@
 import { substitutePreferredLanguage } from '@promptfire/shared';
+import { inferMissingContextType } from '@promptfire/heuristics';
 import type { RewriteInput } from './types';
 
 function roleGuidance(role: RewriteInput['role']): string {
   switch (role) {
     case 'developer':
-      return 'Focus on implementation boundaries, runtime constraints, failure handling, and explicit exclusions.';
+      return 'Focus on runtime, language/framework, interface assumptions, input/output shape, validation requirements, failure/retry behavior, and explicit exclusions before audience.';
     case 'marketer':
       return substitutePreferredLanguage(
         'Focus on audience clarity and concrete positioning detail. Preserve valid audience details when present, keep the same deliverable, and replace abstract phrasing with grounded context and explicit exclusions.',
@@ -33,7 +34,7 @@ function modeGuidance(mode: RewriteInput['mode']): string {
     case 'balanced':
     default:
       return substitutePreferredLanguage(
-        'Improve task boundedness with concrete audience, structure, and exclusions, and prefer direct prompt fills over meta-instructions.',
+        'Improve task boundedness by adding the most relevant missing context, structure, or boundary if clearly missing, and prefer direct prompt fills over meta-instructions.',
         'specificity',
       );
   }
@@ -54,7 +55,7 @@ function patternGuidance(input: RewriteInput): string {
       return 'Pattern fit: context_first. Request missing source context and avoid fabricated specificity.';
     case 'direct_instruction':
     default:
-      return 'Pattern fit: direct_instruction. Keep a direct style and tighten audience, scope, exclusions, and proof requirements.';
+      return 'Pattern fit: direct_instruction. Keep a direct style and add the single highest-value missing context type that narrows the task.';
   }
 }
 
@@ -67,6 +68,16 @@ export function buildRewriteInstructions(input: RewriteInput): RewriteInstructio
   const analysisIssues = input.analysis?.detectedIssueCodes.join(', ') ?? 'none';
   const analysisSignals = input.analysis?.signals.join(' | ') ?? 'none';
 
+  const inferredMissingContext =
+    input.analysis
+      ? inferMissingContextType({
+          prompt: input.prompt,
+          role: input.role,
+          patternFit: input.patternFit,
+          analysis: input.analysis,
+        })
+      : null;
+
   const system = [
     'You are a prompt rewriting assistant.',
     'Return only JSON with keys: rewrittenPrompt, explanation, changes.',
@@ -74,6 +85,9 @@ export function buildRewriteInstructions(input: RewriteInput): RewriteInstructio
     roleGuidance(input.role),
     modeGuidance(input.mode),
     patternGuidance(input),
+    inferredMissingContext
+      ? `Prioritize missing context type: ${inferredMissingContext}.`
+      : 'Prioritize the highest-value missing context type, if any.',
   ].join(' ');
 
   const user = JSON.stringify(

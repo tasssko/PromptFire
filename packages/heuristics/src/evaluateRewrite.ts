@@ -2,9 +2,12 @@ import type {
   Analysis,
   Improvement,
   ImprovementStatus,
+  Role,
   ScoreDeltas,
   ScoreSet,
 } from '@promptfire/shared';
+import { inferMissingContextType } from './missingContext';
+import { detectPatternFit } from './patternFit';
 
 interface EvaluateRewriteInput {
   originalPrompt: string;
@@ -12,6 +15,7 @@ interface EvaluateRewriteInput {
   originalAnalysis: Analysis;
   rewriteAnalysis: Analysis;
   context?: Record<string, unknown>;
+  role?: Role;
 }
 
 interface EvaluateRewriteOutput {
@@ -191,9 +195,12 @@ function countGroundedImprovementGains(input: {
   originalPrompt: string;
   rewrittenPrompt: string;
   context?: Record<string, unknown>;
+  allowAudienceGain?: boolean;
 }): number {
   const gains = [
-    !hasAudience(input.originalPrompt, input.context) && hasAudience(input.rewrittenPrompt, input.context),
+    input.allowAudienceGain !== false &&
+      !hasAudience(input.originalPrompt, input.context) &&
+      hasAudience(input.rewrittenPrompt, input.context),
     !hasSpecificOutputStructure(input.originalPrompt) && hasSpecificOutputStructure(input.rewrittenPrompt),
     !hasSpecificExampleOrComparisonFrame(input.originalPrompt) &&
       hasSpecificExampleOrComparisonFrame(input.rewrittenPrompt),
@@ -369,6 +376,34 @@ function expectedUsefulnessFromStatus(status: ImprovementStatus): Improvement['e
 export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOutput {
   const scoreDeltas = computeScoreDeltas(input.originalAnalysis.scores, input.rewriteAnalysis.scores);
   const overallDelta = computeOverallDelta(scoreDeltas);
+  const role: Role = input.role ?? 'general';
+  const originalPatternFit = detectPatternFit({
+    prompt: input.originalPrompt,
+    role,
+    mode: 'balanced',
+    analysis: input.originalAnalysis,
+    context: input.context,
+  });
+  const rewritePatternFit = detectPatternFit({
+    prompt: input.rewrittenPrompt,
+    role,
+    mode: 'balanced',
+    analysis: input.rewriteAnalysis,
+    context: input.context,
+  });
+  const originalMissingContextType = inferMissingContextType({
+    prompt: input.originalPrompt,
+    role,
+    patternFit: originalPatternFit,
+    analysis: input.originalAnalysis,
+  });
+  const rewriteMissingContextType = inferMissingContextType({
+    prompt: input.rewrittenPrompt,
+    role,
+    patternFit: rewritePatternFit,
+    analysis: input.rewriteAnalysis,
+  });
+  const allowAudienceGain = originalMissingContextType === null || originalMissingContextType === 'audience';
   const lowExpectedImprovement = hasLowExpectedImprovement(
     input.originalAnalysis.scores,
     input.originalPrompt,
@@ -378,7 +413,13 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   const paraphraseHeavy = isParaphraseHeavy(scoreDeltas, input);
   const rubricEchoRisk = rubricEchoRiskLevel(input);
   const intentPreservation = intentPreservationLevel(input);
-  const groundedImprovementCount = countGroundedImprovementGains(input);
+  let groundedImprovementCount = countGroundedImprovementGains({
+    ...input,
+    allowAudienceGain,
+  });
+  if (originalMissingContextType !== null && rewriteMissingContextType !== originalMissingContextType) {
+    groundedImprovementCount += 1;
+  }
   const abstractInstructionCount = getAbstractInstructionCount(input);
 
   const abstractScaffoldingDominates =
@@ -456,6 +497,13 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     notes.push(
       `Material improvement met: overall delta ${Math.round(overallDelta * 100) / 100}, grounded improvements ${groundedImprovementCount}.`,
     );
+  }
+  if (originalMissingContextType !== null) {
+    if (rewriteMissingContextType !== originalMissingContextType) {
+      notes.push(`Rewrite addressed the primary missing context type: ${originalMissingContextType}.`);
+    } else {
+      notes.push(`Rewrite did not fully resolve the primary missing context type: ${originalMissingContextType}.`);
+    }
   }
 
   if (notes.length === 0) {

@@ -656,6 +656,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         originalAnalysis: analysis,
         rewriteAnalysis,
         context: input.context,
+        role: input.role,
       });
 
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
@@ -908,6 +909,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           originalAnalysis,
           rewriteAnalysis,
           context: input.context,
+          role: input.role,
         });
 
         rewrite = generatedRewrite;

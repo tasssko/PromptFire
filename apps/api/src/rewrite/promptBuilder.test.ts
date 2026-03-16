@@ -35,7 +35,7 @@ describe('buildRewriteInstructions', () => {
       },
     });
 
-    expect(instructions.system).toContain('implementation boundaries');
+    expect(instructions.system).toContain('runtime, language/framework');
     expect(instructions.system).toContain('Narrow to one clear deliverable');
     expect(instructions.user).toContain('CONSTRAINTS_MISSING');
   });
@@ -57,6 +57,43 @@ describe('buildRewriteInstructions', () => {
     expect(instructions.system).toContain('keep the same deliverable');
     expect(instructions.system).toContain('grounded context');
     expect(instructions.system).toContain('keep the rewrite minimal and specific');
+  });
+
+  it('uses missing-context-first rewrite language', () => {
+    const instructions = buildRewriteInstructions({
+      prompt: 'Write a webhook handler.',
+      role: 'developer',
+      mode: 'balanced',
+      preferences: {
+        includeScores: true,
+        includeExplanation: true,
+        includeAlternatives: false,
+        preserveTone: false,
+      },
+      analysis: {
+        scores: {
+          scope: 3,
+          contrast: 2,
+          clarity: 4,
+          constraintQuality: 1,
+          genericOutputRisk: 8,
+          tokenWasteRisk: 6,
+        },
+        issues: [],
+        detectedIssueCodes: ['CONSTRAINTS_MISSING'],
+        signals: [],
+        summary: 'test',
+      },
+      patternFit: {
+        primary: 'direct_instruction',
+        confidence: 'medium',
+        reasons: ['Test reason.'],
+      },
+    });
+
+    expect(instructions.system).toContain('most relevant missing context, structure, or boundary');
+    expect(instructions.system).toContain('Prioritize missing context type:');
+    expect(instructions.system).toContain('Pattern fit: direct_instruction');
   });
 
   it('includes pattern-fit guidance when available', () => {
