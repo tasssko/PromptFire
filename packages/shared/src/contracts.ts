@@ -328,6 +328,25 @@ export const EvaluationV2Schema = z.object({
 });
 export type EvaluationV2 = z.infer<typeof EvaluationV2Schema>;
 
+export const RewritePresentationModeSchema = z.enum([
+  'full_rewrite',
+  'template_with_example',
+  'questions_only',
+  'suppressed',
+]);
+export type RewritePresentationMode = z.infer<typeof RewritePresentationModeSchema>;
+
+export const GuidedCompletionSchema = z.object({
+  mode: z.enum(['template_with_example', 'questions_only']),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  questions: z.array(z.string().min(1)).max(8).optional(),
+  template: z.string().min(1).optional(),
+  example: z.string().min(1).optional(),
+  rationale: z.string().min(1).optional(),
+});
+export type GuidedCompletion = z.infer<typeof GuidedCompletionSchema>;
+
 export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   id: z.string().startsWith('par_'),
   overallScore: z.number().int().min(0).max(100),
@@ -339,6 +358,8 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   gating: GatingSchema,
   rewrite: RewriteSchema.nullable(),
   evaluation: EvaluationV2Schema.nullable(),
+  rewritePresentationMode: RewritePresentationModeSchema.optional(),
+  guidedCompletion: GuidedCompletionSchema.nullable().optional(),
   inferenceFallbackUsed: z.boolean().optional(),
   resolutionSource: z.enum(['local', 'inference']).optional(),
   meta: MetaV2Schema,

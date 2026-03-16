@@ -164,4 +164,61 @@ describe('shared contracts', () => {
 
     expect(parsed.success).toBe(true);
   });
+
+  it('validates v2 response guided-completion fallback fields', () => {
+    const parsed = AnalyzeAndRewriteV2ResponseSchema.safeParse({
+      id: 'par_test_v2_gc',
+      overallScore: 42,
+      scoreBand: 'weak',
+      rewriteRecommendation: 'rewrite_recommended',
+      analysis: {
+        scores: {
+          scope: 3,
+          contrast: 4,
+          clarity: 5,
+          constraintQuality: 2,
+          genericOutputRisk: 7,
+          tokenWasteRisk: 4,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Weak prompt.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'high',
+        majorBlockingIssues: true,
+      },
+      rewrite: null,
+      evaluation: {
+        status: 'no_significant_change',
+        overallDelta: 0,
+        signals: [],
+        scoreComparison: {
+          original: { scope: 3, contrast: 4, clarity: 5 },
+          rewrite: { scope: 3, contrast: 4, clarity: 5 },
+        },
+      },
+      rewritePresentationMode: 'template_with_example',
+      guidedCompletion: {
+        mode: 'template_with_example',
+        title: 'Fill in the missing details',
+        summary: 'Add boundaries first.',
+        questions: ['What runtime should be used?'],
+        template: 'Write [deliverable] for [audience].',
+        example: 'Example of a stronger prompt: Write...',
+      },
+      meta: {
+        version: V2_API_VERSION,
+        requestId: 'req_v2_gc',
+        latencyMs: 0,
+        providerMode: 'mock',
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
 });

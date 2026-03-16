@@ -25,6 +25,11 @@ export function heroCopy(result: AnalyzeAndRewriteV2Response): {
   supporting: string;
   primaryAction: string;
 } {
+  const presentationMode = result.rewritePresentationMode ?? (result.rewrite ? 'full_rewrite' : 'suppressed');
+  const hasTemplate = Boolean(result.guidedCompletion?.template);
+  const hasExample = Boolean(result.guidedCompletion?.example);
+  const hasQuestions = Boolean(result.guidedCompletion?.questions?.length);
+
   switch (result.rewriteRecommendation) {
     case 'no_rewrite_needed':
       return {
@@ -37,7 +42,16 @@ export function heroCopy(result: AnalyzeAndRewriteV2Response): {
         headline: 'Usable, with room to improve',
         supporting:
           'The prompt is clear, but tightening constraints or differentiation could improve the output.',
-        primaryAction: result.rewrite ? 'Show suggested rewrite' : 'Generate suggested rewrite',
+        primaryAction:
+          presentationMode === 'template_with_example' && hasTemplate
+            ? 'Copy template'
+            : presentationMode === 'template_with_example' && hasExample
+              ? 'Copy example'
+              : presentationMode === 'questions_only' && hasQuestions
+                ? 'Copy questions'
+                : result.rewrite
+                  ? 'Show suggested rewrite'
+                  : 'Generate suggested rewrite',
       };
     case 'rewrite_recommended':
     default:
@@ -45,7 +59,16 @@ export function heroCopy(result: AnalyzeAndRewriteV2Response): {
         headline: 'This prompt needs tightening',
         supporting:
           'This prompt is likely to produce generic output unless it is narrowed and better directed.',
-        primaryAction: result.rewrite ? 'Copy rewritten prompt' : 'Generate rewrite',
+        primaryAction:
+          presentationMode === 'template_with_example' && hasTemplate
+            ? 'Copy template'
+            : presentationMode === 'template_with_example' && hasExample
+              ? 'Copy example'
+              : presentationMode === 'questions_only' && hasQuestions
+                ? 'Copy questions'
+                : result.rewrite
+                  ? 'Copy rewritten prompt'
+                  : 'Generate rewrite',
       };
   }
 }

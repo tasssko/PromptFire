@@ -50,6 +50,7 @@ import {
 import { ProviderNotConfiguredError, UpstreamRewriteError } from './rewrite/errors';
 import { selectRewriteEngine } from './rewrite/engineSelector';
 import { getProviderConfig } from './rewrite/providerConfig';
+import { buildGuidedCompletion, selectRewritePresentationMode } from './rewrite/rewritePresentation';
 import { evaluateInferenceTrigger, mergeContextWithInference } from './inference/fallbackResolver';
 import { buildEffectiveResolution } from './inference/effectiveContext';
 import { OpenAIInferenceClient } from './inference/openaiInference';
@@ -1034,6 +1035,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     try {
       let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
       let evaluation: AnalyzeAndRewriteV2Response['evaluation'] = null;
+      let rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'] = 'suppressed';
+      let guidedCompletion: AnalyzeAndRewriteV2Response['guidedCompletion'] = null;
 
       if (!shouldSuppress) {
         const rewriteEngine = selectRewriteEngine(providerConfig);
@@ -1103,6 +1106,31 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
             },
           },
         };
+
+        rewritePresentationMode = selectRewritePresentationMode({
+          rewriteRecommendation,
+          rewritePreference: input.rewritePreference,
+          evaluation,
+          analysis: resolvedAnalysis,
+          rewrite,
+          scoreBand,
+          prompt: input.prompt,
+          effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+        });
+        if (rewritePresentationMode === 'template_with_example' || rewritePresentationMode === 'questions_only') {
+          guidedCompletion = buildGuidedCompletion({
+            prompt: input.prompt,
+            role: input.role,
+            mode: rewritePresentationMode,
+            analysis: resolvedAnalysis,
+            bestNextMove,
+            improvementSuggestions,
+            effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+          });
+          rewrite = null;
+        }
+      } else {
+        rewritePresentationMode = 'suppressed';
       }
 
       const analysis: Analysis = {
@@ -1133,6 +1161,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         },
         rewrite,
         evaluation,
+        rewritePresentationMode,
+        guidedCompletion,
         inferenceFallbackUsed,
         resolutionSource,
         meta,

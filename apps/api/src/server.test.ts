@@ -1440,7 +1440,15 @@ describe('API vertical slice', () => {
         }
 
         if (fixture.expected.rewritePresent) {
-          expect(body.rewrite).toBeTruthy();
+          const allowsGuidedFallback =
+            body.rewritePresentationMode === 'template_with_example' ||
+            body.rewritePresentationMode === 'questions_only';
+          if (allowsGuidedFallback) {
+            expect(body.rewrite).toBeNull();
+            expect(body.guidedCompletion).toBeTruthy();
+          } else {
+            expect(body.rewrite).toBeTruthy();
+          }
         } else {
           expect(body.rewrite).toBeNull();
         }

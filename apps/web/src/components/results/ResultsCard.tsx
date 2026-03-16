@@ -46,6 +46,15 @@ export function ResultsCard({
   onSetShowOptionalRewrite,
 }: ResultsCardProps) {
   const bestNextMove: BestNextMove | null = result.bestNextMove ?? null;
+  const rewritePresentationMode = result.rewritePresentationMode ?? (result.rewrite ? 'full_rewrite' : 'suppressed');
+  const guidedCompletion = result.guidedCompletion ?? null;
+  const hasFullRewrite = rewritePresentationMode === 'full_rewrite' && Boolean(result.rewrite);
+
+  const guidedQuestionsText = (guidedCompletion?.questions ?? []).map((question, index) => `${index + 1}. ${question}`).join('\n');
+  const guidedCopyValue =
+    guidedCompletion?.template ??
+    guidedCompletion?.example ??
+    (guidedQuestionsText.length > 0 ? guidedQuestionsText : null);
 
   return (
     <section className="grid gap-4 rounded-xl border border-pf-border-default bg-white p-6 shadow-md max-sm:p-4">
@@ -71,7 +80,17 @@ export function ResultsCard({
                 return;
               }
 
-              if (result.rewrite) {
+              if (rewritePresentationMode === 'template_with_example' && guidedCopyValue) {
+                onCopyPrompt(guidedCopyValue);
+                return;
+              }
+
+              if (rewritePresentationMode === 'questions_only' && guidedQuestionsText.length > 0) {
+                onCopyPrompt(guidedQuestionsText);
+                return;
+              }
+
+              if (hasFullRewrite && result.rewrite) {
                 onCopyPrompt(result.rewrite.rewrittenPrompt);
                 if (state === 'usable') {
                   onSetShowOptionalRewrite(true);
@@ -168,7 +187,7 @@ export function ResultsCard({
           ) : (
             <p>Prompt is usable. Tightening constraints or specificity may still improve outputs.</p>
           )}
-          {result.rewrite ? (
+          {hasFullRewrite && result.rewrite ? (
             <>
               <button type="button" onClick={onToggleOptionalRewrite}>
                 {showOptionalRewrite ? 'Hide rewrite preview' : 'Show rewrite preview'}
@@ -183,6 +202,50 @@ export function ResultsCard({
                 </SurfaceCard>
               )}
             </>
+          ) : guidedCompletion ? (
+            <SurfaceCard tone="suggestion" className="mt-1">
+              <h3 className="text-base">{guidedCompletion.title}</h3>
+              <p>{guidedCompletion.summary}</p>
+              {guidedCompletion.questions && guidedCompletion.questions.length > 0 && (
+                <ul className="grid list-disc gap-1 pl-[1.2rem]">
+                  {guidedCompletion.questions.map((question) => (
+                    <li key={question}>{question}</li>
+                  ))}
+                </ul>
+              )}
+              {guidedCompletion.template && (
+                <>
+                  <p className="font-semibold">Template</p>
+                  <pre>{guidedCompletion.template}</pre>
+                </>
+              )}
+              {guidedCompletion.example && (
+                <>
+                  <p className="font-semibold">Example of a stronger prompt</p>
+                  <pre>{guidedCompletion.example}</pre>
+                </>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {guidedCompletion.template && (
+                  <button type="button" onClick={() => onCopyPrompt(guidedCompletion.template!)}>
+                    Copy template
+                  </button>
+                )}
+                {guidedCompletion.example && (
+                  <button type="button" onClick={() => onCopyPrompt(guidedCompletion.example!)}>
+                    Copy example
+                  </button>
+                )}
+                {!guidedCompletion.template && guidedCompletion.questions && guidedCompletion.questions.length > 0 && (
+                  <button type="button" onClick={() => onCopyPrompt(guidedQuestionsText)}>
+                    Copy questions
+                  </button>
+                )}
+                <button type="button" onClick={() => onCopyPrompt(prompt)}>
+                  Use original prompt
+                </button>
+              </div>
+            </SurfaceCard>
           ) : (
             <button type="button" onClick={() => void onForceRewrite()}>
               Generate rewrite
@@ -193,14 +256,60 @@ export function ResultsCard({
 
       {state === 'weak' && (
         <SurfaceCard tone="rewrite">
-          <h2 className={sectionTitleClass}>Suggested rewrite</h2>
-          {result.rewrite ? (
+          <h2 className={sectionTitleClass}>
+            {guidedCompletion ? guidedCompletion.title : hasFullRewrite ? 'Suggested rewrite' : 'Template'}
+          </h2>
+          {hasFullRewrite && result.rewrite ? (
             <>
               <pre>{result.rewrite.rewrittenPrompt}</pre>
               {result.rewrite.explanation && <p>{result.rewrite.explanation}</p>}
               <button type="button" onClick={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)}>
                 Copy rewritten prompt
               </button>
+            </>
+          ) : guidedCompletion ? (
+            <>
+              <p>{guidedCompletion.summary}</p>
+              {guidedCompletion.questions && guidedCompletion.questions.length > 0 && (
+                <ul className="grid list-disc gap-1 pl-[1.2rem]">
+                  {guidedCompletion.questions.map((question) => (
+                    <li key={question}>{question}</li>
+                  ))}
+                </ul>
+              )}
+              {guidedCompletion.template && (
+                <>
+                  <p className="font-semibold">Template</p>
+                  <pre>{guidedCompletion.template}</pre>
+                </>
+              )}
+              {guidedCompletion.example && (
+                <>
+                  <p className="font-semibold">Example of a stronger prompt</p>
+                  <pre>{guidedCompletion.example}</pre>
+                </>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {guidedCompletion.template && (
+                  <button type="button" onClick={() => onCopyPrompt(guidedCompletion.template!)}>
+                    Copy template
+                  </button>
+                )}
+                {guidedCompletion.example && (
+                  <button type="button" onClick={() => onCopyPrompt(guidedCompletion.example!)}>
+                    Copy example
+                  </button>
+                )}
+                {!guidedCompletion.template && guidedCompletion.questions && guidedCompletion.questions.length > 0 && (
+                  <button type="button" onClick={() => onCopyPrompt(guidedQuestionsText)}>
+                    Copy questions
+                  </button>
+                )}
+                <button type="button" onClick={() => onCopyPrompt(prompt)}>
+                  Use original prompt
+                </button>
+              </div>
+              {guidedCompletion.rationale && <p>{guidedCompletion.rationale}</p>}
             </>
           ) : (
             <button type="button" onClick={() => void onForceRewrite()}>
@@ -210,11 +319,14 @@ export function ResultsCard({
         </SurfaceCard>
       )}
 
-      {result.rewrite && evaluation && (
+      {evaluation && (
         <SurfaceCard tone="verdict">
           <h2 className={sectionTitleClass}>Rewrite result</h2>
           <p className="font-bold">{verdictCopy(evaluation).label}</p>
           <p>{verdictCopy(evaluation).recommendation}</p>
+          {(evaluation.status === 'possible_regression' || evaluation.status === 'no_significant_change') && guidedCompletion && (
+            <p>Keep the original prompt and use the questions/template above if you want to strengthen it.</p>
+          )}
           <p>
             Overall delta: <code>{evaluation.overallDelta}</code>
           </p>
@@ -271,6 +383,9 @@ export function ResultsCard({
           </TechnicalMetric>
           <TechnicalMetric>
             Evaluation signals <code>{result.evaluation?.signals.length ?? 0}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Rewrite presentation <code>{rewritePresentationMode}</code>
           </TechnicalMetric>
           <TechnicalMetric>
             Request ID <code>{result.meta.requestId}</code>
