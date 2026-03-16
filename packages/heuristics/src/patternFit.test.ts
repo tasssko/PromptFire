@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizePreferences } from '@promptfire/shared';
 import { analyzePrompt } from './analyzePrompt';
-import { detectPatternFit } from './patternFit';
+import { detectCurrentPattern, detectPatternFit, projectMethodFit } from './patternFit';
 
 function fitFor(input: { prompt: string; role?: 'general' | 'developer' | 'marketer' }) {
   const role = input.role ?? 'general';
@@ -56,5 +56,39 @@ describe('detectPatternFit', () => {
     expect(['direct_instruction', 'stepwise_reasoning']).toContain(fit.primary);
     expect(fit.primary).not.toBe('decomposition');
     expect(fit.primary).not.toBe('few_shot');
+  });
+
+  it('projects public method fit labels from the canonical pattern taxonomy', () => {
+    const prompt = 'Rewrite these support replies in our house style.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+    const fit = detectPatternFit({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      analysis,
+    });
+
+    expect(projectMethodFit({ prompt, role: 'general', mode: 'balanced', analysis }, fit)).toEqual({
+      currentPattern: null,
+      recommendedPattern: 'add_examples',
+      confidence: 'medium',
+    });
+  });
+
+  it('detects current pattern conservatively when a prompt already uses explicit examples', () => {
+    const prompt = 'Rewrite these support replies in our house style. Follow these examples. Example 1: A. Example 2: B.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    expect(detectCurrentPattern({ prompt, role: 'general', mode: 'balanced', analysis })).toBe('few_shot');
   });
 });

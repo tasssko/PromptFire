@@ -627,6 +627,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       overallScore,
       scoreBand,
       rewriteRecommendation: 'rewrite_recommended',
+      patternFit,
     });
 
     try {
@@ -862,6 +863,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       overallScore,
       scoreBand,
       rewriteRecommendation,
+      patternFit,
     });
     const bestNextMove = generateBestNextMove({
       input,
@@ -869,6 +871,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       overallScore,
       scoreBand,
       rewriteRecommendation,
+      patternFit,
     });
 
     try {

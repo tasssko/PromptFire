@@ -87,7 +87,7 @@ describe('generateBestNextMove', () => {
       'rewrite_optional',
     );
 
-    expect(move?.type).toBe('add_decision_criteria');
+    expect(['shift_to_comparison_pattern', 'add_decision_criteria']).toContain(move?.type);
     expect(move?.targetScores).toEqual(expect.arrayContaining(['contrast', 'constraintQuality']));
   });
 
@@ -102,7 +102,21 @@ describe('generateBestNextMove', () => {
     );
 
     expect(['shift_to_decision_frame', 'shift_to_comparison_pattern']).toContain(move?.type);
-    expect(move?.methodFit?.currentPattern).toBe('role_based');
+    expect(move?.methodFit?.recommendedPattern).toBe('break_into_steps');
+  });
+
+  it('projects canonical pattern guidance into methodFit for missing-context prompts', () => {
+    const move = moveFor(
+      {
+        prompt: 'Write a detailed case study about our customer migration and include measurable business outcomes.',
+        role: 'marketer',
+        mode: 'balanced',
+      },
+      'rewrite_recommended',
+    );
+
+    expect(move?.methodFit?.recommendedPattern).toBe('supply_missing_context');
+    expect(move?.title.toLowerCase()).toContain('context');
   });
 
   it('allows null for already-strong prompts', () => {

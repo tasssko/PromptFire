@@ -664,7 +664,28 @@ describe('API vertical slice', () => {
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
     expect(['shift_to_decision_frame', 'shift_to_comparison_pattern']).toContain(body.bestNextMove.type);
-    expect(body.bestNextMove.methodFit.currentPattern).toBe('role_based');
+    expect(body.bestNextMove.methodFit.recommendedPattern).toBe('break_into_steps');
+  });
+
+  it('projects canonical pattern guidance into methodFit for missing-context prompts', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write a detailed case study about our customer migration and include measurable business outcomes.',
+        role: 'marketer',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.bestNextMove.methodFit.recommendedPattern).toBe('supply_missing_context');
+    expect(body.bestNextMove.title.toLowerCase()).toContain('context');
   });
 
   it('treats broad business-segment phrasing as audience in v2 marketer scoring', async () => {

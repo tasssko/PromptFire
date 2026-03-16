@@ -8,6 +8,7 @@ import type {
   ScoreBand,
   TargetScore,
 } from '@promptfire/shared';
+import { detectPatternFit, projectMethodFit, type PatternFit } from './patternFit';
 
 type Theme =
   | 'landing_page'
@@ -18,15 +19,6 @@ type Theme =
   | 'case_study'
   | 'internal_memo'
   | 'social_post'
-  | 'generic';
-
-type ObservedPattern = 'role_based' | 'comparison' | 'decision_frame' | 'section_structured' | 'audience_outcome' | 'generic';
-type RecommendedPattern =
-  | 'comparison'
-  | 'decision_frame'
-  | 'audience_outcome'
-  | 'persuasive_marketing'
-  | 'technical_explainer'
   | 'generic';
 
 interface OpportunityCandidate {
@@ -51,6 +43,7 @@ export interface OpportunityParams {
   overallScore: number;
   scoreBand: ScoreBand;
   rewriteRecommendation: RewriteRecommendation;
+  patternFit?: PatternFit;
 }
 
 function inferTheme(prompt: string): Theme {
@@ -150,62 +143,6 @@ function lowestScoreKeys(analysis: Analysis): Array<keyof Analysis['scores']> {
     .map(([key]) => key as keyof Analysis['scores']);
 }
 
-function inferObservedPattern(prompt: string): ObservedPattern {
-  if (/\b(act as|as a|role:)\b/i.test(prompt)) {
-    return 'role_based';
-  }
-  if (/\b(compare|comparison|versus|vs\.?)\b/i.test(prompt)) {
-    return 'comparison';
-  }
-  if (/\b(when .* and when .*|trade[-\s]?off|criteria|decide|decision|recommendation)\b/i.test(prompt)) {
-    return 'decision_frame';
-  }
-  if (/\b(section|outline|bullet|bullets|checklist|steps|format|table)\b/i.test(prompt)) {
-    return 'section_structured';
-  }
-  if (/\b(for|aimed at|target(?:ing|ed at)?|tailored for)\b/i.test(prompt) && /\b(outcome|goal|convert|reply|decision)\b/i.test(prompt)) {
-    return 'audience_outcome';
-  }
-  return 'generic';
-}
-
-function inferRecommendedPattern(prompt: string, theme: Theme): RecommendedPattern {
-  if (/\b(compare|comparison|versus|vs\.?)\b/i.test(prompt)) {
-    return 'comparison';
-  }
-  if (/\b(when .* and when .*|trade[-\s]?off|criteria|decide|decision|which option|better than)\b/i.test(prompt)) {
-    return 'decision_frame';
-  }
-  if (theme === 'landing_page' || /\b(convert|conversion|buyer|cta)\b/i.test(prompt)) {
-    return 'persuasive_marketing';
-  }
-  if (/\b(guide|explainer|explain|architecture|deployment|monitoring|troubleshooting|migration)\b/i.test(prompt)) {
-    return 'technical_explainer';
-  }
-  if (!hasAudience(prompt) && /\b(write|create|draft|generate)\b/i.test(prompt)) {
-    return 'audience_outcome';
-  }
-  return 'generic';
-}
-
-function patternMismatch(prompt: string, theme: Theme): BestNextMove['methodFit'] | null {
-  const currentPattern = inferObservedPattern(prompt);
-  const recommendedPattern = inferRecommendedPattern(prompt, theme);
-  if (currentPattern === recommendedPattern || recommendedPattern === 'generic') {
-    return null;
-  }
-
-  const isStrongMismatch =
-    (currentPattern === 'role_based' && (recommendedPattern === 'comparison' || recommendedPattern === 'decision_frame')) ||
-    (currentPattern === 'generic' && (recommendedPattern === 'comparison' || recommendedPattern === 'decision_frame'));
-
-  return {
-    currentPattern,
-    recommendedPattern,
-    confidence: isStrongMismatch ? 'high' : 'medium',
-  };
-}
-
 export function generateOpportunityCandidates(params: OpportunityParams): OpportunityCandidate[] {
   const prompt = params.input.prompt.trim();
   const context = params.input.context;
@@ -215,8 +152,29 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     params.scoreBand === 'strong' ||
     params.scoreBand === 'excellent' ||
     params.rewriteRecommendation === 'no_rewrite_needed';
-  const methodFit = patternMismatch(prompt, theme);
+  const patternFit =
+    params.patternFit ??
+    detectPatternFit({
+      prompt,
+      role: params.input.role,
+      mode: params.input.mode,
+      analysis: params.analysis,
+      context,
+    });
+  const methodFit =
+    projectMethodFit(
+      {
+        prompt,
+        role: params.input.role,
+        mode: params.input.mode,
+        analysis: params.analysis,
+        context,
+      },
+      patternFit,
+    ) ?? undefined;
   const candidates: OpportunityCandidate[] = [];
+  const hasComparisonIntent = /\b(compare|comparison|versus|vs\.?|better than)\b/i.test(prompt);
+  const hasDecisionIntent = /\b(decide|decision|which option|when .* and when .*|trade[-\s]?off)\b/i.test(prompt);
 
   const push = (candidate: OpportunityCandidate) => {
     candidates.push({
@@ -226,37 +184,103 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     });
   };
 
-  if (
-    methodFit &&
-    (methodFit.recommendedPattern === 'decision_frame' || methodFit.recommendedPattern === 'comparison') &&
-    /\b(when .* and when .*|trade[-\s]?off|better than|compare|versus|vs\.?)\b/i.test(prompt)
-  ) {
-    const moveType = methodFit.recommendedPattern === 'comparison' ? 'shift_to_comparison_pattern' : 'shift_to_decision_frame';
+  if (patternFit.primary === 'stepwise_reasoning') {
+    const moveType = hasComparisonIntent ? 'shift_to_comparison_pattern' : 'shift_to_decision_frame';
     push({
       id: moveType,
-      suggestionTitle:
-        moveType === 'shift_to_comparison_pattern' ? 'shift to a comparison pattern' : 'shift to a decision frame',
+      suggestionTitle: moveType === 'shift_to_comparison_pattern' ? 'shift to a comparison pattern' : 'break the reasoning into steps',
       suggestionReason:
         moveType === 'shift_to_comparison_pattern'
           ? 'This task is comparative, so explicit comparison framing will do more work than generic explanation.'
-          : 'This task is about trade-offs or suitability, so explicit decision framing will help more than persona framing.',
+          : 'This task depends on trade-offs or judgment, so a stepwise structure will work better than a broad explanation.',
       impact: 'high',
-      targetScores: ['contrast', 'clarity', 'genericOutputRisk'],
+      targetScores: ['contrast', 'constraintQuality', 'genericOutputRisk'],
       category: 'framing',
       moveType,
-      moveTitle:
-        moveType === 'shift_to_comparison_pattern' ? 'Shift to a comparison pattern' : 'Shift to a decision frame',
+      moveTitle: moveType === 'shift_to_comparison_pattern' ? 'Shift to a comparison pattern' : 'Break the reasoning into steps',
       moveRationale:
         moveType === 'shift_to_comparison_pattern'
           ? 'The prompt needs explicit comparison structure more than broad explanation, so the model can judge options instead of drifting into generic summary.'
-          : 'The prompt needs explicit decision criteria and trade-off framing more than persona setup, so the output can explain when to choose one option over another.',
+          : 'The prompt needs an explicit sequence for weighing dimensions, trade-offs, and the final recommendation.',
       priority: 1,
       tieGroup: 1,
       methodFit,
       exampleChange:
         moveType === 'shift_to_comparison_pattern'
           ? 'Ask for the options to be compared against named criteria or trade-offs.'
-          : 'Ask for when to use each option, when not to, and which criteria should drive the recommendation.',
+          : 'Ask the model to identify the dimensions first, weigh them second, and conclude with a recommendation third.',
+    });
+  }
+
+  if (patternFit.primary === 'few_shot') {
+    push({
+      id: 'require_examples',
+      suggestionTitle: 'add one or two examples',
+      suggestionReason: 'This task is easier to demonstrate than describe, so compact examples will control the output better than extra prose.',
+      impact: 'high',
+      targetScores: ['clarity', 'constraintQuality', 'genericOutputRisk'],
+      category: 'proof',
+      moveType: 'require_examples',
+      moveTitle: 'Add one or two examples',
+      moveRationale: 'A few compact examples will show the model the pattern to follow and reduce ambiguity faster than more instructions.',
+      priority: 2,
+      tieGroup: 1,
+      methodFit,
+      exampleChange: 'Include one or two short examples of the style, structure, or transformation you want.',
+    });
+  }
+
+  if (patternFit.primary === 'decomposition') {
+    push({
+      id: 'reduce_task_load',
+      suggestionTitle: 'split the task into stages',
+      suggestionReason: 'This prompt is overloaded, so splitting it into stages will improve focus before smaller copy-level fixes matter.',
+      impact: 'high',
+      targetScores: ['scope', 'tokenWasteRisk'],
+      category: 'task_load',
+      moveType: 'reduce_task_load',
+      moveTitle: 'Split the task into stages',
+      moveRationale: 'The prompt is trying to do too much at once. Breaking it into stages will reduce sprawl and improve focus.',
+      priority: 1,
+      tieGroup: 1,
+      methodFit,
+      exampleChange: 'Ask for the first deliverable now, then move secondary outputs into a follow-up step or prompt.',
+    });
+  }
+
+  if (patternFit.primary === 'decision_rubric') {
+    push({
+      id: 'add_decision_criteria',
+      suggestionTitle: 'add evaluation criteria',
+      suggestionReason: 'This task is about scoring or ranking, so the prompt should define the criteria and verdict format explicitly.',
+      impact: 'high',
+      targetScores: ['contrast', 'constraintQuality'],
+      category: 'theme_specific',
+      moveType: 'add_decision_criteria',
+      moveTitle: 'Add evaluation criteria',
+      moveRationale: 'The prompt should define how options are judged so the output stays consistent and grounded in the right criteria.',
+      priority: 1,
+      tieGroup: 1,
+      methodFit,
+      exampleChange: 'List the criteria, weighting, or verdict format the scoring should use.',
+    });
+  }
+
+  if (patternFit.primary === 'context_first') {
+    push({
+      id: 'supply_missing_context',
+      suggestionTitle: 'supply the missing context',
+      suggestionReason: 'This task asks for grounded specifics, but the source material or facts are missing.',
+      impact: 'high',
+      targetScores: ['constraintQuality', 'genericOutputRisk', 'contrast'],
+      category: 'proof',
+      moveType: 'add_proof_requirement',
+      moveTitle: 'Supply the missing context',
+      moveRationale: 'The model needs the source material, customer facts, or evidence before it can produce grounded specifics without inventing detail.',
+      priority: 1,
+      tieGroup: 1,
+      methodFit,
+      exampleChange: 'Provide the source notes, transcript, customer facts, or examples the output should use.',
     });
   }
 
@@ -302,7 +326,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
       moveType: 'reduce_task_load',
       moveTitle: 'Narrow the task load',
       moveRationale: 'This prompt tries to do too many jobs at once, which increases generic-output risk and token waste before wording quality matters.',
-      priority: 2,
+      priority: patternFit.primary === 'decomposition' ? 10 : 2,
       tieGroup: 1,
       exampleChange: 'Reduce the request to one deliverable or move secondary asks into a separate prompt.',
     });
@@ -310,7 +334,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
 
   if (
     (theme === 'comparison' && !/\b(criteria|trade-off|tradeoff|recommend(?:ation)?|decision)\b/i.test(prompt)) ||
-    (/\b(when .* and when .*|better than|which option|trade[-\s]?off)\b/i.test(prompt) && params.analysis.scores.contrast <= 6)
+    (hasDecisionIntent && params.analysis.scores.contrast <= 6)
   ) {
     push({
       id: 'add_decision_criteria',
@@ -322,7 +346,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
       moveType: 'add_decision_criteria',
       moveTitle: 'Add decision criteria',
       moveRationale: 'The task implies evaluation, but the prompt does not tell the model which criteria or trade-offs should drive the judgment.',
-      priority: 5,
+      priority: patternFit.primary === 'decision_rubric' ? 10 : 5,
       tieGroup: 2,
       exampleChange: 'List the criteria, trade-offs, or decision boundary the comparison must use.',
     });
@@ -362,7 +386,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     (theme === 'landing_page' && !hasSpecificProof(prompt)) ||
     (theme === 'blog_post' && !/\bexample|examples\b/i.test(prompt))
   ) {
-    const requireExamples = theme === 'blog_post';
+    const requireExamples = theme === 'blog_post' || patternFit.primary === 'few_shot';
     push({
       id: requireExamples ? 'require_examples' : isStrongPrompt ? 'optional_proof_requirement' : 'add_proof_requirement',
       suggestionTitle: requireExamples ? 'require specific examples' : 'require one proof point',
@@ -379,7 +403,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
       moveRationale: requireExamples
         ? 'Concrete examples will improve specificity faster than more wording polish.'
         : 'A proof requirement will make the output less generic by forcing one supported claim or clear comparison.',
-      priority: isStrongPrompt ? 50 : 30,
+      priority: patternFit.primary === 'few_shot' ? 8 : isStrongPrompt ? 50 : 30,
       tieGroup: 3,
       exampleChange: requireExamples
         ? 'Require one or two specific examples, scenarios, or cases.'
@@ -475,7 +499,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     });
   }
 
-  if (methodFit && methodFit.recommendedPattern === 'audience_outcome' && !hasAudience(prompt, context)) {
+  if (patternFit.primary === 'direct_instruction' && !hasAudience(prompt, context)) {
     push({
       id: 'shift_to_audience_outcome_pattern',
       suggestionTitle: 'shift to an audience-outcome pattern',

@@ -94,6 +94,25 @@ export function scoreDimensionLabel(name: string): string {
   }
 }
 
+export function methodFitLabel(name: string | null | undefined): string | null {
+  switch (name) {
+    case 'clarify_directly':
+      return 'clarify the request directly';
+    case 'add_examples':
+      return 'add one or two examples';
+    case 'break_into_steps':
+      return 'break the reasoning into steps';
+    case 'split_into_stages':
+      return 'split the task into stages';
+    case 'add_evaluation_criteria':
+      return 'add evaluation criteria';
+    case 'supply_missing_context':
+      return 'supply the missing context';
+    default:
+      return name ? name.replaceAll('_', ' ') : null;
+  }
+}
+
 export function bandLabel(scoreBand: ScoreBand): string {
   return scoreBand.replace('_', ' ');
 }

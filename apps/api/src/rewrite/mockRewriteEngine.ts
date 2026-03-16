@@ -207,7 +207,7 @@ function composeRewrite(input: {
 function composePatternRewrite(input: {
   basePrompt: string;
   selectedPatches: Partial<Record<PatchKind, string>>;
-  pattern: RewriteInput['patternFit']['primary'];
+  pattern: NonNullable<RewriteInput['patternFit']>['primary'];
 }): string {
   const direct = composeRewrite({ basePrompt: input.basePrompt, selectedPatches: input.selectedPatches });
   const opening = ensureSentence(firstSentence(input.basePrompt));
@@ -255,6 +255,8 @@ function composePatternRewrite(input: {
       opening,
       'Before drafting, request the missing source context and required facts.',
       'Then generate output grounded only in supplied source material.',
+      input.selectedPatches.example_or_comparison,
+      input.selectedPatches.exclusion,
       input.selectedPatches.structure,
     ]).join(' ');
   }
@@ -331,7 +333,10 @@ function rankedPatchKinds(input: RewriteInput): PatchKind[] {
 
   if (fromSuggestions.length > 0) {
     if (input.mode === 'high_contrast' && issueCodes.size > 0 && !fromSuggestions.includes('example_or_comparison')) {
-      return [...fromSuggestions, 'example_or_comparison'];
+      fromSuggestions.push('example_or_comparison');
+    }
+    if (input.role === 'marketer' && input.mode === 'high_contrast' && !fromSuggestions.includes('exclusion')) {
+      fromSuggestions.push('exclusion');
     }
     return fromSuggestions;
   }
@@ -339,6 +344,9 @@ function rankedPatchKinds(input: RewriteInput): PatchKind[] {
   const fallback = fallbackPatchOrder(issueCodes);
   if (input.mode === 'high_contrast' && issueCodes.size > 0 && !fallback.includes('example_or_comparison')) {
     fallback.push('example_or_comparison');
+  }
+  if (input.role === 'marketer' && input.mode === 'high_contrast' && !fallback.includes('exclusion')) {
+    fallback.push('exclusion');
   }
   return fallback;
 }
@@ -397,7 +405,10 @@ export class MockRewriteEngine implements RewriteEngine {
         .map((kind) => selectedPatches[kind])
         .filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
     );
-    const rewrittenPrompt = finalAdditions.length > 0 ? composePatternRewrite({ basePrompt, selectedPatches, pattern }) : basePrompt;
+    const rewrittenPrompt =
+      finalAdditions.length > 0 || pattern !== 'direct_instruction'
+        ? composePatternRewrite({ basePrompt, selectedPatches, pattern })
+        : basePrompt;
 
     return {
       role: input.role,
