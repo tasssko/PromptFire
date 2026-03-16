@@ -401,7 +401,7 @@ describe('analyzePrompt', () => {
           tokenWasteRisk: 2,
           overallScore: 47,
           scoreBand: 'weak',
-          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+          issueCodes: 'EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
         },
       },
       {
@@ -441,7 +441,7 @@ describe('analyzePrompt', () => {
           tokenWasteRisk: 2,
           overallScore: 46,
           scoreBand: 'weak',
-          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING',
+          issueCodes: 'EXCLUSIONS_MISSING',
         },
       },
       {

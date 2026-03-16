@@ -666,12 +666,21 @@ describe('API vertical slice', () => {
           scores: {
             scope: 5,
             contrast: 0,
+<<<<<<< present-or-zero
+            clarity: 8,
+            constraintQuality: 0,
+            genericOutputRisk: 8,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 30,
+=======
             clarity: 10,
             constraintQuality: 2,
             genericOutputRisk: 8,
             tokenWasteRisk: 4,
           },
           overallScore: 36,
+>>>>>>> main
           scoreBand: 'poor',
           rewriteRecommendation: 'rewrite_recommended' as const,
           expectedImprovement: 'high' as const,
@@ -694,12 +703,21 @@ describe('API vertical slice', () => {
           scores: {
             scope: 5,
             contrast: 0,
+<<<<<<< present-or-zero
+            clarity: 7,
+            constraintQuality: 0,
+            genericOutputRisk: 10,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 26,
+=======
             clarity: 8,
             constraintQuality: 2,
             genericOutputRisk: 10,
             tokenWasteRisk: 4,
           },
           overallScore: 31,
+>>>>>>> main
           scoreBand: 'poor',
           rewriteRecommendation: 'rewrite_recommended' as const,
           expectedImprovement: 'high' as const,
@@ -722,9 +740,15 @@ describe('API vertical slice', () => {
         expected: {
           scores: {
             scope: 5,
+<<<<<<< present-or-zero
+            contrast: 1,
+            clarity: 8,
+            constraintQuality: 6,
+=======
             contrast: 2,
             clarity: 10,
             constraintQuality: 5,
+>>>>>>> main
             genericOutputRisk: 4,
             tokenWasteRisk: 4,
           },
@@ -749,20 +773,29 @@ describe('API vertical slice', () => {
         expected: {
           scores: {
             scope: 7,
+<<<<<<< present-or-zero
+            contrast: 2,
+            clarity: 8,
+=======
             contrast: 3,
             clarity: 10,
+>>>>>>> main
             constraintQuality: 2,
             genericOutputRisk: 6,
             tokenWasteRisk: 2,
           },
+<<<<<<< present-or-zero
+          overallScore: 48,
+=======
           overallScore: 53,
+>>>>>>> main
           scoreBand: 'weak',
           rewriteRecommendation: 'rewrite_recommended' as const,
           expectedImprovement: 'high' as const,
           majorBlockingIssues: true,
           rewritePresent: true,
           evaluationPresent: true,
-          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
+          issueCodes: 'EXCLUSIONS_MISSING|GENERIC_OUTPUT_RISK_HIGH',
         },
       },
       {
@@ -777,13 +810,22 @@ describe('API vertical slice', () => {
         expected: {
           scores: {
             scope: 5,
+<<<<<<< present-or-zero
+            contrast: 1,
+            clarity: 8,
+=======
             contrast: 2,
             clarity: 10,
+>>>>>>> main
             constraintQuality: 5,
             genericOutputRisk: 4,
             tokenWasteRisk: 4,
           },
+<<<<<<< present-or-zero
+          overallScore: 48,
+=======
           overallScore: 53,
+>>>>>>> main
           scoreBand: 'weak',
           rewriteRecommendation: 'rewrite_recommended' as const,
           expectedImprovement: 'high' as const,
@@ -805,20 +847,29 @@ describe('API vertical slice', () => {
         expected: {
           scores: {
             scope: 6,
+<<<<<<< present-or-zero
+            contrast: 1,
+            clarity: 8,
+=======
             contrast: 2,
             clarity: 10,
+>>>>>>> main
             constraintQuality: 2,
             genericOutputRisk: 5,
             tokenWasteRisk: 2,
           },
+<<<<<<< present-or-zero
+          overallScore: 44,
+=======
           overallScore: 49,
+>>>>>>> main
           scoreBand: 'weak',
           rewriteRecommendation: 'rewrite_recommended' as const,
           expectedImprovement: 'high' as const,
-          majorBlockingIssues: true,
+          majorBlockingIssues: false,
           rewritePresent: true,
           evaluationPresent: true,
-          issueCodes: 'CONSTRAINTS_MISSING|EXCLUSIONS_MISSING',
+          issueCodes: 'EXCLUSIONS_MISSING',
         },
       },
       {
@@ -833,9 +884,15 @@ describe('API vertical slice', () => {
         expected: {
           scores: {
             scope: 7,
+<<<<<<< present-or-zero
+            contrast: 7,
+            clarity: 8,
+            constraintQuality: 8,
+=======
             contrast: 8,
             clarity: 10,
             constraintQuality: 7,
+>>>>>>> main
             genericOutputRisk: 3,
             tokenWasteRisk: 4,
           },
@@ -861,12 +918,21 @@ describe('API vertical slice', () => {
           scores: {
             scope: 10,
             contrast: 10,
+<<<<<<< present-or-zero
+            clarity: 8,
+            constraintQuality: 10,
+            genericOutputRisk: 3,
+            tokenWasteRisk: 2,
+          },
+          overallScore: 95,
+=======
             clarity: 10,
             constraintQuality: 8,
             genericOutputRisk: 3,
             tokenWasteRisk: 2,
           },
           overallScore: 93,
+>>>>>>> main
           scoreBand: 'excellent',
           rewriteRecommendation: 'no_rewrite_needed' as const,
           expectedImprovement: 'low' as const,
@@ -888,12 +954,21 @@ describe('API vertical slice', () => {
           scores: {
             scope: 7,
             contrast: 10,
+<<<<<<< present-or-zero
+            clarity: 8,
+            constraintQuality: 10,
+            genericOutputRisk: 3,
+            tokenWasteRisk: 4,
+          },
+          overallScore: 85,
+=======
             clarity: 10,
             constraintQuality: 9,
             genericOutputRisk: 3,
             tokenWasteRisk: 4,
           },
           overallScore: 86,
+>>>>>>> main
           scoreBand: 'excellent',
           rewriteRecommendation: 'no_rewrite_needed' as const,
           expectedImprovement: 'low' as const,

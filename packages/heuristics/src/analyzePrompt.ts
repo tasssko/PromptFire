@@ -33,10 +33,11 @@ interface ConstraintSignals {
   framing: boolean;
   structure: boolean;
   explicitLimit: boolean;
+  broadTopicRequirements: boolean;
   categoryCount: number;
 }
 
-function hasClearDeliverable(prompt: string): 0 | 1 | 2 {
+function hasClearDeliverable(prompt: string): 0 | 2 {
   const actionVerb = /\b(write|draft|create|build|design|implement|analyze|optimize|summarize|generate)\b/i.test(
     prompt,
   );
@@ -45,15 +46,7 @@ function hasClearDeliverable(prompt: string): 0 | 1 | 2 {
       prompt,
     );
 
-  if (actionVerb && deliverableType) {
-    return 2;
-  }
-
-  if (actionVerb || deliverableType) {
-    return 1;
-  }
-
-  return 0;
+  return actionVerb && deliverableType ? 2 : 0;
 }
 
 function audienceOrContextSpecificity(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 {
@@ -210,8 +203,13 @@ function deriveConstraintSignals(prompt: string, context?: Record<string, unknow
   const framing = /\b(lead with|focus on|rather than|trade[-\s]?off|angle|framing|positioning)\b/i.test(prompt);
   const structure = hasOutputShapeRequirement(prompt, context);
   const explicitLimit = hasExplicitLimit(prompt, context);
+  const broadTopicRequirements =
+    /\b(include|including|cover|covering|highlight|emphasize|address|mention)\b/i.test(prompt) &&
+    countCategoryTerms(prompt) >= 1;
 
-  const categoryCount = [audience, examples, exclusions, tone, framing, structure, explicitLimit].filter(Boolean).length;
+  const categoryCount = [audience, examples, exclusions, tone, framing, structure, explicitLimit, broadTopicRequirements].filter(
+    Boolean,
+  ).length;
 
   return {
     audience,
@@ -221,6 +219,7 @@ function deriveConstraintSignals(prompt: string, context?: Record<string, unknow
     framing,
     structure,
     explicitLimit,
+    broadTopicRequirements,
     categoryCount,
   };
 }
@@ -232,16 +231,19 @@ function computeConstraintQualityScore(
   marketerConstraintsWeak: boolean,
 ): number {
   if (!constraintsPresent) {
-    return 2;
+    return 0;
   }
 
   const signals = deriveConstraintSignals(prompt, context);
-  const onlyAudience = signals.audience && signals.categoryCount === 1;
-  if (onlyAudience) {
-    return 2;
-  }
-
-  let score = 2 + signals.categoryCount;
+  let score = 0;
+  score += signals.audience ? 2 : 0;
+  score += signals.examples ? 2 : 0;
+  score += signals.exclusions ? 2 : 0;
+  score += signals.tone ? 1 : 0;
+  score += signals.framing ? 1 : 0;
+  score += signals.structure ? 1 : 0;
+  score += signals.explicitLimit ? 1 : 0;
+  score += signals.broadTopicRequirements ? 1 : 0;
   if ((signals.exclusions && signals.framing) || (signals.structure && signals.explicitLimit)) {
     score += 1;
   }
@@ -250,7 +252,7 @@ function computeConstraintQualityScore(
     score -= 1;
   }
 
-  return clamp(score, 2, 9);
+  return clamp(score, 0, 10);
 }
 
 function computeScopeScore(input: {
@@ -285,13 +287,17 @@ function hasAudience(prompt: string, context?: Record<string, unknown>) {
 function hasConstraints(prompt: string, context?: Record<string, unknown>) {
   const hasContextConstraints = Boolean(context?.mustInclude) || Boolean(context?.systemGoals);
   const inclusionListConstraint =
-    /\b(include|including|cover|covering)\b/i.test(prompt) &&
+    /\b(include|including|cover|covering|mention|highlight|emphasize|address)\b/i.test(prompt) &&
     ((prompt.match(/,| and |;|\/|&/gi)?.length ?? 0) >= 2 || /\b(example|examples|best practices|steps?|checklist|conclusion)\b/i.test(prompt));
+  const toneOrStyleConstraint = /\b(keep (?:it|the tone)?\s*(?:concise|persuasive|grounded|formal|casual|practical)|tone|voice)\b/i.test(
+    prompt,
+  );
   const hasPromptConstraints =
     /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
     /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt) ||
+    toneOrStyleConstraint ||
     inclusionListConstraint ||
-    /\b(include|incorporate|cover)\s+(?:real-world|actionable|specific|practical|one|two|\d+|examples?|best practices|steps?|checklist|conclusion)\b/i.test(
+    /\b(include|incorporate|cover|mention|highlight|emphasize|address)\s+(?:real-world|actionable|specific|practical|one|two|\d+|examples?|best practices|steps?|checklist|conclusion)\b/i.test(
       prompt,
     );
   return hasContextConstraints || hasPromptConstraints;
@@ -520,16 +526,15 @@ function exclusionDistinctivenessScore(prompt: string, context?: Record<string, 
 }
 
 function contextSpecificityScore(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 {
-  if (hasScenarioContext(prompt) && audienceOrContextSpecificity(prompt, context) >= 2) {
+  const operatingContext = /\b(after acquisitions?|post[-\s]?merger|during audits?|in regulated environments?|legacy stack|migration window)\b/i.test(
+    prompt,
+  );
+
+  if ((hasScenarioContext(prompt) || operatingContext) && audienceOrContextSpecificity(prompt, context) >= 2) {
     return 2;
   }
 
-  if (
-    hasScenarioContext(prompt) ||
-    hasOrgFitSpecificity(prompt) ||
-    audienceOrContextSpecificity(prompt, context) >= 2 ||
-    /\b(kubernetes|iam|identity and access management|typescript|ci\/cd|platform engineering|microservices)\b/i.test(prompt)
-  ) {
+  if (hasScenarioContext(prompt) || operatingContext) {
     return 1;
   }
 
@@ -579,6 +584,11 @@ function computeContrastScore(input: {
   const framing = framingDistinctivenessScore(input.prompt);
   const exclusions = exclusionDistinctivenessScore(input.prompt, input.context);
   const context = contextSpecificityScore(input.prompt, input.context);
+  const differentiatingSignalsPresent = audience >= 1 || framing >= 1 || exclusions >= 1 || context >= 1;
+  if (!differentiatingSignalsPresent) {
+    return 0;
+  }
+
   const support = supportingDifferentiatorsScore(input.prompt, framing, exclusions);
   const genericPenalty = genericFramingPenaltyScore(
     input.prompt,

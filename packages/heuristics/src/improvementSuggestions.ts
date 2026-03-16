@@ -179,7 +179,7 @@ export function generateImprovementSuggestions(params: SuggestionParams): Improv
       theme === 'landing_page'
         ? {
             id: 'add_business_pain',
-            title: 'add a concrete business pain',
+            title: 'add a specific business pain',
             reason: 'Landing-page prompts improve when they name the pressure or pain the buyer is trying to solve.',
             impact: 'high' as const,
             targetScores: ['contrast', 'genericOutputRisk'] satisfies TargetScore[],
@@ -218,7 +218,7 @@ export function generateImprovementSuggestions(params: SuggestionParams): Improv
       theme === 'blog_post'
         ? {
             id: 'require_examples',
-            title: 'require concrete examples',
+            title: 'require specific examples',
             reason: 'Examples make the post more specific and reduce the chance of abstract, generic output.',
             impact: 'medium' as const,
             targetScores: ['contrast', 'constraintQuality', 'genericOutputRisk'] satisfies TargetScore[],
@@ -286,7 +286,7 @@ export function generateImprovementSuggestions(params: SuggestionParams): Improv
             }
           : {
               id: 'add_constraints',
-              title: 'add concrete constraints',
+              title: 'add specific constraints',
               reason: 'The prompt needs more explicit boundaries on what to include, how much to include, or how to frame it.',
               impact: 'high' as const,
               targetScores: ['scope', 'constraintQuality', 'tokenWasteRisk'] satisfies TargetScore[],
