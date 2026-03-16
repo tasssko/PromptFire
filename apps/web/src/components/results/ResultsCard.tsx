@@ -95,6 +95,17 @@ export function ResultsCard({
         </div>
       </section>
 
+      <Section title="Score breakdown">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
+          <MetricTile label="Scope" value={result.analysis.scores.scope} />
+          <MetricTile label="Contrast" value={result.analysis.scores.contrast} />
+          <MetricTile label="Clarity" value={result.analysis.scores.clarity} />
+          <MetricTile label={scoreDimensionLabel('constraintQuality')} value={result.analysis.scores.constraintQuality} />
+          <MetricTile label={scoreDimensionLabel('genericOutputRisk')} value={result.analysis.scores.genericOutputRisk} />
+          <MetricTile label={scoreDimensionLabel('tokenWasteRisk')} value={result.analysis.scores.tokenWasteRisk} />
+        </div>
+      </Section>
+
       <Section title="Key findings">
         <ul className="grid list-disc gap-2 pl-[1.2rem]">
           {findings.map((finding) => (
@@ -105,10 +116,12 @@ export function ResultsCard({
         </ul>
       </Section>
 
+      <hr className="border-0 border-t border-pf-border-divider" />
+
       {bestNextMove && (
         <SurfaceCard tone={state === 'strong' ? 'default' : 'suggestion'}>
           <div className="flex items-center justify-between gap-2">
-            <h2 className={sectionTitleClass}>{state === 'strong' ? 'Optional next move' : 'Best next move'}</h2>
+            <h2 className={sectionTitleClass}>{state === 'strong' ? 'Optional next step' : 'Next step'}</h2>
             <ImpactBadge impact={bestNextMove.expectedImpact} />
           </div>
           <p className="font-semibold">{bestNextMove.title}</p>
@@ -124,20 +137,9 @@ export function ResultsCard({
         </SurfaceCard>
       )}
 
-      <Section title="Sub-scores">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
-          <MetricTile label="Scope" value={result.analysis.scores.scope} />
-          <MetricTile label="Contrast" value={result.analysis.scores.contrast} />
-          <MetricTile label="Clarity" value={result.analysis.scores.clarity} />
-          <MetricTile label="Constraint quality" value={result.analysis.scores.constraintQuality} />
-          <MetricTile label="Generic output risk" value={result.analysis.scores.genericOutputRisk} />
-          <MetricTile label="Token waste risk" value={result.analysis.scores.tokenWasteRisk} />
-        </div>
-      </Section>
-
       {state === 'strong' && (
         <SurfaceCard tone="default">
-          <h2 className={sectionTitleClass}>Why no rewrite?</h2>
+          <h2 className={sectionTitleClass}>Why it stays as-is</h2>
           <p>
             {result.gating.rewritePreference === 'suppress'
               ? 'Rewrite suppressed by your preference.'
@@ -156,7 +158,7 @@ export function ResultsCard({
 
       {state === 'usable' && (
         <SurfaceCard tone="default">
-          <h2 className={sectionTitleClass}>Suggested improvement</h2>
+          <h2 className={sectionTitleClass}>One good improvement</h2>
           {topSuggestions.length > 0 ? (
             <ul>
               {topSuggestions.map((suggestion) => (
@@ -193,7 +195,7 @@ export function ResultsCard({
 
       {state === 'weak' && (
         <SurfaceCard tone="rewrite">
-          <h2 className={sectionTitleClass}>Recommended rewrite</h2>
+          <h2 className={sectionTitleClass}>Suggested rewrite</h2>
           {result.rewrite ? (
             <>
               <pre>{result.rewrite.rewrittenPrompt}</pre>
@@ -212,7 +214,7 @@ export function ResultsCard({
 
       {result.rewrite && evaluation && (
         <SurfaceCard tone="verdict">
-          <h2 className={sectionTitleClass}>Rewrite verdict</h2>
+          <h2 className={sectionTitleClass}>Rewrite result</h2>
           <p className="font-bold">{verdictCopy(evaluation).label}</p>
           <p>{verdictCopy(evaluation).recommendation}</p>
           <p>
@@ -230,7 +232,7 @@ export function ResultsCard({
       )}
 
       {state !== 'strong' && (
-        <Section title="How to improve this prompt">
+        <Section title="How to improve it">
           {result.improvementSuggestions.length > 0 ? (
             <div className="grid gap-3">
               {result.improvementSuggestions.map((suggestion) => (

@@ -42,7 +42,7 @@ export function heroCopy(result: AnalyzeAndRewriteV2Response): {
     case 'rewrite_recommended':
     default:
       return {
-        headline: 'Rewrite recommended',
+        headline: 'This prompt needs tightening',
         supporting:
           'This prompt is likely to produce generic output unless it is narrowed and better directed.',
         primaryAction: result.rewrite ? 'Copy rewritten prompt' : 'Generate rewrite',
@@ -54,28 +54,28 @@ export function verdictCopy(evaluation: EvaluationV2): { label: string; recommen
   switch (evaluation.status) {
     case 'material_improvement':
       return {
-        label: 'Material improvement',
+        label: 'Clearly better',
         recommendation: 'Use the rewritten prompt.',
       };
     case 'minor_improvement':
       return {
-        label: 'Minor improvement',
+        label: 'Slightly better',
         recommendation: 'Rewrite is slightly stronger, but either version is workable.',
       };
     case 'possible_regression':
       return {
-        label: 'Possible regression',
+        label: 'Might be worse',
         recommendation: 'Keep the original unless you need a shorter or tighter variation.',
       };
     case 'already_strong':
       return {
-        label: 'Already strong',
+        label: 'Already in good shape',
         recommendation: 'Original prompt was already strong before rewrite.',
       };
     case 'no_significant_change':
     default:
       return {
-        label: 'No significant change',
+        label: 'About the same',
         recommendation: 'Rewrite mostly rephrases the original prompt.',
       };
   }
@@ -84,11 +84,11 @@ export function verdictCopy(evaluation: EvaluationV2): { label: string; recommen
 export function scoreDimensionLabel(name: string): string {
   switch (name) {
     case 'constraintQuality':
-      return 'Constraint quality';
+      return 'Useful constraints';
     case 'genericOutputRisk':
-      return 'Generic output risk';
+      return 'Too generic';
     case 'tokenWasteRisk':
-      return 'Token waste risk';
+      return 'Wordiness';
     default:
       return name;
   }
