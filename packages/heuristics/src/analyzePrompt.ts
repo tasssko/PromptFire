@@ -603,16 +603,50 @@ function computeContrastScore(input: {
 }
 
 function computeClarityScore(prompt: string, overloaded: boolean): number {
-  let score = 8;
-  if (overloaded) {
-    score -= 2;
+  let score = 0;
+  const text = prompt.trim();
+
+  const hasActionVerb =
+    /\b(write|create|draft|generate|develop|produce|outline|summarize|explain|compare|design)\b/i.test(text);
+  if (hasActionVerb) {
+    score += 2;
   }
-  if (prompt.length > 900) {
-    score -= 1;
+
+  const hasDeliverable =
+    /\b(landing page copy|landing page|blog post|guide|article|email|summary|outline|report|ad copy|case study|headline|script|copy)\b/i.test(
+      text,
+    );
+  if (hasDeliverable) {
+    score += 2;
   }
-  if (/\b(amazing|incredible|very|really)\b/i.test(prompt)) {
-    score -= 1;
+
+  const sentenceCount = (text.match(/[.!?]/g) ?? []).length || 1;
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const avgSentenceLength = wordCount / sentenceCount;
+  if (text.length <= 1200 && avgSentenceLength <= 40) {
+    score += 2;
+  } else if (text.length <= 1800 && avgSentenceLength <= 55) {
+    score += 1;
   }
+
+  const hasStrongVagueness = /\b(something|stuff|things)\b/i.test(text);
+  const hasMildVagueness = /\b(good|better|nice|interesting|engaging|compelling)\b/i.test(text);
+  if (!hasStrongVagueness && !hasMildVagueness) {
+    score += 2;
+  } else if (!hasStrongVagueness) {
+    score += 1;
+  }
+
+  const hasHypeOrIntensifiers =
+    /\b(amazing|incredible|very|really|seamless|world-class|best-in-class|innovative)\b/i.test(text);
+  if (!hasHypeOrIntensifiers) {
+    score += 1;
+  }
+
+  if (!overloaded) {
+    score += 1;
+  }
+
   return clamp(score, 0, 10);
 }
 
