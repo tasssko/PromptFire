@@ -592,6 +592,54 @@ function computeContrastScore(input: {
   return clamp(audience + framing + exclusions + context + support + highContrastBoost - genericPenalty, 0, 10);
 }
 
+function computeClarityScore(prompt: string, overloaded: boolean): number {
+  let score = 0;
+  const text = prompt.trim();
+
+  const hasActionVerb =
+    /\b(write|create|draft|generate|develop|produce|outline|summarize|explain|compare|design)\b/i.test(text);
+  if (hasActionVerb) {
+    score += 2;
+  }
+
+  const hasDeliverable =
+    /\b(landing page copy|landing page|blog post|guide|article|email|summary|outline|report|ad copy|case study|headline|script|copy)\b/i.test(
+      text,
+    );
+  if (hasDeliverable) {
+    score += 2;
+  }
+
+  const sentenceCount = (text.match(/[.!?]/g) ?? []).length || 1;
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const avgSentenceLength = wordCount / sentenceCount;
+  if (text.length <= 1200 && avgSentenceLength <= 40) {
+    score += 2;
+  } else if (text.length <= 1800 && avgSentenceLength <= 55) {
+    score += 1;
+  }
+
+  const hasStrongVagueness = /\b(something|stuff|things)\b/i.test(text);
+  const hasMildVagueness = /\b(good|better|nice|interesting|engaging|compelling)\b/i.test(text);
+  if (!hasStrongVagueness && !hasMildVagueness) {
+    score += 2;
+  } else if (!hasStrongVagueness) {
+    score += 1;
+  }
+
+  const hasHypeOrIntensifiers =
+    /\b(amazing|incredible|very|really|seamless|world-class|best-in-class|innovative)\b/i.test(text);
+  if (!hasHypeOrIntensifiers) {
+    score += 1;
+  }
+
+  if (!overloaded) {
+    score += 1;
+  }
+
+  return clamp(score, 0, 10);
+}
+
 function deriveMarketerSignals(prompt: string, context?: Record<string, unknown>): MarketerSignals {
   const audiencePresent = hasAudience(prompt, context);
   const exclusionsPresent = hasExclusions(prompt, context);
@@ -752,10 +800,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
             audiencePresent,
             marketerSignals,
           }),
-          clarity: Math.max(
-            0,
-            8 - (marketerSignals?.proofWeak ? 1 : 0) - (marketerSignals?.constraintsWeak ? 1 : 0) - (overloaded ? 2 : 0),
-          ),
+          clarity: computeClarityScore(prompt, overloaded),
           constraintQuality: computeConstraintQualityScore(
             prompt,
             context,
@@ -774,7 +819,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
             foundGenericPhrases,
             audiencePresent,
           }),
-          clarity: Math.max(0, 8 - (overloaded ? 2 : 0) - (constraintsPresent ? 0 : 2)),
+          clarity: computeClarityScore(prompt, overloaded),
           constraintQuality: computeConstraintQualityScore(prompt, context, constraintsPresent, false),
           genericOutputRisk,
           tokenWasteRisk: Math.min(10, Math.max(0, 3 + (overloaded ? 2 : 0) + (prompt.length > 1000 ? 3 : 1))),

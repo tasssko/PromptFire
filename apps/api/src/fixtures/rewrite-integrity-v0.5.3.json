@@ -19,7 +19,7 @@
     "mode": "balanced",
     "rewritePreference": "auto",
     "expectedRecommendation": "rewrite_recommended",
-    "expectedEvaluationStatus": "no_significant_change",
+    "expectedEvaluationStatus": "possible_regression",
     "mustHaveSignals": ["REWRITE_RUBRIC_ECHO"],
     "mustNotHaveSignals": ["LOW_INTENT_PRESERVATION"],
     "rationale": "General-mode meta instructions should not become material gains when concrete task shaping is absent.",

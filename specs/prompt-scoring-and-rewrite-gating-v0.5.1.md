@@ -323,18 +323,205 @@ Example:
 
 ---
 
-## 10. Clarity Rules
+## 10. Clarity Rules (v0.5.2)
 
-Clarity measures directness and readability of instruction.
+Clarity measures first-read understandability and directness of instruction.
 
-Clarity should decrease when:
+Clarity must not be a proxy for:
 
-* the prompt is padded
-* wording becomes more formal without becoming more precise
-* the sentence structure obscures the ask
-* multiple ideas are nested unnecessarily
+* boundedness
+* meaningful differentiation
+* usefulness of constraints
+* rewrite worthiness
 
-Clarity should not automatically increase with length.
+Those remain the primary concern of:
+
+* `scope`
+* `contrast`
+* `constraintQuality`
+* `genericOutputRisk`
+
+Clarity remains a `0–10` integer score.
+
+Clarity should be earned from present readability signals rather than assumed by default.
+
+### 10.1 Clear action verb (`0|2`)
+
+Award when the prompt clearly tells the model what to do.
+
+Example verbs:
+
+* write
+* create
+* draft
+* generate
+* develop
+* produce
+* explain
+* summarize
+* compare
+* outline
+* design
+
+Scoring:
+
+* `2`: clear action verb present
+* `0`: no clear action verb
+
+### 10.2 Recognizable deliverable (`0|2`)
+
+Award when the prompt names a recognizable output type.
+
+Examples:
+
+* landing page copy
+* blog post
+* guide
+* article
+* email
+* summary
+* outline
+* report
+* case study
+* ad copy
+* script
+
+Scoring:
+
+* `2`: deliverable clearly named
+* `0`: no recognizable deliverable
+
+### 10.3 Readable structure (`0|1|2`)
+
+Award when the prompt remains structurally readable.
+
+Suggested deterministic heuristic:
+
+* `2`: prompt length <= 1200 chars and average sentence length <= 40 words
+* `1`: slightly dense but still readable
+* `0`: very dense, tangled, or hard to parse
+
+### 10.4 Low ambiguity / low vagueness (`0|1|2`)
+
+Award when wording avoids vague placeholders and weak generic phrasing.
+
+Strong vagueness examples:
+
+* something
+* stuff
+* things
+
+Mild vagueness examples:
+
+* good
+* better
+* nice
+* engaging
+* interesting
+* compelling
+
+Scoring:
+
+* `2`: no obvious vague placeholders
+* `1`: mild vagueness
+* `0`: substantial vagueness
+
+Important:
+This evaluates phrasing ambiguity, not whether the prompt is well bounded.
+
+### 10.5 Low filler / low hype (`0|1`)
+
+Penalize decorative hype and empty intensifiers lightly.
+
+Examples:
+
+* amazing
+* incredible
+* very
+* really
+* seamless
+* world-class
+* best-in-class
+* innovative
+
+Scoring:
+
+* `1`: low filler / hype
+* `0`: hype or intensifier language present
+
+This is a minor factor, not the main driver.
+
+### 10.6 No readability-harming overload (`0|1`)
+
+Use existing `overloaded` only as a readability modifier.
+
+Scoring:
+
+* `1`: not overloaded in a readability-harming way
+* `0`: overloaded
+
+Broad prompts are not unclear by default. This factor applies only when overload harms instruction readability.
+
+### 10.7 Implementation note
+
+Clarity scoring must deprecate the old subtractive pattern (for example, starting at `8` and applying small deductions).
+
+Clarity should instead:
+
+* start at `0`
+* add points for present readability signals
+* remain deterministic and inexpensive (regex + simple counts)
+* preserve separation from scope, contrast, and constraint quality
+
+### 10.8 Normative pseudocode
+
+```ts
+function computeClarityScore(prompt: string, overloaded: boolean): number {
+  let score = 0;
+  const text = prompt.trim();
+
+  const hasActionVerb =
+    /\b(write|create|draft|generate|develop|produce|outline|summarize|explain|compare|design)\b/i.test(text);
+  if (hasActionVerb) score += 2;
+
+  const hasDeliverable =
+    /\b(landing page copy|blog post|guide|article|email|summary|outline|report|ad copy|case study|headline|script)\b/i.test(
+      text,
+    );
+  if (hasDeliverable) score += 2;
+
+  const sentenceCount = (text.match(/[.!?]/g) || []).length || 1;
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const avgSentenceLength = wordCount / sentenceCount;
+
+  if (text.length <= 1200 && avgSentenceLength <= 40) {
+    score += 2;
+  } else if (text.length <= 1800 && avgSentenceLength <= 55) {
+    score += 1;
+  }
+
+  const hasStrongVagueness = /\b(something|stuff|things)\b/i.test(text);
+  const hasMildVagueness = /\b(good|better|nice|interesting|engaging|compelling)\b/i.test(text);
+
+  if (!hasStrongVagueness && !hasMildVagueness) {
+    score += 2;
+  } else if (!hasStrongVagueness) {
+    score += 1;
+  }
+
+  const hasHypeOrIntensifiers =
+    /\b(amazing|incredible|very|really|seamless|world-class|best-in-class|innovative)\b/i.test(text);
+  if (!hasHypeOrIntensifiers) {
+    score += 1;
+  }
+
+  if (!overloaded) {
+    score += 1;
+  }
+
+  return clamp(score, 0, 10);
+}
+```
 
 ---
 
@@ -666,6 +853,11 @@ For `high_contrast` mode:
 15. prompts with explicit example requirements, exclusions, and framing boundaries do not trigger `CONSTRAINTS_MISSING`
 16. strong prompts with low expected improvement and no major blocking issues return `no_rewrite_needed`
 17. rewrites that mostly paraphrase an already-strong prompt are suppressed by default
+18. bare IAM prompt can score high clarity even when weak overall
+19. broad Kubernetes guide remains moderate-high clarity unless readability degrades
+20. short vague “do something good” prompt does not receive inflated clarity
+21. hype and intensifier wording reduces clarity only lightly
+22. clarity distribution is wider than default-high baseline behavior
 
 ---
 
