@@ -277,4 +277,78 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(rewrite.rewrittenPrompt).toBe(prompt);
     expect(rewrite.changes).toEqual(['Kept rewrite minimal to avoid abstract scaffolding.']);
   });
+
+  it('branches rewrite style for stepwise_reasoning pattern', async () => {
+    const prompt = 'Compare monolith and microservices options for our platform migration.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'developer',
+      mode: 'high_contrast',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'developer',
+      mode: 'high_contrast',
+      preferences: normalizePreferences(),
+      analysis,
+      patternFit: {
+        primary: 'stepwise_reasoning',
+        confidence: 'high',
+        reasons: ['Comparison-heavy prompt.'],
+      },
+      improvementSuggestions: [
+        {
+          id: 'comparison_frame',
+          title: 'add comparison framing',
+          reason: 'Need explicit trade-off flow.',
+          impact: 'high',
+          targetScores: ['contrast', 'constraintQuality'],
+          category: 'proof',
+        },
+      ],
+    });
+
+    expect(rewrite.rewrittenPrompt).toContain('Use three steps: identify decision dimensions');
+    expect(rewrite.explanation).toContain('stepwise_reasoning');
+  });
+
+  it('branches rewrite style for context_first pattern', async () => {
+    const prompt = 'Write a detailed case study about our customer migration with measurable outcomes.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'marketer',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'marketer',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+      analysis,
+      patternFit: {
+        primary: 'context_first',
+        confidence: 'high',
+        reasons: ['Specific outcomes requested without source material.'],
+      },
+      improvementSuggestions: [
+        {
+          id: 'clarify_output_structure',
+          title: 'specify the output structure',
+          reason: 'Structure is broad.',
+          impact: 'medium',
+          targetScores: ['clarity', 'constraintQuality'],
+          category: 'structure',
+        },
+      ],
+    });
+
+    expect(rewrite.rewrittenPrompt).toContain('request the missing source context');
+    expect(rewrite.rewrittenPrompt).toContain('grounded only in supplied source material');
+  });
 });

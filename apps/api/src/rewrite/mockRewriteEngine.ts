@@ -204,6 +204,64 @@ function composeRewrite(input: {
   return ordered.length > 0 ? ordered.join(' ') : input.basePrompt;
 }
 
+function composePatternRewrite(input: {
+  basePrompt: string;
+  selectedPatches: Partial<Record<PatchKind, string>>;
+  pattern: RewriteInput['patternFit']['primary'];
+}): string {
+  const direct = composeRewrite({ basePrompt: input.basePrompt, selectedPatches: input.selectedPatches });
+  const opening = ensureSentence(firstSentence(input.basePrompt));
+
+  if (input.pattern === 'few_shot') {
+    return toSentences([
+      opening,
+      input.selectedPatches.audience,
+      input.selectedPatches.exclusion,
+      'Follow this pattern: Example 1 -> concise, grounded answer. Example 2 -> same structure with different facts.',
+      'Then produce the final answer using the same pattern.',
+    ]).join(' ');
+  }
+
+  if (input.pattern === 'stepwise_reasoning') {
+    return toSentences([
+      opening,
+      input.selectedPatches.audience,
+      'Use three steps: identify decision dimensions, compare options across those dimensions, then provide a final recommendation with trade-offs.',
+      input.selectedPatches.exclusion,
+    ]).join(' ');
+  }
+
+  if (input.pattern === 'decomposition') {
+    return toSentences([
+      opening,
+      'Break the work into phases and start with the first phase output.',
+      input.selectedPatches.structure,
+      input.selectedPatches.task_load,
+      input.selectedPatches.exclusion,
+    ]).join(' ');
+  }
+
+  if (input.pattern === 'decision_rubric') {
+    return toSentences([
+      opening,
+      'Define criteria first, then score each option against those criteria, and finish with a ranked verdict.',
+      input.selectedPatches.structure,
+      input.selectedPatches.exclusion,
+    ]).join(' ');
+  }
+
+  if (input.pattern === 'context_first') {
+    return toSentences([
+      opening,
+      'Before drafting, request the missing source context and required facts.',
+      'Then generate output grounded only in supplied source material.',
+      input.selectedPatches.structure,
+    ]).join(' ');
+  }
+
+  return direct;
+}
+
 function patchKindFromSuggestion(input: { id: string; title: string; category: string }): PatchKind | null {
   const id = input.id.toLowerCase();
   const title = input.title.toLowerCase();
@@ -307,6 +365,7 @@ function inferPatchClause(input: RewriteInput, patchKind: PatchKind): string | n
 export class MockRewriteEngine implements RewriteEngine {
   async rewrite(input: RewriteInput): Promise<Rewrite> {
     const basePrompt = input.prompt.trim().replace(/\s+/g, ' ');
+    const pattern = input.patternFit?.primary ?? 'direct_instruction';
     const rankedKinds = rankedPatchKinds(input);
     const selectedPatches: Partial<Record<PatchKind, string>> = {};
     const selectedKinds: PatchKind[] = [];
@@ -338,8 +397,7 @@ export class MockRewriteEngine implements RewriteEngine {
         .map((kind) => selectedPatches[kind])
         .filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
     );
-    const rewrittenPrompt =
-      finalAdditions.length > 0 ? composeRewrite({ basePrompt, selectedPatches }) : basePrompt;
+    const rewrittenPrompt = finalAdditions.length > 0 ? composePatternRewrite({ basePrompt, selectedPatches, pattern }) : basePrompt;
 
     return {
       role: input.role,
@@ -347,7 +405,7 @@ export class MockRewriteEngine implements RewriteEngine {
       rewrittenPrompt,
       explanation:
         finalAdditions.length > 0
-          ? 'Applied concrete, task-grounded additions derived from the prompt and detected gaps.'
+          ? `Applied ${pattern} rewrite guidance with concrete, task-grounded additions.`
           : 'Applied a minimal rewrite because concrete improvements were not safely inferable.',
       changes: finalAdditions.length > 0 ? finalAdditions : ['Kept rewrite minimal to avoid abstract scaffolding.'],
     };

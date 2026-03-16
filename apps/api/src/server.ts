@@ -1,4 +1,5 @@
-import { analyzePrompt, evaluateRewrite, generateImprovementSuggestions } from '@promptfire/heuristics';
+import { analyzePrompt, detectPatternFit, evaluateRewrite, generateImprovementSuggestions } from '@promptfire/heuristics';
+import type { PromptPattern } from '@promptfire/heuristics';
 import {
   AnalyzeAndRewriteV2RequestSchema,
   AnalyzeAndRewriteRequestSchema,
@@ -290,6 +291,25 @@ function summaryForV2(params: {
     return 'Prompt is weakly bounded and likely to produce generic output.';
   }
   return 'Prompt is usable but may benefit from a targeted rewrite.';
+}
+
+function bestImprovementPath(pattern: PromptPattern): string {
+  if (pattern === 'few_shot') {
+    return 'Best improvement path: add one or two examples of the pattern you want.';
+  }
+  if (pattern === 'stepwise_reasoning') {
+    return 'Best improvement path: break the reasoning into explicit steps.';
+  }
+  if (pattern === 'decomposition') {
+    return 'Best improvement path: split the task into stages.';
+  }
+  if (pattern === 'decision_rubric') {
+    return 'Best improvement path: add evaluation criteria and a verdict format.';
+  }
+  if (pattern === 'context_first') {
+    return 'Best improvement path: supply missing context or source material.';
+  }
+  return 'Best improvement path: clarify the request directly.';
 }
 
 export async function handleHttpRequest(request: HttpRequest): Promise<HttpResponse> {
@@ -589,6 +609,13 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const input = parsed.data;
     const preferences = normalizePreferences(input.preferences);
     const analysis = analyzePrompt({ ...input, preferences });
+    const patternFit = detectPatternFit({
+      prompt: input.prompt,
+      role: input.role,
+      mode: input.mode,
+      analysis,
+      context: input.context,
+    });
     const overallScore = computeOverallScore(withV2Scores(analysis, input.prompt, input.context).scores);
     const scoreBand = scoreBandFromOverallScore(overallScore);
     const improvementSuggestions = generateImprovementSuggestions({
@@ -609,6 +636,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         preferences,
         analysis,
         improvementSuggestions,
+        patternFit,
       });
 
       const rewriteAnalysis = analyzePrompt({
@@ -799,6 +827,13 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const input: AnalyzeAndRewriteV2Request = parsed.data;
     const preferences = normalizePreferences(input.preferences);
     const originalAnalysis = withV2Scores(analyzePrompt({ ...input, preferences }), input.prompt, input.context);
+    const patternFit = detectPatternFit({
+      prompt: input.prompt,
+      role: input.role,
+      mode: input.mode,
+      analysis: originalAnalysis,
+      context: input.context,
+    });
     const overallScore = computeOverallScore(originalAnalysis.scores);
     const scoreBand = scoreBandFromOverallScore(overallScore);
     const expectedImprovement = hasLowExpectedImprovementV2(originalAnalysis.scores, input.prompt, input.context)
@@ -840,6 +875,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           preferences,
           analysis: originalAnalysis,
           improvementSuggestions,
+          patternFit,
         });
 
         const rewriteAnalysis = withV2Scores(
@@ -885,8 +921,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         ...originalAnalysis,
         signals:
           expectedImprovement === 'low' && !originalAnalysis.signals.includes('Low expected improvement.')
-            ? [...originalAnalysis.signals, 'Low expected improvement.']
-            : originalAnalysis.signals,
+            ? [...originalAnalysis.signals, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
+            : [...originalAnalysis.signals, bestImprovementPath(patternFit.primary)].slice(0, 12),
         summary: summaryForV2({
           recommendation: rewriteRecommendation,
           rewritePreference: input.rewritePreference,

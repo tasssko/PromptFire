@@ -7,6 +7,7 @@ import type {
   Rewrite,
   Role,
 } from '@promptfire/shared';
+import type { PatternFit } from '@promptfire/heuristics';
 
 export interface RewriteInput {
   prompt: string;
@@ -16,6 +17,7 @@ export interface RewriteInput {
   preferences: Preferences;
   analysis?: Analysis;
   improvementSuggestions?: ImprovementSuggestion[];
+  patternFit?: PatternFit;
 }
 
 export interface RewriteEngine {

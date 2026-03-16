@@ -58,4 +58,26 @@ describe('buildRewriteInstructions', () => {
     expect(instructions.system).toContain('grounded context');
     expect(instructions.system).toContain('keep the rewrite minimal and concrete');
   });
+
+  it('includes pattern-fit guidance when available', () => {
+    const instructions = buildRewriteInstructions({
+      prompt: 'Score these options and rank them.',
+      role: 'general',
+      mode: 'balanced',
+      preferences: {
+        includeScores: true,
+        includeExplanation: true,
+        includeAlternatives: false,
+        preserveTone: false,
+      },
+      patternFit: {
+        primary: 'decision_rubric',
+        confidence: 'high',
+        reasons: ['Prompt requests scoring.'],
+      },
+    });
+
+    expect(instructions.system).toContain('Pattern fit: decision_rubric');
+    expect(instructions.user).toContain('"primary": "decision_rubric"');
+  });
 });
