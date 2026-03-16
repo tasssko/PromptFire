@@ -52,13 +52,13 @@ export function TopShell({
       <form onSubmit={onSubmit} className="grid gap-3">
         <label className="grid w-full gap-1 font-semibold">
           Prompt
-          <textarea value={prompt} onChange={(e) => onPromptChange(e.target.value)} rows={7} />
+          <textarea value={prompt} onChange={(e) => onPromptChange(e.target.value)} rows={7} disabled={loading} />
         </label>
 
         <div className="grid grid-cols-3 gap-2 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
           <label className="grid w-auto gap-1 font-semibold">
             Role
-            <select value={role} onChange={(e) => onRoleChange(e.target.value as Role)}>
+            <select value={role} onChange={(e) => onRoleChange(e.target.value as Role)} disabled={loading}>
               {roles.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -69,7 +69,7 @@ export function TopShell({
 
           <label className="grid w-auto gap-1 font-semibold">
             Mode
-            <select value={mode} onChange={(e) => onModeChange(e.target.value as Mode)}>
+            <select value={mode} onChange={(e) => onModeChange(e.target.value as Mode)} disabled={loading}>
               {modes.map((item) => (
                 <option key={item} value={item}>
                   {item}
@@ -83,6 +83,7 @@ export function TopShell({
             <select
               value={rewritePreference}
               onChange={(e) => onRewritePreferenceChange(e.target.value as RewritePreference)}
+              disabled={loading}
             >
               <option value="auto">auto</option>
               <option value="force">force</option>
@@ -100,13 +101,13 @@ export function TopShell({
         <details className="border-t border-pf-border-divider pt-3">
           <summary className="cursor-pointer text-[#3f5066]">Load example</summary>
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={onLoadGeneral}>
+            <button type="button" onClick={onLoadGeneral} disabled={loading}>
               General
             </button>
-            <button type="button" onClick={onLoadMarketer}>
+            <button type="button" onClick={onLoadMarketer} disabled={loading}>
               Marketer
             </button>
-            <button type="button" onClick={onLoadDeveloper}>
+            <button type="button" onClick={onLoadDeveloper} disabled={loading}>
               Developer
             </button>
           </div>

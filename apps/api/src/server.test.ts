@@ -541,6 +541,325 @@ describe('API vertical slice', () => {
     expect(body.bestNextMove).toBeNull();
   });
 
+  it('does not call inference when local pattern match is strong', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write a blog post for engineering managers at SaaS companies about TypeScript maintainability. Include one startup example and one enterprise example. Avoid hype and keep it practical.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(body.inferenceFallbackUsed).toBe(false);
+    expect(body.resolutionSource).toBe('local');
+  });
+
+  it('calls inference once for unfamiliar prompt shapes', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 'stepwise_reasoning',
+                  taskType: 'comparison',
+                  deliverableType: 'recommendation',
+                  missingContextType: 'comparison',
+                  roleHint: 'general',
+                  noveltyCandidate: false,
+                  lookupKeys: ['comparison', 'tradeoff'],
+                  confidence: 0.82,
+                  notes: 'Needs explicit trade-off framing.',
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Can you help me decide this?',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.inferenceFallbackUsed).toBe(true);
+    expect(body.resolutionSource).toBe('inference');
+  });
+
+  it('ignores invalid inference schema output and keeps local resolution', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 42,
+                  notes: 'invalid payload',
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Can you help me decide this?',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.inferenceFallbackUsed).toBe(true);
+    expect(body.resolutionSource).toBe('local');
+  });
+
+  it('returns local best result when inference request fails', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: 'upstream failure' }), { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Can you help me decide this?',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.inferenceFallbackUsed).toBe(true);
+    expect(body.resolutionSource).toBe('local');
+    expect(typeof body.overallScore).toBe('number');
+  });
+
+  it('keeps bare webhook prompts weak without technical bounds', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write a webhook handler.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(['poor', 'weak']).toContain(body.scoreBand);
+    expect(body.analysis.detectedIssueCodes).toContain('CONSTRAINTS_MISSING');
+  });
+
+  it('applies inference metadata so bounded Node/JSON webhook prompt is not flagged as missing constraints', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 'direct_instruction',
+                  taskType: 'implementation',
+                  deliverableType: 'code',
+                  missingContextType: null,
+                  roleHint: 'developer',
+                  noveltyCandidate: false,
+                  lookupKeys: ['webhook', 'nodejs', 'json-schema'],
+                  confidence: 0.86,
+                  notes: 'Developer implementation request with explicit constraints.',
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Need webhook implementation support: Node.js runtime, JSON schema validation for payload, respond with 202/400 status codes, include retry-safe idempotency, avoid framework-specific middleware.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.inferenceFallbackUsed).toBe(true);
+    expect(body.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+  });
+
+  it('keeps a stronger Express + JSON-schema webhook prompt out of poor score band', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 'direct_instruction',
+                  taskType: 'development',
+                  deliverableType: 'code',
+                  missingContextType: null,
+                  roleHint: 'developer',
+                  noveltyCandidate: false,
+                  lookupKeys: ['express', 'json-schema', 'idempotency'],
+                  confidence: 0.9,
+                  notes: 'Bounded implementation task.',
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Help with a webhook in Express: accept POST events only, validate request body with JSON schema, return 202 on success and 400 on schema failure, enforce idempotency key handling, no queueing middleware.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(['weak', 'usable', 'strong', 'excellent']).toContain(body.scoreBand);
+  });
+
+  it('removes duplicated issues from effective analysis output', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 'direct_instruction',
+                  taskType: 'coding',
+                  deliverableType: 'code',
+                  missingContextType: null,
+                  roleHint: 'developer',
+                  noveltyCandidate: false,
+                  lookupKeys: ['webhook', 'api'],
+                  confidence: 0.75,
+                  notes: null,
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Need help with webhook handling in Node.js with schema validation and explicit status codes.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    const dedupeKeySet = new Set(body.analysis.issues.map((issue: { code: string; message: string }) => `${issue.code}:${issue.message}`));
+    expect(dedupeKeySet.size).toBe(body.analysis.issues.length);
+  });
+
   it('returns v2 forced rewrite for strong prompt', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 

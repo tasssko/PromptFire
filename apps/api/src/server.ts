@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { analyzePrompt, detectPatternFit, evaluateRewrite, generateBestNextMove, generateImprovementSuggestions } from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
 import {
@@ -49,6 +50,10 @@ import {
 import { ProviderNotConfiguredError, UpstreamRewriteError } from './rewrite/errors';
 import { selectRewriteEngine } from './rewrite/engineSelector';
 import { getProviderConfig } from './rewrite/providerConfig';
+import { evaluateInferenceTrigger, mergeContextWithInference, resolvePatternFitWithInference } from './inference/fallbackResolver';
+import { buildEffectiveResolution } from './inference/effectiveContext';
+import { OpenAIInferenceClient } from './inference/openaiInference';
+import type { InferenceMetadata } from './inference/types';
 
 function isAuthorized(headers: Record<string, string>): boolean {
   if (getAuthBypassEnabled()) {
@@ -92,6 +97,48 @@ function logRequest(params: {
   errorCode?: string;
 }): void {
   console.info(JSON.stringify(params));
+}
+
+function promptHash(prompt: string): string {
+  return createHash('sha256').update(prompt).digest('hex');
+}
+
+function logInferenceCase(params: {
+  prompt: string;
+  role: string;
+  mode: string;
+  localMatchStatus: string;
+  inferenceUsed: boolean;
+  validatedInferenceMetadata: InferenceMetadata | null;
+  inferenceError?: string;
+  finalResolutionSource: 'local' | 'inference';
+  inferenceMetadataApplied: boolean;
+  effectiveTaskType: string | null;
+  effectiveDeliverableType: string | null;
+  effectiveMissingContextType: string | null;
+  effectivePatternFit: string;
+  effectiveCalibrationPath: string;
+}): void {
+  console.info(
+    JSON.stringify({
+      event: 'inference_fallback_review',
+      prompt_hash: promptHash(params.prompt),
+      role: params.role,
+      mode: params.mode,
+      local_match_status: params.localMatchStatus,
+      inference_used: params.inferenceUsed,
+      validated_inference_metadata: params.validatedInferenceMetadata,
+      inference_error: params.inferenceError ?? null,
+      final_resolution_source: params.finalResolutionSource,
+      inference_metadata_applied: params.inferenceMetadataApplied,
+      effective_task_type: params.effectiveTaskType,
+      effective_deliverable_type: params.effectiveDeliverableType,
+      effective_missing_context_type: params.effectiveMissingContextType,
+      effective_pattern_fit: params.effectivePatternFit,
+      effective_calibration_path: params.effectiveCalibrationPath,
+      timestamp: new Date().toISOString(),
+    }),
+  );
 }
 
 function hasAudience(prompt: string, context?: Record<string, unknown>): boolean {
@@ -831,21 +878,127 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
 
     const input: AnalyzeAndRewriteV2Request = parsed.data;
     const preferences = normalizePreferences(input.preferences);
-    const originalAnalysis = withV2Scores(analyzePrompt({ ...input, preferences }), input.prompt, input.context);
-    const patternFit = detectPatternFit({
+
+    let resolvedContext = input.context;
+    let resolvedAnalysis = withV2Scores(analyzePrompt({ ...input, preferences }), input.prompt, resolvedContext);
+    let patternFit = detectPatternFit({
       prompt: input.prompt,
       role: input.role,
       mode: input.mode,
-      analysis: originalAnalysis,
-      context: input.context,
+      analysis: resolvedAnalysis,
+      context: resolvedContext,
     });
-    const overallScore = computeOverallScore(originalAnalysis.scores);
+
+    const inferenceTrigger = evaluateInferenceTrigger({
+      prompt: input.prompt,
+      role: input.role,
+      mode: input.mode,
+      analysis: resolvedAnalysis,
+      context: resolvedContext,
+      patternFit,
+    });
+    const localMatchStatus = inferenceTrigger.shouldInfer ? inferenceTrigger.reasons.join('|') : 'strong_local_match';
+    let inferenceFallbackUsed = false;
+    let resolutionSource: 'local' | 'inference' = 'local';
+    let validatedInferenceMetadata: InferenceMetadata | null = null;
+    let inferenceError: string | undefined;
+
+    if (inferenceTrigger.shouldInfer) {
+      inferenceFallbackUsed = true;
+
+      if (providerMode !== 'real') {
+        inferenceError = 'INFERENCE_UNAVAILABLE_PROVIDER_MODE';
+      } else {
+        try {
+          const inferenceClient = new OpenAIInferenceClient(providerConfig);
+          validatedInferenceMetadata = await inferenceClient.inferMetadata({
+            prompt: input.prompt,
+            role: input.role,
+            mode: input.mode,
+          });
+
+          resolvedContext = mergeContextWithInference(resolvedContext, validatedInferenceMetadata);
+          resolvedAnalysis = withV2Scores(
+            analyzePrompt({
+              prompt: input.prompt,
+              role: input.role,
+              mode: input.mode,
+              context: resolvedContext,
+              preferences,
+            }),
+            input.prompt,
+            resolvedContext,
+          );
+          patternFit = detectPatternFit({
+            prompt: input.prompt,
+            role: input.role,
+            mode: input.mode,
+            analysis: resolvedAnalysis,
+            context: resolvedContext,
+          });
+
+          const resolution = resolvePatternFitWithInference({
+            prompt: input.prompt,
+            role: input.role,
+            mode: input.mode,
+            analysis: resolvedAnalysis,
+            context: resolvedContext,
+            localPatternFit: patternFit,
+            metadata: validatedInferenceMetadata,
+          });
+          patternFit = resolution.resolvedPatternFit;
+          if (resolution.usedInference) {
+            resolutionSource = 'inference';
+          }
+        } catch (error) {
+          inferenceError = error instanceof Error ? error.message : 'UNKNOWN_INFERENCE_ERROR';
+        }
+      }
+
+    }
+
+    const effectiveResolution = buildEffectiveResolution({
+      prompt: input.prompt,
+      role: input.role,
+      mode: input.mode,
+      context: resolvedContext,
+      analysis: resolvedAnalysis,
+      patternFit,
+      metadata: validatedInferenceMetadata,
+    });
+    resolvedAnalysis = effectiveResolution.analysis;
+    patternFit = effectiveResolution.patternFit;
+    const effectiveInput: AnalyzeAndRewriteV2Request = {
+      ...input,
+      context: resolvedContext,
+    };
+
+    if (inferenceTrigger.shouldInfer) {
+      logInferenceCase({
+        prompt: input.prompt,
+        role: input.role,
+        mode: input.mode,
+        localMatchStatus,
+        inferenceUsed: inferenceFallbackUsed,
+        validatedInferenceMetadata,
+        inferenceError,
+        finalResolutionSource: resolutionSource,
+        inferenceMetadataApplied: effectiveResolution.inferenceMetadataApplied,
+        effectiveTaskType: effectiveResolution.effectiveTaskType,
+        effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
+        effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
+        effectivePatternFit: effectiveResolution.effectivePatternFit,
+        effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+      });
+    }
+
+    const overallScore = computeOverallScore(resolvedAnalysis.scores);
     const scoreBand = scoreBandFromOverallScore(overallScore);
-    const expectedImprovement = hasLowExpectedImprovementV2(originalAnalysis.scores, input.prompt, input.context)
+    const expectedImprovement = hasLowExpectedImprovementV2(resolvedAnalysis.scores, input.prompt, resolvedContext)
       ? 'low'
       : 'high';
-    const majorBlockingIssues = hasMajorBlockingIssues(originalAnalysis.issues);
-    const cleanStrongPrompt = expectedImprovement === 'low' && originalAnalysis.issues.length === 0;
+    const majorBlockingIssues = hasMajorBlockingIssues(resolvedAnalysis.issues);
+    const cleanStrongPrompt = expectedImprovement === 'low' && resolvedAnalysis.issues.length === 0;
     const shouldSuppressByStrength =
       (overallScore >= 75 || cleanStrongPrompt) &&
       !majorBlockingIssues &&
@@ -859,16 +1012,16 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       expectedImprovementLow: expectedImprovement === 'low',
     });
     const improvementSuggestions = generateImprovementSuggestions({
-      input,
-      analysis: originalAnalysis,
+      input: effectiveInput,
+      analysis: resolvedAnalysis,
       overallScore,
       scoreBand,
       rewriteRecommendation,
       patternFit,
     });
     const bestNextMove = generateBestNextMove({
-      input,
-      analysis: originalAnalysis,
+      input: effectiveInput,
+      analysis: resolvedAnalysis,
       overallScore,
       scoreBand,
       rewriteRecommendation,
@@ -885,9 +1038,9 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           prompt: input.prompt,
           role: input.role,
           mode: input.mode,
-          context: input.context,
+          context: resolvedContext,
           preferences,
-          analysis: originalAnalysis,
+          analysis: resolvedAnalysis,
           improvementSuggestions,
           patternFit,
         });
@@ -897,18 +1050,35 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
             prompt: generatedRewrite.rewrittenPrompt,
             role: input.role,
             mode: input.mode,
-            context: input.context,
+            context: resolvedContext,
             preferences,
           }),
           generatedRewrite.rewrittenPrompt,
-          input.context,
+          resolvedContext,
         );
+        const rewritePatternFit = detectPatternFit({
+          prompt: generatedRewrite.rewrittenPrompt,
+          role: input.role,
+          mode: input.mode,
+          analysis: rewriteAnalysis,
+          context: resolvedContext,
+        });
+        const effectiveRewrite = buildEffectiveResolution({
+          prompt: generatedRewrite.rewrittenPrompt,
+          role: input.role,
+          mode: input.mode,
+          context: resolvedContext,
+          analysis: rewriteAnalysis,
+          patternFit: rewritePatternFit,
+          metadata: validatedInferenceMetadata,
+        });
+        const calibratedRewriteAnalysis = effectiveRewrite.analysis;
         const rewriteEvaluation = evaluateRewrite({
           originalPrompt: input.prompt,
           rewrittenPrompt: generatedRewrite.rewrittenPrompt,
-          originalAnalysis,
-          rewriteAnalysis,
-          context: input.context,
+          originalAnalysis: resolvedAnalysis,
+          rewriteAnalysis: calibratedRewriteAnalysis,
+          context: resolvedContext,
           role: input.role,
         });
 
@@ -919,25 +1089,25 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           signals: rewriteEvaluation.signals,
           scoreComparison: {
             original: {
-              scope: originalAnalysis.scores.scope,
-              contrast: originalAnalysis.scores.contrast,
-              clarity: originalAnalysis.scores.clarity,
+              scope: resolvedAnalysis.scores.scope,
+              contrast: resolvedAnalysis.scores.contrast,
+              clarity: resolvedAnalysis.scores.clarity,
             },
             rewrite: {
-              scope: rewriteAnalysis.scores.scope,
-              contrast: rewriteAnalysis.scores.contrast,
-              clarity: rewriteAnalysis.scores.clarity,
+              scope: calibratedRewriteAnalysis.scores.scope,
+              contrast: calibratedRewriteAnalysis.scores.contrast,
+              clarity: calibratedRewriteAnalysis.scores.clarity,
             },
           },
         };
       }
 
       const analysis: Analysis = {
-        ...originalAnalysis,
+        ...resolvedAnalysis,
         signals:
-          expectedImprovement === 'low' && !originalAnalysis.signals.includes('Low expected improvement.')
-            ? [...originalAnalysis.signals, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
-            : [...originalAnalysis.signals, bestImprovementPath(patternFit.primary)].slice(0, 12),
+          expectedImprovement === 'low' && !resolvedAnalysis.signals.includes('Low expected improvement.')
+            ? [...resolvedAnalysis.signals, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
+            : [...resolvedAnalysis.signals, bestImprovementPath(patternFit.primary)].slice(0, 12),
         summary: summaryForV2({
           recommendation: rewriteRecommendation,
           rewritePreference: input.rewritePreference,
@@ -960,6 +1130,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         },
         rewrite,
         evaluation,
+        inferenceFallbackUsed,
+        resolutionSource,
         meta,
       };
 

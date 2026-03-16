@@ -339,6 +339,8 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   gating: GatingSchema,
   rewrite: RewriteSchema.nullable(),
   evaluation: EvaluationV2Schema.nullable(),
+  inferenceFallbackUsed: z.boolean().optional(),
+  resolutionSource: z.enum(['local', 'inference']).optional(),
   meta: MetaV2Schema,
 });
 export type AnalyzeAndRewriteV2Response = z.infer<typeof AnalyzeAndRewriteV2ResponseSchema>;
