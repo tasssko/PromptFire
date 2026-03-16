@@ -100,7 +100,10 @@ function hasAudience(prompt: string, context?: Record<string, unknown>): boolean
     return true;
   }
 
-  return /\b(audience|for\s+[a-z]|target\s+user|aimed at|target(?:ing|ed at)?)\b/i.test(prompt);
+  const explicitAudience =
+    /\b(for|to|aimed at|target(?:ing|ed at)?|tailored for)\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,6}(?:cto|ctos|it decision-makers?|decision-makers?|enterprise buyers?|buyers?|developers?|engineers?|directors?|managers?|leaders?|admins?|business(?:es)?|companies|organizations|teams|startups?|scaleups?|enterprises?|smbs?|small(?:\s+to\s+medium-sized)?\s+business(?:es)?|mid-sized\s+business(?:es)?)\b/i;
+  const genericAudience = /\b(audience|target\s+user)\b/i;
+  return explicitAudience.test(prompt) || genericAudience.test(prompt);
 }
 
 function hasConstraintsV2(prompt: string, context?: Record<string, unknown>): boolean {

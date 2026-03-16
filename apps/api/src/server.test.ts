@@ -620,6 +620,28 @@ describe('API vertical slice', () => {
     ).toBe(true);
   });
 
+  it('treats broad business-segment phrasing as audience in v2 marketer scoring', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+        role: 'marketer',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.analysis.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
+    expect(body.analysis.scores.scope).toBeGreaterThanOrEqual(5);
+  });
+
   it('keeps opportunities presentable when rewrite is null for a strong general prompt', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 
