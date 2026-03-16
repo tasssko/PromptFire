@@ -45,6 +45,13 @@ export interface OpportunityParams {
   scoreBand: ScoreBand;
   rewriteRecommendation: RewriteRecommendation;
   patternFit?: PatternFit;
+  effectiveContext?: {
+    role: 'general' | 'developer' | 'marketer';
+    canonicalTaskType: string | null;
+    canonicalDeliverableType: string | null;
+    missingContextType: MissingContextType;
+    effectivePatternFit: PatternFit | null;
+  };
 }
 
 function inferTheme(prompt: string): Theme {
@@ -178,6 +185,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     params.scoreBand === 'excellent' ||
     params.rewriteRecommendation === 'no_rewrite_needed';
   const patternFit =
+    params.effectiveContext?.effectivePatternFit ??
     params.patternFit ??
     detectPatternFit({
       prompt,
@@ -200,12 +208,20 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
   const candidates: OpportunityCandidate[] = [];
   const hasComparisonIntent = /\b(compare|comparison|versus|vs\.?|better than)\b/i.test(prompt);
   const hasDecisionIntent = /\b(decide|decision|which option|when .* and when .*|trade[-\s]?off)\b/i.test(prompt);
-  const missingContextType = inferMissingContextType({
-    prompt,
-    role: params.input.role,
-    patternFit,
-    analysis: params.analysis,
-  });
+  const missingContextType =
+    params.effectiveContext?.missingContextType ??
+    inferMissingContextType({
+      prompt,
+      role: params.input.role,
+      patternFit,
+      analysis: params.analysis,
+    });
+  const isBoundedDeveloperCodePrompt =
+    (params.effectiveContext?.role ?? params.input.role) === 'developer' &&
+    params.effectiveContext?.canonicalDeliverableType === 'code' &&
+    params.effectiveContext?.canonicalTaskType === 'implementation_code' &&
+    missingContextType === null &&
+    patternFit.primary === 'direct_instruction';
 
   const push = (candidate: OpportunityCandidate) => {
     candidates.push({
@@ -243,7 +259,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     });
   }
 
-  if (patternFit.primary === 'few_shot') {
+  if (patternFit.primary === 'few_shot' && !isBoundedDeveloperCodePrompt) {
     push({
       id: 'require_examples',
       suggestionTitle: 'add one or two examples',
@@ -335,7 +351,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     });
   }
 
-  if (params.input.role === 'developer' && missingContextType === 'execution') {
+  if (params.input.role === 'developer' && missingContextType === 'execution' && !isBoundedDeveloperCodePrompt) {
     push({
       id: 'add_execution_context',
       suggestionTitle: 'add runtime and execution constraints',
@@ -500,7 +516,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     (theme === 'landing_page' && !hasSpecificProof(prompt)) ||
     (theme === 'blog_post' && !/\bexample|examples\b/i.test(prompt))
   ) {
-    const requireExamples = theme === 'blog_post' || patternFit.primary === 'few_shot';
+    const requireExamples = !isBoundedDeveloperCodePrompt && (theme === 'blog_post' || patternFit.primary === 'few_shot');
     push({
       id: requireExamples ? 'require_examples' : isStrongPrompt ? 'optional_proof_requirement' : 'add_proof_requirement',
       suggestionTitle: requireExamples ? 'require specific examples' : 'require one proof point',
@@ -589,6 +605,27 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
           : !hasStructure(prompt, context)
             ? 'Name the sections, format, or sequence the output should follow.'
             : 'Set a limit, required element, or framing boundary the output must follow.',
+    });
+  }
+
+  if (isBoundedDeveloperCodePrompt) {
+    push({
+      id: 'clarify_output_structure',
+      suggestionTitle: 'clarify request/response contract details',
+      suggestionReason:
+        'This prompt is already bounded at runtime/framework level; the next gains come from exact schema fields and contract boundaries.',
+      impact: 'high',
+      targetScores: ['constraintQuality', 'clarity', 'genericOutputRisk'],
+      category: 'structure',
+      moveType: 'clarify_output_structure',
+      moveTitle: 'Clarify request/response contract details',
+      moveRationale:
+        'Specify exact schema fields, auth/signature scope, retry/idempotency semantics, config boundaries, and sample payload/test coverage.',
+      priority: 1,
+      tieGroup: 1,
+      methodFit,
+      exampleChange:
+        'Define required schema properties, auth/signature checks, success/error payload shape, retry/idempotency handling, and one test payload set.',
     });
   }
 

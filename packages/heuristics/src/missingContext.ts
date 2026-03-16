@@ -112,6 +112,12 @@ export function inferMissingContextType(input: InferMissingContextTypeInput): Mi
   if (prompt.length === 0) {
     return null;
   }
+  if (
+    input.role === 'developer' &&
+    input.analysis.signals.some((signal) => /effective analysis context:\s*bounded_developer_code/i.test(signal))
+  ) {
+    return null;
+  }
 
   const pattern = detectInternalPattern(prompt, input.patternFit?.primary);
   const needsComparison = /\b(compare|comparison|contrast|versus|vs\.?|trade[-\s]?off|when .* and when .*)\b/i.test(prompt);

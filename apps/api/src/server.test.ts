@@ -666,6 +666,7 @@ describe('API vertical slice', () => {
     process.env.REWRITE_PROVIDER_MODE = 'real';
     process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
     process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
 
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ error: 'upstream failure' }), { status: 500 }));
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
@@ -688,10 +689,46 @@ describe('API vertical slice', () => {
     expect(body.inferenceFallbackUsed).toBe(true);
     expect(body.resolutionSource).toBe('local');
     expect(typeof body.overallScore).toBe('number');
+
+    const inferenceLogLine = infoSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('"event":"inference_fallback_review"'));
+    expect(inferenceLogLine).toBeTruthy();
+    const inferenceLog = JSON.parse(inferenceLogLine as string);
+    expect(inferenceLog.inference_error).toBeTruthy();
+    expect(inferenceLog.inference_metadata_applied).toBe(false);
   });
 
-  it('keeps bare webhook prompts weak without technical bounds', async () => {
-    process.env.REWRITE_PROVIDER_MODE = 'mock';
+  it('keeps thin developer webhook prompts weak and direct-instruction oriented', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 'implementation request',
+                  taskType: 'coding',
+                  deliverableType: 'code',
+                  missingContextType: 'execution',
+                  roleHint: 'developer',
+                  noveltyCandidate: false,
+                  lookupKeys: ['webhook'],
+                  confidence: 0.76,
+                  notes: 'Thin implementation prompt needs execution context.',
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     const response = await handleHttpRequest({
       method: 'POST',
@@ -707,14 +744,18 @@ describe('API vertical slice', () => {
 
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
+    expect(body.inferenceFallbackUsed).toBe(true);
     expect(['poor', 'weak']).toContain(body.scoreBand);
     expect(body.analysis.detectedIssueCodes).toContain('CONSTRAINTS_MISSING');
+    expect(body.bestNextMove?.methodFit?.recommendedPattern).not.toBe('add_examples');
+    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).toMatch(/runtime|execution|input|output|structure/);
   });
 
-  it('applies inference metadata so bounded Node/JSON webhook prompt is not flagged as missing constraints', async () => {
+  it('applies inference metadata so bounded developer webhook prompt avoids stale runtime/example advice', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'real';
     process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
     process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
 
     const fetchMock = vi.fn(async () =>
       new Response(
@@ -748,7 +789,7 @@ describe('API vertical slice', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         prompt:
-          'Need webhook implementation support: Node.js runtime, JSON schema validation for payload, respond with 202/400 status codes, include retry-safe idempotency, avoid framework-specific middleware.',
+          'Implement a webhook handler in Node.js using Express that accepts JSON payloads. The handler should validate the incoming request against a predefined JSON schema for input-output contract compliance. Respond with a 200 status code for successful processing and a 400 status code for validation errors. Log any errors encountered during processing to the console. Ensure that the handler can handle unexpected input gracefully without crashing the server.',
         role: 'developer',
         mode: 'balanced',
         rewritePreference: 'suppress',
@@ -759,10 +800,33 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(body.inferenceFallbackUsed).toBe(true);
-    expect(body.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(body.resolutionSource).toBe('inference');
+    expect(['weak', 'usable', 'strong', 'excellent']).toContain(body.scoreBand);
+    expect(
+      body.analysis.issues.some((issue: { message: string }) => /\b(runtime|language)\b/i.test(issue.message)),
+    ).toBe(false);
+    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
+    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toContain('examples');
+    expect(String(body.bestNextMove?.rationale ?? '').toLowerCase()).toMatch(
+      /schema|contract|auth|signature|retry|idempot|config|bootstrap|payload|test/,
+    );
+
+    const inferenceLogLine = infoSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('"event":"inference_fallback_review"'));
+    expect(inferenceLogLine).toBeTruthy();
+    const inferenceLog = JSON.parse(inferenceLogLine as string);
+    expect(inferenceLog.inference_metadata_applied).toBe(true);
+    expect(inferenceLog.effective_task_type).toBe('implementation_code');
+    expect(inferenceLog.effective_deliverable_type).toBe('code');
+    expect(inferenceLog.effective_missing_context_type).toBeNull();
+    expect(inferenceLog.effective_pattern_fit).toBe('direct_instruction');
+    expect(inferenceLog.effective_calibration_path).toBe('developer_code_bounded');
+    expect(Array.isArray(inferenceLog.scoring_guardrails_applied)).toBe(true);
+    expect(inferenceLog.scoring_guardrails_applied.length).toBeGreaterThan(0);
   });
 
-  it('keeps a stronger Express + JSON-schema webhook prompt out of poor score band', async () => {
+  it('keeps stronger bounded Express/JSON-schema prompts out of poor and dedupes findings', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'real';
     process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
     process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
@@ -799,7 +863,7 @@ describe('API vertical slice', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         prompt:
-          'Help with a webhook in Express: accept POST events only, validate request body with JSON schema, return 202 on success and 400 on schema failure, enforce idempotency key handling, no queueing middleware.',
+          'Implement a Node.js webhook handler using Express.js that exclusively processes POST requests with JSON payloads. The handler must validate the incoming request against a specified input/output contract, which should be defined as a JSON schema. On successful validation, it should return a 200 status code with a success message. If validation fails, it should return a 400 status code along with a descriptive error message detailing the validation errors. Ensure that the handler includes middleware for JSON parsing and is set up to listen on a specified port.',
         role: 'developer',
         mode: 'balanced',
         rewritePreference: 'suppress',
@@ -808,7 +872,12 @@ describe('API vertical slice', () => {
 
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
+    expect(body.analysis.scores.constraintQuality).toBeGreaterThanOrEqual(5);
     expect(['weak', 'usable', 'strong', 'excellent']).toContain(body.scoreBand);
+    expect(body.bestNextMove?.type).not.toBe('require_examples');
+    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
+    const dedupeKeySet = new Set(body.analysis.issues.map((issue: { code: string; message: string }) => `${issue.code}:${issue.message}`));
+    expect(dedupeKeySet.size).toBe(body.analysis.issues.length);
   });
 
   it('removes duplicated issues from effective analysis output', async () => {

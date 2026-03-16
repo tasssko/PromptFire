@@ -50,7 +50,7 @@ import {
 import { ProviderNotConfiguredError, UpstreamRewriteError } from './rewrite/errors';
 import { selectRewriteEngine } from './rewrite/engineSelector';
 import { getProviderConfig } from './rewrite/providerConfig';
-import { evaluateInferenceTrigger, mergeContextWithInference, resolvePatternFitWithInference } from './inference/fallbackResolver';
+import { evaluateInferenceTrigger, mergeContextWithInference } from './inference/fallbackResolver';
 import { buildEffectiveResolution } from './inference/effectiveContext';
 import { OpenAIInferenceClient } from './inference/openaiInference';
 import type { InferenceMetadata } from './inference/types';
@@ -118,6 +118,7 @@ function logInferenceCase(params: {
   effectiveMissingContextType: string | null;
   effectivePatternFit: string;
   effectiveCalibrationPath: string;
+  scoringGuardrailsApplied: string[];
 }): void {
   console.info(
     JSON.stringify({
@@ -136,6 +137,7 @@ function logInferenceCase(params: {
       effective_missing_context_type: params.effectiveMissingContextType,
       effective_pattern_fit: params.effectivePatternFit,
       effective_calibration_path: params.effectiveCalibrationPath,
+      scoring_guardrails_applied: params.scoringGuardrailsApplied,
       timestamp: new Date().toISOString(),
     }),
   );
@@ -937,19 +939,6 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
             context: resolvedContext,
           });
 
-          const resolution = resolvePatternFitWithInference({
-            prompt: input.prompt,
-            role: input.role,
-            mode: input.mode,
-            analysis: resolvedAnalysis,
-            context: resolvedContext,
-            localPatternFit: patternFit,
-            metadata: validatedInferenceMetadata,
-          });
-          patternFit = resolution.resolvedPatternFit;
-          if (resolution.usedInference) {
-            resolutionSource = 'inference';
-          }
         } catch (error) {
           inferenceError = error instanceof Error ? error.message : 'UNKNOWN_INFERENCE_ERROR';
         }
@@ -968,9 +957,20 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     });
     resolvedAnalysis = effectiveResolution.analysis;
     patternFit = effectiveResolution.patternFit;
+    resolutionSource =
+      validatedInferenceMetadata && effectiveResolution.effectiveAnalysisContext.source === 'inference' ? 'inference' : 'local';
+    const effectiveContext = {
+      ...(resolvedContext ?? {}),
+      effectiveRole: effectiveResolution.effectiveAnalysisContext.role,
+      effectiveTaskType: effectiveResolution.effectiveTaskType,
+      effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
+      effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
+      effectivePatternFit: effectiveResolution.effectivePatternFit,
+      effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+    };
     const effectiveInput: AnalyzeAndRewriteV2Request = {
       ...input,
-      context: resolvedContext,
+      context: effectiveContext,
     };
 
     if (inferenceTrigger.shouldInfer) {
@@ -989,6 +989,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
         effectivePatternFit: effectiveResolution.effectivePatternFit,
         effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+        scoringGuardrailsApplied: effectiveResolution.scoringGuardrailsApplied,
       });
     }
 
@@ -1018,6 +1019,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       scoreBand,
       rewriteRecommendation,
       patternFit,
+      effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
     const bestNextMove = generateBestNextMove({
       input: effectiveInput,
@@ -1026,6 +1028,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       scoreBand,
       rewriteRecommendation,
       patternFit,
+      effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
 
     try {
@@ -1038,7 +1041,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           prompt: input.prompt,
           role: input.role,
           mode: input.mode,
-          context: resolvedContext,
+          context: effectiveContext,
           preferences,
           analysis: resolvedAnalysis,
           improvementSuggestions,
@@ -1050,24 +1053,24 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
             prompt: generatedRewrite.rewrittenPrompt,
             role: input.role,
             mode: input.mode,
-            context: resolvedContext,
+            context: effectiveContext,
             preferences,
           }),
           generatedRewrite.rewrittenPrompt,
-          resolvedContext,
+          effectiveContext,
         );
         const rewritePatternFit = detectPatternFit({
           prompt: generatedRewrite.rewrittenPrompt,
           role: input.role,
           mode: input.mode,
           analysis: rewriteAnalysis,
-          context: resolvedContext,
+          context: effectiveContext,
         });
         const effectiveRewrite = buildEffectiveResolution({
           prompt: generatedRewrite.rewrittenPrompt,
           role: input.role,
           mode: input.mode,
-          context: resolvedContext,
+          context: effectiveContext,
           analysis: rewriteAnalysis,
           patternFit: rewritePatternFit,
           metadata: validatedInferenceMetadata,
@@ -1078,7 +1081,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           rewrittenPrompt: generatedRewrite.rewrittenPrompt,
           originalAnalysis: resolvedAnalysis,
           rewriteAnalysis: calibratedRewriteAnalysis,
-          context: resolvedContext,
+          context: effectiveContext,
           role: input.role,
         });
 

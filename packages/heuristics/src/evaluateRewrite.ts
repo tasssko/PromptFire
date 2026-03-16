@@ -18,6 +18,23 @@ interface EvaluateRewriteInput {
   role?: Role;
 }
 
+function readEffectiveMissingContextOverride(context?: Record<string, unknown>) {
+  const value = context?.effectiveMissingContextType;
+  if (
+    value === 'audience' ||
+    value === 'operating' ||
+    value === 'execution' ||
+    value === 'io' ||
+    value === 'comparison' ||
+    value === 'source' ||
+    value === 'boundary' ||
+    value === null
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
 interface EvaluateRewriteOutput {
   improvement: Improvement;
   signals: string[];
@@ -391,18 +408,23 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     analysis: input.rewriteAnalysis,
     context: input.context,
   });
-  const originalMissingContextType = inferMissingContextType({
-    prompt: input.originalPrompt,
-    role,
-    patternFit: originalPatternFit,
-    analysis: input.originalAnalysis,
-  });
-  const rewriteMissingContextType = inferMissingContextType({
-    prompt: input.rewrittenPrompt,
-    role,
-    patternFit: rewritePatternFit,
-    analysis: input.rewriteAnalysis,
-  });
+  const effectiveMissingContextOverride = readEffectiveMissingContextOverride(input.context);
+  const originalMissingContextType =
+    effectiveMissingContextOverride ??
+    inferMissingContextType({
+      prompt: input.originalPrompt,
+      role,
+      patternFit: originalPatternFit,
+      analysis: input.originalAnalysis,
+    });
+  const rewriteMissingContextType =
+    effectiveMissingContextOverride ??
+    inferMissingContextType({
+      prompt: input.rewrittenPrompt,
+      role,
+      patternFit: rewritePatternFit,
+      analysis: input.rewriteAnalysis,
+    });
   const allowAudienceGain = originalMissingContextType === null || originalMissingContextType === 'audience';
   const lowExpectedImprovement = hasLowExpectedImprovement(
     input.originalAnalysis.scores,
