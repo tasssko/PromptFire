@@ -31,14 +31,14 @@ const OVERALL_DELTA_WEIGHTS = {
 const RUBRIC_ECHO_PATTERNS: RegExp[] = [
   /\bimprove (?:clarity|contrast|scope)\b/i,
   /\badd (?:non[-\s]?negotiable )?constraints?\b/i,
-  /\badd (?:one|two|\d+)\s+concrete requirement\b/i,
-  /\badd (?:one|two|\d+)\s+concrete exclusion\b/i,
+  /\badd (?:one|two|\d+)\s+(?:specific|clear|explicit)\s+requirement\b/i,
+  /\badd (?:one|two|\d+)\s+(?:specific|clear|explicit)\s+exclusion\b/i,
   /\binclude (?:explicit )?exclusions?\b/i,
   /\blead with operational tension\b/i,
   /\bemphasize (?:audience|operational)?\s*tension\b/i,
   /\buse a specific lead angle\b/i,
   /\binclude (?:one )?(?:specific )?proof point\b/i,
-  /\bconcrete proof artifact\b/i,
+  /\b(?:specific|evidence-backed)\s+proof (?:artifact|point)\b/i,
   /\bdifferentiating constraints?\b/i,
   /\b(?:include|add|require) (?:a )?measurable outcome\b/i,
   /\bdifferentiated positioning\b/i,
@@ -126,21 +126,21 @@ function hasOutputStructure(prompt: string): boolean {
   return /\b(section|outline|template|format|table|bullet|step[-\s]?by[-\s]?step|headings?)\b/i.test(prompt);
 }
 
-function hasConcreteOutputStructure(prompt: string): boolean {
-  const concreteStructure =
+function hasSpecificOutputStructure(prompt: string): boolean {
+  const specificStructure =
     /\b(exactly|at least|at most|use)\s+(?:one|two|three|\d+)\s+sections?\b/i.test(prompt) ||
     /\b(?:section|heading)s?:\s+[a-z]/i.test(prompt) ||
     /\b(?:three|four|five|\d+)\s+part\b/i.test(prompt);
   const metaPlaceholder = /\bsection count\b/i.test(prompt) || /\bsuch as\b/i.test(prompt);
-  return concreteStructure && !metaPlaceholder;
+  return specificStructure && !metaPlaceholder;
 }
 
 function hasExampleOrComparisonFrame(prompt: string): boolean {
   return /\b(example|case study|comparison|compare|versus|vs\.?|trade[-\s]?off)\b/i.test(prompt);
 }
 
-function hasConcreteExampleOrComparisonFrame(prompt: string): boolean {
-  const concreteFrame =
+function hasSpecificExampleOrComparisonFrame(prompt: string): boolean {
+  const specificFrame =
     /\b(startup|enterprise|customer|case study|real[-\s]?world)\b.{0,40}\b(example|comparison|vs\.?|versus)\b/i.test(
       prompt,
     ) ||
@@ -148,10 +148,10 @@ function hasConcreteExampleOrComparisonFrame(prompt: string): boolean {
       prompt,
     );
   const metaPlaceholder = /\bexample count\b/i.test(prompt) || /\bsuch as\b/i.test(prompt);
-  return concreteFrame && !metaPlaceholder;
+  return specificFrame && !metaPlaceholder;
 }
 
-function hasConcreteExclusion(prompt: string): boolean {
+function hasClearExclusion(prompt: string): boolean {
   return /\b(avoid|exclude|without|do not|don't)\b/i.test(prompt) &&
     /\b(buzzwords?|jargon|hype|generic|unsupported|out of scope|fear[-\s]?based)\b/i.test(prompt);
 }
@@ -161,8 +161,8 @@ function hasBoundaryNarrowing(prompt: string): boolean {
     /\b(example|section|deliverable|output|audience|comparison|constraint)\b/i.test(prompt);
 }
 
-function hasConcreteBoundaryNarrowing(prompt: string): boolean {
-  const concreteBoundary =
+function hasSpecificBoundaryNarrowing(prompt: string): boolean {
+  const specificBoundary =
     /\b(exactly|at least|at most|\d+)\b.{0,25}\b(sections?|examples?|comparisons?|steps?)\b/i.test(
       prompt,
     ) ||
@@ -170,11 +170,11 @@ function hasConcreteBoundaryNarrowing(prompt: string): boolean {
       prompt,
     );
   const metaPlaceholder =
-    /\b(add|include|define|specify|require)\b.{0,60}\b(?:concrete|explicit)\b.{0,40}\b(requirement|constraint|exclusion|audience|proof)\b/i.test(
+    /\b(add|include|define|specify|require)\b.{0,60}\b(?:specific|clear|explicit)\b.{0,40}\b(requirement|constraint|exclusion|audience|proof)\b/i.test(
       prompt,
     ) ||
     /\bsuch as\b/i.test(prompt);
-  return concreteBoundary && !metaPlaceholder;
+  return specificBoundary && !metaPlaceholder;
 }
 
 function hasOperationalContext(prompt: string): boolean {
@@ -187,18 +187,18 @@ function countPatternAdds(original: string, rewrite: string, patterns: RegExp[])
   return patterns.filter((pattern) => pattern.test(rewrite) && !pattern.test(original)).length;
 }
 
-function countConcreteGroundingGains(input: {
+function countGroundedImprovementGains(input: {
   originalPrompt: string;
   rewrittenPrompt: string;
   context?: Record<string, unknown>;
 }): number {
   const gains = [
     !hasAudience(input.originalPrompt, input.context) && hasAudience(input.rewrittenPrompt, input.context),
-    !hasConcreteOutputStructure(input.originalPrompt) && hasConcreteOutputStructure(input.rewrittenPrompt),
-    !hasConcreteExampleOrComparisonFrame(input.originalPrompt) &&
-      hasConcreteExampleOrComparisonFrame(input.rewrittenPrompt),
-    !hasConcreteExclusion(input.originalPrompt) && hasConcreteExclusion(input.rewrittenPrompt),
-    !hasConcreteBoundaryNarrowing(input.originalPrompt) && hasConcreteBoundaryNarrowing(input.rewrittenPrompt),
+    !hasSpecificOutputStructure(input.originalPrompt) && hasSpecificOutputStructure(input.rewrittenPrompt),
+    !hasSpecificExampleOrComparisonFrame(input.originalPrompt) &&
+      hasSpecificExampleOrComparisonFrame(input.rewrittenPrompt),
+    !hasClearExclusion(input.originalPrompt) && hasClearExclusion(input.rewrittenPrompt),
+    !hasSpecificBoundaryNarrowing(input.originalPrompt) && hasSpecificBoundaryNarrowing(input.rewrittenPrompt),
     !hasOperationalContext(input.originalPrompt) && hasOperationalContext(input.rewrittenPrompt),
   ];
 
@@ -218,15 +218,15 @@ function rubricEchoRiskLevel(input: {
   context?: Record<string, unknown>;
 }): 'low' | 'medium' | 'high' {
   const addedRubricPatterns = getAbstractInstructionCount(input);
-  const concreteGroundingGains = countConcreteGroundingGains(input);
+  const groundedImprovementGains = countGroundedImprovementGains(input);
 
-  if (addedRubricPatterns >= 2 && concreteGroundingGains < 2) {
+  if (addedRubricPatterns >= 2 && groundedImprovementGains < 2) {
     return 'high';
   }
   if (
     addedRubricPatterns >= 1 &&
-    concreteGroundingGains >= 1 &&
-    addedRubricPatterns > concreteGroundingGains
+    groundedImprovementGains >= 1 &&
+    addedRubricPatterns > groundedImprovementGains
   ) {
     return 'medium';
   }
@@ -378,7 +378,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   const paraphraseHeavy = isParaphraseHeavy(scoreDeltas, input);
   const rubricEchoRisk = rubricEchoRiskLevel(input);
   const intentPreservation = intentPreservationLevel(input);
-  const groundedImprovementCount = countConcreteGroundingGains(input);
+  const groundedImprovementCount = countGroundedImprovementGains(input);
   const abstractInstructionCount = getAbstractInstructionCount(input);
 
   const abstractScaffoldingDominates =
@@ -435,7 +435,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   if (rubricEchoRisk !== 'low') {
     signals.push('REWRITE_RUBRIC_ECHO');
     notes.push(
-      'Rewrite adds abstract optimization language that is not sufficiently backed by concrete task detail.',
+      'Rewrite adds abstract optimization language that is not sufficiently backed by specific task detail.',
     );
   }
 
@@ -449,7 +449,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   }
 
   if (futureModelScaffolding) {
-    notes.push('Rewrite asks for specificity patterns instead of adding concrete, task-grounded content directly.');
+    notes.push('Rewrite asks for specificity patterns instead of adding specific, task-grounded content directly.');
   }
 
   if (status === 'material_improvement') {

@@ -111,6 +111,42 @@ export const ImprovementSuggestionSchema = z.object({
 });
 export type ImprovementSuggestion = z.infer<typeof ImprovementSuggestionSchema>;
 
+export const BestNextMoveTypeSchema = z.enum([
+  'add_audience',
+  'add_exclusion',
+  'add_proof_requirement',
+  'clarify_output_structure',
+  'reduce_task_load',
+  'add_framing_boundary',
+  'add_decision_criteria',
+  'require_examples',
+  'shift_to_comparison_pattern',
+  'shift_to_decision_frame',
+  'shift_to_audience_outcome_pattern',
+]);
+export type BestNextMoveType = z.infer<typeof BestNextMoveTypeSchema>;
+
+export const BestNextMoveStrengthSchema = z.enum(['high', 'medium', 'low']);
+export type BestNextMoveStrength = z.infer<typeof BestNextMoveStrengthSchema>;
+
+export const BestNextMoveSchema = z.object({
+  id: z.string().min(1),
+  type: BestNextMoveTypeSchema,
+  title: z.string().min(1),
+  rationale: z.string().min(1),
+  expectedImpact: BestNextMoveStrengthSchema,
+  targetScores: z.array(TargetScoreSchema).min(1).max(3),
+  methodFit: z
+    .object({
+      currentPattern: z.string().min(1).nullable(),
+      recommendedPattern: z.string().min(1).nullable(),
+      confidence: z.enum(['high', 'medium', 'low']),
+    })
+    .optional(),
+  exampleChange: z.string().min(1).optional(),
+});
+export type BestNextMove = z.infer<typeof BestNextMoveSchema>;
+
 export const ImprovementStatusSchema = z.enum([
   'material_improvement',
   'minor_improvement',
@@ -299,6 +335,7 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   rewriteRecommendation: RewriteRecommendationSchema,
   analysis: AnalysisSchema,
   improvementSuggestions: z.array(ImprovementSuggestionSchema),
+  bestNextMove: BestNextMoveSchema.nullable().optional(),
   gating: GatingSchema,
   rewrite: RewriteSchema.nullable(),
   evaluation: EvaluationV2Schema.nullable(),

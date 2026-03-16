@@ -56,7 +56,7 @@ describe('buildRewriteInstructions', () => {
     expect(instructions.system).toContain('Preserve valid audience details when present');
     expect(instructions.system).toContain('keep the same deliverable');
     expect(instructions.system).toContain('grounded context');
-    expect(instructions.system).toContain('keep the rewrite minimal and concrete');
+    expect(instructions.system).toContain('keep the rewrite minimal and specific');
   });
 
   it('includes pattern-fit guidance when available', () => {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { findDiscouragedDefaultLanguage } from '@promptfire/shared';
 import { handleHttpRequest } from './server';
 
 const originalEnv = { ...process.env };
@@ -10,6 +11,26 @@ afterEach(() => {
 });
 
 describe('API vertical slice', () => {
+  function expectVisibleCopyFreeOfDiscouragedLanguage(body: any) {
+    expect(findDiscouragedDefaultLanguage(String(body.analysis?.summary ?? ''))).toEqual([]);
+
+    for (const issue of body.analysis?.issues ?? []) {
+      expect(findDiscouragedDefaultLanguage(String(issue.message ?? ''))).toEqual([]);
+    }
+    for (const signal of body.analysis?.signals ?? []) {
+      expect(findDiscouragedDefaultLanguage(String(signal))).toEqual([]);
+    }
+    for (const suggestion of body.improvementSuggestions ?? []) {
+      expect(findDiscouragedDefaultLanguage(`${suggestion.title} ${suggestion.reason} ${suggestion.exampleChange ?? ''}`)).toEqual([]);
+    }
+    if (body.bestNextMove) {
+      expect(findDiscouragedDefaultLanguage(`${body.bestNextMove.title} ${body.bestNextMove.rationale} ${body.bestNextMove.exampleChange ?? ''}`)).toEqual([]);
+    }
+    if (body.rewrite?.explanation) {
+      expect(findDiscouragedDefaultLanguage(String(body.rewrite.explanation))).toEqual([]);
+    }
+  }
+
   const strongV2Prompt =
     'Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.';
   const microservicesCalibrationPrompt =
@@ -517,6 +538,7 @@ describe('API vertical slice', () => {
     expect(body.evaluation).toBeNull();
     expect(Array.isArray(body.improvementSuggestions)).toBe(true);
     expect(body.improvementSuggestions.length).toBeLessThanOrEqual(2);
+    expect(body.bestNextMove).toBeNull();
   });
 
   it('returns v2 forced rewrite for strong prompt', async () => {
@@ -591,6 +613,8 @@ describe('API vertical slice', () => {
     expect(body.evaluation).toBeNull();
     expect(Array.isArray(body.improvementSuggestions)).toBe(true);
     expect(body.improvementSuggestions.length).toBeGreaterThanOrEqual(2);
+    expect(body.bestNextMove).toBeTruthy();
+    expect(body.bestNextMove.type).toBe('shift_to_audience_outcome_pattern');
   });
 
   it('returns landing page opportunities tied to buyer, pain, proof, and exclusions', async () => {
@@ -618,6 +642,29 @@ describe('API vertical slice', () => {
         (suggestion: { category: string }) => suggestion.category === 'proof' || suggestion.category === 'exclusion',
       ),
     ).toBe(true);
+    expect(body.bestNextMove.type).toBe('shift_to_audience_outcome_pattern');
+    expectVisibleCopyFreeOfDiscouragedLanguage(body);
+  });
+
+  it('returns pattern-shift best-next-move for role-based comparison prompts', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Act as a senior engineer and explain when TypeScript is better than JavaScript.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(['shift_to_decision_frame', 'shift_to_comparison_pattern']).toContain(body.bestNextMove.type);
+    expect(body.bestNextMove.methodFit.currentPattern).toBe('role_based');
   });
 
   it('treats broad business-segment phrasing as audience in v2 marketer scoring', async () => {

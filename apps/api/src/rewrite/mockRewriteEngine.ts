@@ -1,4 +1,4 @@
-import type { Rewrite } from '@promptfire/shared';
+import { substitutePreferredLanguage, type Rewrite } from '@promptfire/shared';
 import type { RewriteEngine, RewriteInput } from './types';
 
 type PatchKind = 'audience' | 'structure' | 'exclusion' | 'task_load' | 'example_or_comparison';
@@ -405,8 +405,8 @@ export class MockRewriteEngine implements RewriteEngine {
       rewrittenPrompt,
       explanation:
         finalAdditions.length > 0
-          ? `Applied ${pattern} rewrite guidance with concrete, task-grounded additions.`
-          : 'Applied a minimal rewrite because concrete improvements were not safely inferable.',
+          ? substitutePreferredLanguage(`Applied ${pattern} rewrite guidance with concrete, task-grounded additions.`, 'specificity')
+          : substitutePreferredLanguage('Applied a minimal rewrite because concrete improvements were not safely inferable.', 'specificity'),
       changes: finalAdditions.length > 0 ? finalAdditions : ['Kept rewrite minimal to avoid abstract scaffolding.'],
     };
   }

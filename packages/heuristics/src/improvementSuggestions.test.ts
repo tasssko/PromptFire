@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { findDiscouragedDefaultLanguage } from '@promptfire/shared';
 import { analyzePrompt } from './analyzePrompt';
 import { generateImprovementSuggestions } from './improvementSuggestions';
 
@@ -172,6 +173,7 @@ describe('generateImprovementSuggestions', () => {
       expect(`${suggestion.title} ${suggestion.reason}`.toLowerCase()).not.toMatch(
         /more engaging|more compelling|stronger wording|more professional/,
       );
+      expect(findDiscouragedDefaultLanguage(`${suggestion.title} ${suggestion.reason} ${suggestion.exampleChange ?? ''}`)).toEqual([]);
     }
   });
 });

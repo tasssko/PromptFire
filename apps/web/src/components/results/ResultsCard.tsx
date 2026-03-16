@@ -1,4 +1,4 @@
-import type { AnalyzeAndRewriteV2Response, EvaluationV2, ImprovementSuggestion } from '@promptfire/shared';
+import type { AnalyzeAndRewriteV2Response, BestNextMove, EvaluationV2, ImprovementSuggestion } from '@promptfire/shared';
 import { ImpactBadge, MetricTile, Section, SurfaceCard, TechnicalMetric, sectionTitleClass } from '../ui';
 import {
   bandLabel,
@@ -44,6 +44,8 @@ export function ResultsCard({
   onCopyPrompt,
   onSetShowOptionalRewrite,
 }: ResultsCardProps) {
+  const bestNextMove: BestNextMove | null = result.bestNextMove ?? null;
+
   return (
     <section className="grid gap-4 rounded-xl border border-pf-border-default bg-white p-6 shadow-md max-sm:p-4">
       <section className={`grid gap-2 rounded-lg p-4 text-[#f7f4ea] ${heroBandClass(result.scoreBand)}`}>
@@ -102,6 +104,25 @@ export function ResultsCard({
           ))}
         </ul>
       </Section>
+
+      {bestNextMove && (
+        <SurfaceCard tone={state === 'strong' ? 'default' : 'suggestion'}>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className={sectionTitleClass}>{state === 'strong' ? 'Optional next move' : 'Best next move'}</h2>
+            <ImpactBadge impact={bestNextMove.expectedImpact} />
+          </div>
+          <p className="font-semibold">{bestNextMove.title}</p>
+          <p>{bestNextMove.rationale}</p>
+          <p>Improves: {bestNextMove.targetScores.map(scoreDimensionLabel).join(', ')}</p>
+          {bestNextMove.methodFit && (
+            <p>
+              Method fit: <code>{bestNextMove.methodFit.currentPattern ?? 'unknown'}</code> {'->'}{' '}
+              <code>{bestNextMove.methodFit.recommendedPattern ?? 'unknown'}</code>
+            </p>
+          )}
+          {bestNextMove.exampleChange && <p>Example: {bestNextMove.exampleChange}</p>}
+        </SurfaceCard>
+      )}
 
       <Section title="Sub-scores">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
