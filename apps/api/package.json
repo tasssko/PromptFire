@@ -6,6 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
+    "predev": "pnpm --dir ../.. --filter @promptfire/api^... build",
     "build": "tsc -p tsconfig.json",
     "dev": "tsx watch src/local.ts",
     "test": "vitest run",

@@ -9,7 +9,7 @@
     "expectedEvaluationStatus": "possible_regression",
     "mustHaveSignals": ["REWRITE_RUBRIC_ECHO", "REWRITE_POSSIBLE_REGRESSION"],
     "mustNotHaveSignals": [],
-    "rationale": "Rubric-shaped marketer rewrite language must not be rewarded without concrete task detail.",
+    "rationale": "Rubric-shaped marketer rewrite language must not be rewarded without specific task detail.",
     "rewrittenPrompt": "Create a complete guide to Kubernetes and improve clarity, scope, and contrast. Add constraints, include explicit exclusions, lead with operational tension, use a specific lead angle, include one proof point, require a measurable outcome, and enforce differentiated positioning."
   },
   {
@@ -22,11 +22,11 @@
     "expectedEvaluationStatus": "possible_regression",
     "mustHaveSignals": ["REWRITE_RUBRIC_ECHO"],
     "mustNotHaveSignals": ["LOW_INTENT_PRESERVATION"],
-    "rationale": "General-mode meta instructions should not become material gains when concrete task shaping is absent.",
+    "rationale": "General-mode meta instructions should not become material gains when specific task shaping is absent.",
     "rewrittenPrompt": "Create a complete Kubernetes guide. Improve clarity, scope, and contrast. Add non-negotiable constraints, include explicit exclusions, use a specific lead angle, include one proof point, and require a measurable outcome."
   },
   {
-    "id": "weak_concrete_rewrite_can_be_material",
+    "id": "weak_specific_rewrite_can_be_material",
     "prompt": "Write about cloud cost optimization.",
     "role": "general",
     "mode": "balanced",
@@ -35,8 +35,8 @@
     "expectedEvaluationStatus": "material_improvement",
     "mustHaveSignals": [],
     "mustNotHaveSignals": ["REWRITE_RUBRIC_ECHO", "LOW_INTENT_PRESERVATION"],
-    "rationale": "Weak prompts can still earn material improvement when rewrites add concrete audience, structure, comparison, and exclusions.",
-    "rewrittenPrompt": "Write a step-by-step blog post for engineering managers at mid-sized SaaS companies about cloud cost optimization. Use exactly three sections: quick wins, trade-offs, and measurement plan. Include one startup vs enterprise comparison and one concrete exclusion: avoid vendor marketing claims."
+    "rationale": "Weak prompts can still earn material improvement when rewrites add specific audience, structure, comparison, and exclusions.",
+    "rewrittenPrompt": "Write a step-by-step blog post for engineering managers at mid-sized SaaS companies about cloud cost optimization. Use exactly three sections: quick wins, trade-offs, and measurement plan. Include one startup vs enterprise comparison and one clear exclusion: avoid vendor marketing claims."
   },
   {
     "id": "strong_microservices_no_rewrite_needed",
@@ -85,7 +85,7 @@
     "expectedEvaluationStatus": "material_improvement",
     "mustHaveSignals": [],
     "mustNotHaveSignals": ["REWRITE_RUBRIC_ECHO", "LOW_INTENT_PRESERVATION"],
-    "rationale": "High-contrast mode must still reward grounded differentiation when concrete audience, structure, and exclusions are added.",
+    "rationale": "High-contrast mode must still reward grounded differentiation when specific audience, structure, and exclusions are added.",
     "rewrittenPrompt": "Write landing page copy for CTOs at mid-sized SaaS companies adopting IAM after acquisitions. Use exactly three sections: operational condition, proof artifact, and rollout boundary. Include one quantified proof metric and one exclusion: avoid fear-based compliance claims."
   }
 ]

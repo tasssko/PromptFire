@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { analyzePrompt } from '@promptfire/heuristics';
 import type { ImprovementSuggestion } from '@promptfire/shared';
-import { normalizePreferences } from '@promptfire/shared';
+import { findDiscouragedDefaultLanguage, normalizePreferences } from '@promptfire/shared';
 import { MockRewriteEngine } from './mockRewriteEngine';
+
+function expectNoDiscouragedLanguage(text: string) {
+  expect(findDiscouragedDefaultLanguage(text)).toEqual([]);
+}
 
 describe('MockRewriteEngine marketer behavior', () => {
   it('preserves valid audience phrases in marketer rewrites', async () => {
@@ -27,7 +31,7 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(rewrite.rewrittenPrompt).toContain('for IT decision-makers in mid-sized enterprises');
   });
 
-  it('adds concrete fills for IAM prompt without rubric scaffolding', async () => {
+  it('adds specific fills for IAM prompt without rubric scaffolding', async () => {
     const prompt =
       'Develop targeted landing page copy for our Identity and Access Management (IAM) service, specifically aimed at IT decision-makers in mid-sized enterprises. Emphasize the distinct advantages of our solution, including robust security features, compliance assistance, and seamless integration processes. Incorporate specific customer testimonials and quantifiable results to enhance credibility and demonstrate effectiveness.';
     const analysis = analyzePrompt({
@@ -48,8 +52,12 @@ describe('MockRewriteEngine marketer behavior', () => {
 
     expect(rewrite.rewrittenPrompt).toContain('Avoid vendor-marketing language and unsupported superlatives.');
     expect(rewrite.rewrittenPrompt).toContain('Include one clear comparison to an alternative approach.');
-    expect(rewrite.rewrittenPrompt).not.toContain('Require one concrete proof artifact');
+    expect(rewrite.rewrittenPrompt).not.toContain('Require one evidence-backed proof point');
     expect(rewrite.rewrittenPrompt).not.toContain('Keep the same deliverable and audience');
+    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
+    for (const change of rewrite.changes ?? []) {
+      expectNoDiscouragedLanguage(change);
+    }
   });
 
   it('addresses missing audience before lower-priority Kubernetes opportunities', async () => {
@@ -166,7 +174,7 @@ describe('MockRewriteEngine marketer behavior', () => {
       improvementSuggestions: [
         {
           id: 'require_examples',
-          title: 'require concrete examples',
+          title: 'require specific examples',
           reason: 'Add direct examples.',
           impact: 'medium',
           targetScores: ['contrast', 'constraintQuality'],
@@ -199,10 +207,11 @@ describe('MockRewriteEngine marketer behavior', () => {
     const lowered = rewrite.rewrittenPrompt.toLowerCase();
     expect(lowered).not.toContain('improve clarity, scope, and contrast');
     expect(lowered).not.toContain('tighten to a clear deliverable');
-    expect(lowered).not.toContain('add one concrete requirement');
-    expect(lowered).not.toContain('add one concrete exclusion');
-    expect(lowered).not.toContain('require one concrete proof artifact');
+    expect(lowered).not.toContain('add one specific requirement');
+    expect(lowered).not.toContain('add one clear exclusion');
+    expect(lowered).not.toContain('require one evidence-backed proof point');
     expect(lowered).not.toContain('keep the same deliverable and audience');
+    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 
   it('does not emit dangling fragment inserts', async () => {
@@ -250,13 +259,13 @@ describe('MockRewriteEngine marketer behavior', () => {
     });
 
     expect(rewrite.rewrittenPrompt).toBe(prompt);
-    expect(rewrite.rewrittenPrompt).not.toContain('Add one concrete requirement');
-    expect(rewrite.rewrittenPrompt).not.toContain('Add one concrete exclusion');
-    expect(rewrite.rewrittenPrompt).not.toContain('Require one concrete proof artifact');
+    expect(rewrite.rewrittenPrompt).not.toContain('Add one specific requirement');
+    expect(rewrite.rewrittenPrompt).not.toContain('Add one clear exclusion');
+    expect(rewrite.rewrittenPrompt).not.toContain('Require one evidence-backed proof point');
     expect(rewrite.rewrittenPrompt).not.toContain('for CTOs and platform leaders evaluating adoption');
   });
 
-  it('under-writes when no concrete additions are inferable', async () => {
+  it('under-writes when no specific additions are inferable', async () => {
     const prompt = 'Summarize this in one sentence. Avoid extra commentary.';
     const analysis = analyzePrompt({
       prompt,
@@ -276,6 +285,7 @@ describe('MockRewriteEngine marketer behavior', () => {
 
     expect(rewrite.rewrittenPrompt).toBe(prompt);
     expect(rewrite.changes).toEqual(['Kept rewrite minimal to avoid abstract scaffolding.']);
+    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 
   it('branches rewrite style for stepwise_reasoning pattern', async () => {
@@ -350,5 +360,6 @@ describe('MockRewriteEngine marketer behavior', () => {
 
     expect(rewrite.rewrittenPrompt).toContain('request the missing source context');
     expect(rewrite.rewrittenPrompt).toContain('grounded only in supplied source material');
+    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 });

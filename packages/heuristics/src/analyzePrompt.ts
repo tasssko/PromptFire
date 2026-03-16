@@ -793,7 +793,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
       issues,
       'GENERIC_OUTPUT_RISK_HIGH',
       'high',
-      'The prompt is likely to produce generic output without stronger direction.',
+      'The prompt is likely to produce generic output without clearer direction.',
     );
     signals.push('High likelihood of generic output.');
   }

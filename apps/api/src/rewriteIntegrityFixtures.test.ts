@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { analyzePrompt, evaluateRewrite } from '@promptfire/heuristics';
-import { normalizePreferences } from '@promptfire/shared';
+import { findDiscouragedDefaultLanguage, normalizePreferences } from '@promptfire/shared';
 import { handleHttpRequest } from './server';
 
 type Fixture = {
@@ -42,6 +42,30 @@ describe('rewrite integrity fixtures v0.5.3', () => {
       const body = JSON.parse(response.body);
       expect(response.statusCode, fixture.id).toBe(200);
       expect(body.rewriteRecommendation, fixture.id).toBe(fixture.expectedRecommendation);
+      expect(findDiscouragedDefaultLanguage(String(body.analysis.summary ?? '')), fixture.id).toEqual([]);
+
+      for (const issue of body.analysis.issues ?? []) {
+        expect(findDiscouragedDefaultLanguage(String(issue.message ?? '')), `${fixture.id}: issue message`).toEqual([]);
+      }
+
+      for (const signal of body.analysis.signals ?? []) {
+        expect(findDiscouragedDefaultLanguage(String(signal)), `${fixture.id}: analysis signal`).toEqual([]);
+      }
+
+      for (const suggestion of body.improvementSuggestions ?? []) {
+        expect(findDiscouragedDefaultLanguage(`${suggestion.title} ${suggestion.reason} ${suggestion.exampleChange ?? ''}`), `${fixture.id}: suggestion`).toEqual([]);
+      }
+
+      if (body.bestNextMove) {
+        expect(
+          findDiscouragedDefaultLanguage(`${body.bestNextMove.title} ${body.bestNextMove.rationale} ${body.bestNextMove.exampleChange ?? ''}`),
+          `${fixture.id}: best next move`,
+        ).toEqual([]);
+      }
+
+      if (body.rewrite) {
+        expect(findDiscouragedDefaultLanguage(String(body.rewrite.explanation ?? '')), `${fixture.id}: rewrite explanation`).toEqual([]);
+      }
 
       if (fixture.expectedEvaluationStatus === null) {
         expect(body.evaluation, fixture.id).toBeNull();
@@ -112,9 +136,9 @@ describe('rewrite integrity fixtures v0.5.3', () => {
       expect(response.statusCode, fixture.id).toBe(200);
       expect(body.evaluation, fixture.id).toBeTruthy();
       const rewrittenPrompt = String(body.rewrite?.rewrittenPrompt ?? '').toLowerCase();
-      expect(rewrittenPrompt, fixture.id).not.toContain('add one concrete requirement');
-      expect(rewrittenPrompt, fixture.id).not.toContain('add one concrete exclusion');
-      expect(rewrittenPrompt, fixture.id).not.toContain('require one concrete proof artifact');
+      expect(rewrittenPrompt, fixture.id).not.toContain('add one specific requirement');
+      expect(rewrittenPrompt, fixture.id).not.toContain('add one clear exclusion');
+      expect(rewrittenPrompt, fixture.id).not.toContain('require one evidence-backed proof point');
     }
   });
 });

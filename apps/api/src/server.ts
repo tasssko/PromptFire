@@ -1,4 +1,4 @@
-import { analyzePrompt, detectPatternFit, evaluateRewrite, generateImprovementSuggestions } from '@promptfire/heuristics';
+import { analyzePrompt, detectPatternFit, evaluateRewrite, generateBestNextMove, generateImprovementSuggestions } from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
 import {
   AnalyzeAndRewriteV2RequestSchema,
@@ -863,6 +863,13 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       scoreBand,
       rewriteRecommendation,
     });
+    const bestNextMove = generateBestNextMove({
+      input,
+      analysis: originalAnalysis,
+      overallScore,
+      scoreBand,
+      rewriteRecommendation,
+    });
 
     try {
       let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
@@ -940,6 +947,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         rewriteRecommendation,
         analysis,
         improvementSuggestions,
+        bestNextMove,
         gating: {
           rewritePreference: input.rewritePreference,
           expectedImprovement,
