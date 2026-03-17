@@ -77,6 +77,24 @@ describe('generateBestNextMove', () => {
     expect(move?.rationale.toLowerCase()).not.toMatch(/more compelling|stronger wording|more professional/);
   });
 
+  it('does not misdiagnose buyer context when an IAM landing-page prompt already names the audience', () => {
+    const move = moveFor(
+      {
+        prompt:
+          "Create a compelling landing page copy for our Identity and Access Management (IAM) service specifically designed for IT decision-makers in mid-sized companies. The copy should clearly emphasize our advanced security features, seamless integration process, and compliance benefits with industry standards. Additionally, detail how our service effectively streamlines user access while ensuring the protection of sensitive data. Please avoid generic phrases and focus on specific examples or statistics that demonstrate our service's effectiveness.",
+        role: 'marketer',
+        mode: 'high_contrast',
+      },
+      'rewrite_optional',
+    );
+
+    expect(move).toBeTruthy();
+    expect(move?.id).not.toBe('add_buyer_context');
+    expect(move?.type).not.toBe('shift_to_audience_outcome_pattern');
+    expect(`${move?.title ?? ''} ${move?.rationale ?? ''}`.toLowerCase()).not.toMatch(/buyer context|lacks clear buyer|audience.*missing/);
+    expect(['add_framing_boundary', 'clarify_output_structure', 'add_proof_requirement', 'add_exclusion']).toContain(move?.type);
+  });
+
   it('prioritizes execution context for thin developer implementation prompts', () => {
     const move = moveFor(
       {

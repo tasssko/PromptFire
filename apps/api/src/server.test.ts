@@ -434,6 +434,31 @@ describe('API vertical slice', () => {
     expect(body.evaluation.rewriteScore.contrast).toBeGreaterThanOrEqual(body.evaluation.originalScore.contrast);
   });
 
+  it('does not report buyer context as missing for IAM landing-page prompts that already define the audience', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          "Create a compelling landing page copy for our Identity and Access Management (IAM) service specifically designed for IT decision-makers in mid-sized companies. The copy should clearly emphasize our advanced security features, seamless integration process, and compliance benefits with industry standards. Additionally, detail how our service effectively streamlines user access while ensuring the protection of sensitive data. Please avoid generic phrases and focus on specific examples or statistics that demonstrate our service's effectiveness.",
+        role: 'marketer',
+        mode: 'high_contrast',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.analysis.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
+    expect(body.bestNextMove?.id).not.toBe('add_buyer_context');
+    expect(body.bestNextMove?.type).not.toBe('shift_to_audience_outcome_pattern');
+    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/buyer context|audience/);
+    expect(String(body.bestNextMove?.rationale ?? '').toLowerCase()).not.toMatch(/buyer context|audience.*missing|lacks clear buyer/);
+  });
+
   it('improves low-contrast general prompts without inventing specific business context or drifting task type', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 

@@ -123,7 +123,15 @@ function hasResponseOutcome(prompt: string): boolean {
 }
 
 function hasSpecificBuyerContext(prompt: string): boolean {
-  return /\b(cto|ciso|vp|director|manager|operator|admin|buyer|decision-maker|procurement)\b/i.test(prompt);
+  return /\b(cto|ctos|ciso|cisos|vp|vps|directors?|managers?|operators?|admins?|buyers?|decision-makers?|procurement)\b/i.test(prompt);
+}
+
+function hasLandingPageBuyerContext(prompt: string, context?: Record<string, unknown>): boolean {
+  if (context?.audienceHint) {
+    return true;
+  }
+
+  return hasSpecificBuyerContext(prompt);
 }
 
 function hasTaskOverload(prompt: string): boolean {
@@ -207,7 +215,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     ) ?? undefined;
   const candidates: OpportunityCandidate[] = [];
   const hasComparisonIntent = /\b(compare|comparison|versus|vs\.?|better than)\b/i.test(prompt);
-  const hasDecisionIntent = /\b(decide|decision|which option|when .* and when .*|trade[-\s]?off)\b/i.test(prompt);
+  const hasDecisionIntent = /\b(decide|decision(?!-makers?)|which option|when .* and when .*|trade[-\s]?off)\b/i.test(prompt);
   const missingContextType =
     params.effectiveContext?.missingContextType ??
     inferMissingContextType({
@@ -411,13 +419,13 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     });
   }
 
+  const landingPageHasBuyerContext = hasLandingPageBuyerContext(prompt, context);
   const shouldSuggestAudience =
     (params.input.role !== 'developer' || missingContextType === 'audience') &&
     (
-    !hasAudience(prompt, context) ||
-    issueSet.has('AUDIENCE_MISSING') ||
-    params.analysis.scores.scope <= 5 ||
-    (theme === 'landing_page' && (!hasSpecificBuyerContext(prompt) || !hasResponseOutcome(prompt)))
+      theme === 'landing_page'
+        ? !hasAudience(prompt, context) || issueSet.has('AUDIENCE_MISSING') || !landingPageHasBuyerContext
+        : !hasAudience(prompt, context) || issueSet.has('AUDIENCE_MISSING') || params.analysis.scores.scope <= 5
     );
   if (shouldSuggestAudience) {
     push({
@@ -442,6 +450,25 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
         theme === 'landing_page'
           ? 'Specify the buyer, operator, or decision-maker this page should speak to and the outcome it should drive.'
           : 'Specify the buyer, reader, or operator this is meant for.',
+    });
+  }
+
+  if (theme === 'landing_page' && landingPageHasBuyerContext && !hasResponseOutcome(prompt)) {
+    push({
+      id: 'define_conversion_goal',
+      suggestionTitle: 'define the conversion goal',
+      suggestionReason:
+        'The prompt already has an audience, but it does not say what action or response the page should drive.',
+      impact: 'medium',
+      targetScores: ['constraintQuality', 'clarity', 'contrast'],
+      category: 'structure',
+      moveType: 'add_framing_boundary',
+      moveTitle: 'Define the conversion goal',
+      moveRationale:
+        'The page has a buyer, but the prompt does not define the response it should drive, so the copy direction will stay broad.',
+      priority: 11,
+      tieGroup: 2,
+      exampleChange: 'Specify the intended action, such as booking a demo, requesting an assessment, or starting a trial.',
     });
   }
 

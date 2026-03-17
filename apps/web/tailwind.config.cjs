@@ -23,36 +23,85 @@ module.exports = {
       },
       colors: {
         pf: {
+          bg: {
+            page: 'var(--bg-page)',
+            card: 'var(--bg-card)',
+            cardSubtle: 'var(--bg-card-subtle)',
+            cardElevated: 'var(--bg-card-elevated)',
+          },
           text: {
-            primary: '#102039',
-            secondary: '#2e4461',
+            primary: 'var(--text-primary)',
+            secondary: 'var(--text-secondary)',
+            muted: 'var(--text-muted)',
+            inverse: 'var(--text-inverse)',
           },
           border: {
-            subtle: '#d7e0eb',
-            default: '#d3dde8',
-            strong: '#c8d4e3',
-            divider: '#e1e8f0',
+            subtle: 'var(--border-subtle)',
+            default: 'var(--border-default)',
+            strong: 'var(--border-strong)',
+            focus: 'var(--border-focus)',
           },
-          cta: {
-            primary: '#174473',
-            primaryHover: '#12385f',
-            secondary: '#f3f8ff',
-            secondaryHover: '#e8f1ff',
+          action: {
+            primary: {
+              bg: 'var(--action-primary-bg)',
+              text: 'var(--action-primary-text)',
+              bgHover: 'var(--action-primary-bg-hover)',
+            },
+            secondary: {
+              bg: 'var(--action-secondary-bg)',
+              text: 'var(--action-secondary-text)',
+              bgHover: 'var(--action-secondary-bg-hover)',
+            },
+          },
+          feedback: {
+            high: {
+              bg: 'var(--feedback-high-bg)',
+              text: 'var(--feedback-high-text)',
+            },
+            medium: {
+              bg: 'var(--feedback-medium-bg)',
+              text: 'var(--feedback-medium-text)',
+            },
+            low: {
+              bg: 'var(--feedback-low-bg)',
+              text: 'var(--feedback-low-text)',
+            },
+          },
+          surface: {
+            default: {
+              bg: 'var(--surface-default-bg)',
+              border: 'var(--surface-default-border)',
+            },
+            suggestion: {
+              bg: 'var(--surface-suggestion-bg)',
+              border: 'var(--surface-suggestion-border)',
+            },
+            rewrite: {
+              bg: 'var(--surface-rewrite-bg)',
+              border: 'var(--surface-rewrite-border)',
+            },
+            verdict: {
+              bg: 'var(--surface-verdict-bg)',
+              border: 'var(--surface-verdict-border)',
+            },
+          },
+          loading: {
+            soft: 'var(--loading-soft)',
+            strong: 'var(--loading-strong)',
+          },
+          status: {
+            danger: {
+              text: 'var(--status-danger-text)',
+            },
           },
         },
       },
       boxShadow: {
-        sm: '0 8px 20px rgba(16, 32, 57, 0.08)',
-        md: '0 16px 34px rgba(16, 32, 57, 0.12)',
+        sm: 'var(--shadow-sm)',
+        md: 'var(--shadow-md)',
       },
       backgroundImage: {
-        'page-shell': 'radial-gradient(circle at top right, #f2f7ff 0%, #f6f4ee 45%, #edf2f6 100%)',
-        shell: 'linear-gradient(180deg, #fcfdff 0%, #f6f9fd 100%)',
-        'hero-poor': 'linear-gradient(135deg, #411724 0%, #7f1d32 55%, #b4542d 100%)',
-        'hero-weak': 'linear-gradient(135deg, #3d1f26 0%, #7b2d35 55%, #be5d2f 100%)',
-        'hero-usable': 'linear-gradient(135deg, #0f2f54 0%, #225889 55%, #d59e44 100%)',
-        'hero-strong': 'linear-gradient(135deg, #10365e 0%, #1e5479 55%, #3f8d6a 100%)',
-        'hero-excellent': 'linear-gradient(135deg, #0d3d4a 0%, #146f73 55%, #67b06b 100%)',
+        shell: 'var(--bg-shell)',
       },
     },
   },

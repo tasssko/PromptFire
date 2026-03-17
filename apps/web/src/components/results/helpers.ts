@@ -2,13 +2,20 @@ import type {
   AnalyzeAndRewriteV2Response,
   EvaluationV2,
   ImprovementSuggestion,
-  RewriteRecommendation,
+  RewritePresentationMode,
   ScoreBand,
 } from '@promptfire/shared';
 
 export type ProductState = 'strong' | 'usable' | 'weak';
+export type PrimarySurfaceKind = 'full-rewrite' | 'guided-completion' | 'no-rewrite-needed';
 
-export function toProductState(rewriteRecommendation: RewriteRecommendation): ProductState {
+export type HeroView = {
+  headline: string;
+  supporting: string;
+  primaryAction: string;
+};
+
+export function toProductState(rewriteRecommendation: AnalyzeAndRewriteV2Response['rewriteRecommendation']): ProductState {
   switch (rewriteRecommendation) {
     case 'no_rewrite_needed':
       return 'strong';
@@ -20,12 +27,32 @@ export function toProductState(rewriteRecommendation: RewriteRecommendation): Pr
   }
 }
 
-export function heroCopy(result: AnalyzeAndRewriteV2Response): {
-  headline: string;
-  supporting: string;
-  primaryAction: string;
-} {
-  const presentationMode = result.rewritePresentationMode ?? (result.rewrite ? 'full_rewrite' : 'suppressed');
+export function getRewritePresentationMode(result: AnalyzeAndRewriteV2Response): RewritePresentationMode {
+  return result.rewritePresentationMode ?? (result.rewrite ? 'full_rewrite' : 'suppressed');
+}
+
+export function hasMaterialRewrite(result: AnalyzeAndRewriteV2Response): boolean {
+  return (
+    getRewritePresentationMode(result) === 'full_rewrite' &&
+    Boolean(result.rewrite) &&
+    result.evaluation?.status === 'material_improvement'
+  );
+}
+
+export function resolvePrimarySurface(result: AnalyzeAndRewriteV2Response): PrimarySurfaceKind {
+  if (result.rewriteRecommendation === 'no_rewrite_needed') {
+    return 'no-rewrite-needed';
+  }
+
+  if (hasMaterialRewrite(result)) {
+    return 'full-rewrite';
+  }
+
+  return 'guided-completion';
+}
+
+export function heroCopy(result: AnalyzeAndRewriteV2Response): HeroView {
+  const primarySurface = resolvePrimarySurface(result);
   const hasTemplate = Boolean(result.guidedCompletion?.template);
   const hasExample = Boolean(result.guidedCompletion?.example);
   const hasQuestions = Boolean(result.guidedCompletion?.questions?.length);
@@ -33,42 +60,40 @@ export function heroCopy(result: AnalyzeAndRewriteV2Response): {
   switch (result.rewriteRecommendation) {
     case 'no_rewrite_needed':
       return {
-        headline: 'Strong prompt',
-        supporting: 'This prompt is already well scoped and well directed.',
+        headline: result.scoreBand === 'excellent' ? 'Excellent prompt' : 'Strong prompt',
+        supporting: 'This prompt is already scoped well enough to use as-is.',
         primaryAction: 'Copy original prompt',
       };
     case 'rewrite_optional':
       return {
-        headline: 'Usable, with room to improve',
-        supporting:
-          'The prompt is clear, but tightening constraints or differentiation could improve the output.',
+        headline: 'Usable, with one clear upgrade',
+        supporting: 'The prompt works now, but one focused change would make the result more reliable.',
         primaryAction:
-          presentationMode === 'template_with_example' && hasTemplate
-            ? 'Copy template'
-            : presentationMode === 'template_with_example' && hasExample
-              ? 'Copy example'
-              : presentationMode === 'questions_only' && hasQuestions
-                ? 'Copy questions'
-                : result.rewrite
-                  ? 'Show suggested rewrite'
-                  : 'Generate suggested rewrite',
+          primarySurface === 'full-rewrite'
+            ? 'Copy rewritten prompt'
+            : hasTemplate
+              ? 'Copy template'
+              : hasExample
+                ? 'Copy example'
+                : hasQuestions
+                  ? 'Copy questions'
+                  : 'Copy original prompt',
       };
     case 'rewrite_recommended':
     default:
       return {
-        headline: 'This prompt needs tightening',
-        supporting:
-          'This prompt is likely to produce generic output unless it is narrowed and better directed.',
+        headline: result.scoreBand === 'poor' ? 'Prompt is too open-ended' : 'This prompt needs tighter boundaries',
+        supporting: 'Define the missing constraints first, then decide whether a rewrite is worth using.',
         primaryAction:
-          presentationMode === 'template_with_example' && hasTemplate
-            ? 'Copy template'
-            : presentationMode === 'template_with_example' && hasExample
-              ? 'Copy example'
-              : presentationMode === 'questions_only' && hasQuestions
-                ? 'Copy questions'
-                : result.rewrite
-                  ? 'Copy rewritten prompt'
-                  : 'Generate rewrite',
+          primarySurface === 'full-rewrite'
+            ? 'Copy rewritten prompt'
+            : hasTemplate
+              ? 'Copy template'
+              : hasExample
+                ? 'Copy example'
+                : hasQuestions
+                  ? 'Copy questions'
+                  : 'Copy original prompt',
       };
   }
 }
@@ -83,23 +108,23 @@ export function verdictCopy(evaluation: EvaluationV2): { label: string; recommen
     case 'minor_improvement':
       return {
         label: 'Slightly better',
-        recommendation: 'Rewrite is slightly stronger, but either version is workable.',
+        recommendation: 'The rewrite helps a bit, but the original still works.',
       };
     case 'possible_regression':
       return {
-        label: 'Might be worse',
-        recommendation: 'Keep the original unless you need a shorter or tighter variation.',
+        label: 'Possible regression',
+        recommendation: 'Keep the original and apply the next step manually.',
       };
     case 'already_strong':
       return {
-        label: 'Already in good shape',
-        recommendation: 'Original prompt was already strong before rewrite.',
+        label: 'Already strong',
+        recommendation: 'The original prompt was already in good shape.',
       };
     case 'no_significant_change':
     default:
       return {
-        label: 'About the same',
-        recommendation: 'Rewrite mostly rephrases the original prompt.',
+        label: 'No significant change',
+        recommendation: 'The rewrite does not add enough value to switch.',
       };
   }
 }
@@ -173,18 +198,6 @@ export function formatSuggestionTitle(suggestion: ImprovementSuggestion): string
   return suggestion.title.charAt(0).toUpperCase() + suggestion.title.slice(1);
 }
 
-export function heroBandClass(scoreBand: ScoreBand): string {
-  switch (scoreBand) {
-    case 'poor':
-      return 'bg-hero-poor';
-    case 'weak':
-      return 'bg-hero-weak';
-    case 'usable':
-      return 'bg-hero-usable';
-    case 'excellent':
-      return 'bg-hero-excellent';
-    case 'strong':
-    default:
-      return 'bg-hero-strong';
-  }
+export function lowerFirst(value: string): string {
+  return value.charAt(0).toLowerCase() + value.slice(1);
 }
