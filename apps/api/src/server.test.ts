@@ -1033,7 +1033,53 @@ describe('API vertical slice', () => {
     expect(String(body.analysis.summary)).toContain('well scoped');
     expect(String(body.analysis.signals.join(' '))).toContain('Direct implementation instructions are present.');
     expect(String(body.analysis.signals.join(' '))).toContain('Clear implementation boundaries are defined.');
-    expect(String(body.analysis.signals.join(' '))).toContain('Useful runtime and validation constraints are included.');
+    expect(String(body.analysis.signals.join(' '))).toMatch(
+      /Useful runtime and validation constraints are included\.|Slice A semantic path: validation, response behavior, and exclusions are explicit\./,
+    );
+  });
+
+  it('keeps synonym-bounded webhook implementation prompts in the same non-blocking state', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const canonicalResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const synonymResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Build a small Node.js endpoint in TypeScript for receiving webhook events as JSON. Check the body against a defined contract before processing it. Return HTTP 200 when the payload is accepted and HTTP 400 when the contract check fails. Log failures for debugging. Leave auth, signature checks, and business-rule enforcement out of scope.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const canonicalBody = JSON.parse(canonicalResponse.body);
+    const synonymBody = JSON.parse(synonymResponse.body);
+
+    expect(canonicalResponse.statusCode).toBe(200);
+    expect(synonymResponse.statusCode).toBe(200);
+    expect(canonicalBody.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(synonymBody.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(canonicalBody.gating.majorBlockingIssues).toBe(false);
+    expect(synonymBody.gating.majorBlockingIssues).toBe(false);
+    expect(synonymBody.rewriteRecommendation).toBe(canonicalBody.rewriteRecommendation);
+    expect(String(synonymBody.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
+    expect(String(synonymBody.bestNextMove?.rationale ?? '').toLowerCase()).toMatch(/schema|contract|auth|signature|idempot|payload/);
+    expect(Math.abs(Number(synonymBody.overallScore) - Number(canonicalBody.overallScore))).toBeLessThanOrEqual(10);
   });
 
   it('returns v2 suppressed response without rewrite for weak prompt', async () => {
