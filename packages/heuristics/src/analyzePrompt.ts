@@ -393,6 +393,38 @@ function hasScenarioContext(prompt: string): boolean {
   );
 }
 
+function hasTechnicalBranching(prompt: string): boolean {
+  const hasBranchLanguage =
+    /\b(on success|on failure|if valid|if invalid|success|failure|error|invalid|valid)\b/i.test(prompt);
+  const hasResponseHandling =
+    /\b(return|respond|http|status code|2\d\d|4\d\d|5\d\d|request body|response body)\b/i.test(prompt);
+
+  return hasBranchLanguage && hasResponseHandling;
+}
+
+function technicalBoundaryContrastScore(prompt: string, context?: Record<string, unknown>): 0 | 1 | 2 | 3 {
+  if (!isImplementationOrTransformationPrompt(prompt)) {
+    return 0;
+  }
+
+  const runtimeSpecificity =
+    /\b(node\.?js|typescript|python|go|java|json|schema|validate|validation|payload|request body|response body|error logging|http\s*(?:status|200|400|500))\b/i.test(
+      prompt,
+    );
+  const branching = hasTechnicalBranching(prompt);
+  const exclusions = hasExclusions(prompt, context);
+
+  if (runtimeSpecificity && branching && exclusions) {
+    return 3;
+  }
+
+  if ((runtimeSpecificity && branching) || (runtimeSpecificity && exclusions)) {
+    return 1;
+  }
+
+  return 0;
+}
+
 function hasLeadAngle(prompt: string): boolean {
   return /\b(lead with|tension|pain|risk|pressure|sprawl|overhead|readiness|governance)\b/i.test(prompt);
 }
@@ -591,7 +623,9 @@ function computeContrastScore(input: {
   const framing = framingDistinctivenessScore(input.prompt);
   const exclusions = exclusionDistinctivenessScore(input.prompt, input.context);
   const context = contextSpecificityScore(input.prompt, input.context);
-  const differentiatingSignalsPresent = audience >= 1 || framing >= 1 || exclusions >= 1 || context >= 1;
+  const technicalBoundaryContrast = technicalBoundaryContrastScore(input.prompt, input.context);
+  const differentiatingSignalsPresent =
+    audience >= 1 || framing >= 1 || exclusions >= 1 || context >= 1 || technicalBoundaryContrast >= 1;
   if (!differentiatingSignalsPresent) {
     return 0;
   }
@@ -606,7 +640,11 @@ function computeContrastScore(input: {
   );
 
   const highContrastBoost = input.mode === 'high_contrast' && framing >= 2 && (audience >= 1 || exclusions >= 1) ? 1 : 0;
-  return clamp(audience + framing + exclusions + context + support + highContrastBoost - genericPenalty, 0, 10);
+  return clamp(
+    audience + framing + exclusions + context + support + technicalBoundaryContrast + highContrastBoost - genericPenalty,
+    0,
+    10,
+  );
 }
 
 function computeClarityScore(prompt: string, overloaded: boolean): number {
@@ -732,6 +770,7 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
   const overloaded = input.role === 'marketer' ? isMarketerTaskOverloaded(prompt) : isTaskOverloaded(prompt);
   const foundGenericPhrases = detectGenericPhrases(prompt);
   const marketerSignals = input.role === 'marketer' ? deriveMarketerSignals(prompt, context) : undefined;
+  const implementationOrTransform = isImplementationOrTransformationPrompt(prompt);
 
   if (!constraintsPresent || prompt.length < 30) {
     pushIssue(
@@ -863,7 +902,6 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
   });
 
   const audienceMateriallyImportant = isAudienceMateriallyImportant(prompt, input.role);
-  const implementationOrTransform = isImplementationOrTransformationPrompt(prompt);
   if (
     !audiencePresent &&
     missingContextType === 'audience' &&
@@ -888,6 +926,19 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
     signals.push(`Most useful missing context appears to be ${missingContextType}.`);
   }
 
+  if (implementationOrTransform && constraintsPresent) {
+    signals.push('Direct implementation instructions are present.');
+  }
+  if (implementationOrTransform && (taskBoundaries(prompt, context) >= 1 || exclusionsPresent)) {
+    signals.push('Clear implementation boundaries are defined.');
+  }
+  if (
+    implementationOrTransform &&
+    /\b(schema|validate|validation|request body|status code|http 200|http 400|error logging)\b/i.test(prompt)
+  ) {
+    signals.push('Useful runtime and validation constraints are included.');
+  }
+
   const scores: ScoreSet = {
     ...baseScores,
     genericOutputRisk,
@@ -896,7 +947,9 @@ export function analyzePrompt(input: AnalyzeAndRewriteRequest): Analysis {
   const uniqueCodes = [...new Set(issues.map((issue) => issue.code))];
   const summary =
     issues.length === 0
-      ? 'Prompt quality is acceptable with low generic-output risk.'
+      ? implementationOrTransform
+        ? 'Prompt is well scoped with direct implementation instructions and useful constraints.'
+        : 'Prompt quality is acceptable with low generic-output risk.'
       : `Detected ${issues.length} quality issue(s); add the most relevant missing context and tighten boundaries for better output.`;
 
   return {
