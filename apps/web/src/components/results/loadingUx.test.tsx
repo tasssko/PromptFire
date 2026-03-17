@@ -19,6 +19,7 @@ describe('loading UX components', () => {
         role="general"
         mode="balanced"
         rewritePreference="auto"
+        theme="light"
         roles={['general', 'developer', 'marketer']}
         modes={['balanced', 'tight_scope', 'high_contrast', 'low_token_cost']}
         loading={true}
@@ -29,6 +30,7 @@ describe('loading UX components', () => {
         onRoleChange={vi.fn()}
         onModeChange={vi.fn()}
         onRewritePreferenceChange={vi.fn()}
+        onThemeChange={vi.fn()}
         onLoadGeneral={vi.fn()}
         onLoadMarketer={vi.fn()}
         onLoadDeveloper={vi.fn()}
@@ -38,6 +40,6 @@ describe('loading UX components', () => {
     expect(markup).toContain('<textarea rows="7" disabled=""');
     expect(markup).toContain('Analyzing');
     expect(markup.match(/<select disabled=""/g)?.length).toBe(3);
-    expect(markup.match(/type="button" disabled=""/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(markup.match(/<button[^>]*type="button"[^>]*disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
   });
 });

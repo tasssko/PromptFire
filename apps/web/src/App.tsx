@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { AnalyzeAndRewriteV2Response, Mode, RewritePreference, Role } from '@promptfire/shared';
 import { fixtures, modes, roles } from './config';
@@ -13,6 +13,7 @@ import {
   toProductState,
   type AnalysisUiState,
 } from './components/results';
+import { applyTheme, resolveInitialTheme, type ThemeMode } from './theme';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
 
@@ -21,6 +22,7 @@ export function App() {
   const [role, setRole] = useState<Role>('general');
   const [mode, setMode] = useState<Mode>('balanced');
   const [rewritePreference, setRewritePreference] = useState<RewritePreference>('auto');
+  const [theme, setTheme] = useState<ThemeMode>(() => resolveInitialTheme());
   const [loading, setLoading] = useState(false);
   const [uiState, setUiState] = useState<AnalysisUiState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +30,10 @@ export function App() {
   const [showOptionalRewrite, setShowOptionalRewrite] = useState(false);
 
   const canSubmit = useMemo(() => prompt.trim().length > 0 && !loading, [prompt, loading]);
+
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
 
   async function submitAnalysis(preferenceOverride?: RewritePreference) {
     setLoading(true);
@@ -100,6 +106,7 @@ export function App() {
         role={role}
         mode={mode}
         rewritePreference={rewritePreference}
+        theme={theme}
         roles={roles}
         modes={modes}
         loading={loading}
@@ -110,6 +117,7 @@ export function App() {
         onRoleChange={setRole}
         onModeChange={setMode}
         onRewritePreferenceChange={setRewritePreference}
+        onThemeChange={setTheme}
         onLoadGeneral={() => {
           setRole('general');
           setPrompt(fixtures.general);
@@ -141,7 +149,6 @@ export function App() {
           onToggleOptionalRewrite={() => setShowOptionalRewrite((value) => !value)}
           onForceRewrite={handleForceRewrite}
           onCopyPrompt={copyText}
-          onSetShowOptionalRewrite={setShowOptionalRewrite}
         />
       )}
     </main>
