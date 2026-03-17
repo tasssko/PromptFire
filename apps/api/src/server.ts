@@ -1,5 +1,15 @@
 import { createHash } from 'node:crypto';
-import { analyzePrompt, detectPatternFit, evaluateRewrite, generateBestNextMove, generateImprovementSuggestions } from '@promptfire/heuristics';
+import {
+  analyzePrompt,
+  buildDeveloperImplementationDecision,
+  classifyDeveloperImplementationPrompt,
+  detectPatternFit,
+  evaluateRewrite,
+  generateBestNextMove,
+  generateDeveloperImplementationFindings,
+  generateImprovementSuggestions,
+  projectDeveloperImplementationScores,
+} from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
 import {
   AnalyzeAndRewriteV2RequestSchema,
@@ -14,7 +24,9 @@ import {
   type AnalyzeAndRewriteV2Request,
   type AnalyzeAndRewriteV2Response,
   type Analysis,
+  type BestNextMove,
   type Issue,
+  type Role,
   type RewriteRecommendation,
   type RewritePreference,
   type ScoreBand,
@@ -1049,12 +1061,28 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       });
     }
 
+    const sliceAClassification = classifyDeveloperImplementationPrompt(input.prompt, input.role);
+    const sliceAInScope = sliceAClassification.extraction.inScope;
+    const sliceADecision = sliceAInScope
+      ? buildDeveloperImplementationDecision(sliceAClassification.context, input.rewritePreference)
+      : null;
+
+    if (sliceAInScope && sliceADecision) {
+      resolvedAnalysis = {
+        ...resolvedAnalysis,
+        scores: projectDeveloperImplementationScores(resolvedAnalysis.scores, sliceAClassification.context, sliceADecision),
+      };
+    }
+
     const overallScore = computeOverallScore(resolvedAnalysis.scores);
     const scoreBand = scoreBandFromOverallScore(overallScore);
-    const expectedImprovement = hasLowExpectedImprovementV2(resolvedAnalysis.scores, input.prompt, resolvedContext)
-      ? 'low'
-      : 'high';
-    const majorBlockingIssues = hasMajorBlockingIssues(resolvedAnalysis.issues);
+    const expectedImprovement = sliceADecision
+      ? sliceADecision.expectedImprovement
+      : hasLowExpectedImprovementV2(resolvedAnalysis.scores, input.prompt, resolvedContext)
+        ? 'low'
+        : 'high';
+    const publicExpectedImprovement = expectedImprovement === 'low' ? 'low' : 'high';
+    const majorBlockingIssues = sliceADecision ? sliceADecision.majorBlockingIssues : hasMajorBlockingIssues(resolvedAnalysis.issues);
     const cleanStrongPrompt = expectedImprovement === 'low' && resolvedAnalysis.issues.length === 0;
     const shouldSuppressByStrength =
       (overallScore >= 75 || cleanStrongPrompt) &&
@@ -1062,23 +1090,25 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       expectedImprovement === 'low' &&
       input.rewritePreference !== 'force';
     const shouldSuppress = input.rewritePreference === 'suppress' || shouldSuppressByStrength;
-    let rewriteRecommendation = recommendationFromState({
+    let rewriteRecommendation = sliceADecision?.rewriteRecommendation ?? recommendationFromState({
       overallScore,
       rewritePreference: input.rewritePreference,
       shouldSuppress,
       expectedImprovementLow: expectedImprovement === 'low',
     });
-    if (
-      rewriteRecommendation === 'rewrite_recommended' &&
-      shouldFloorDeveloperRecommendation({
-        role: input.role,
-        prompt: input.prompt,
-        context: resolvedContext,
-        analysis: resolvedAnalysis,
-        majorBlockingIssues,
-      })
-    ) {
-      rewriteRecommendation = 'rewrite_optional';
+    if (!sliceADecision) {
+      if (
+        rewriteRecommendation === 'rewrite_recommended' &&
+        shouldFloorDeveloperRecommendation({
+          role: input.role,
+          prompt: input.prompt,
+          context: resolvedContext,
+          analysis: resolvedAnalysis,
+          majorBlockingIssues,
+        })
+      ) {
+        rewriteRecommendation = 'rewrite_optional';
+      }
     }
     const improvementSuggestions = generateImprovementSuggestions({
       input: effectiveInput,
@@ -1089,7 +1119,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       patternFit,
       effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
-    const bestNextMove = generateBestNextMove({
+    const generatedBestNextMove = generateBestNextMove({
       input: effectiveInput,
       analysis: resolvedAnalysis,
       overallScore,
@@ -1098,6 +1128,11 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       patternFit,
       effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
+    const sliceAFindings =
+      sliceAInScope && sliceADecision
+        ? generateDeveloperImplementationFindings(resolvedAnalysis, sliceAClassification.context, sliceADecision)
+        : null;
+    const bestNextMove: BestNextMove | null = sliceAFindings?.bestNextMove ?? generatedBestNextMove;
 
     try {
       let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
@@ -1200,20 +1235,26 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         rewritePresentationMode = 'suppressed';
       }
 
+      const finalIssues = sliceAFindings?.issues ?? resolvedAnalysis.issues;
+      const finalSignalsBase = sliceAFindings?.signals ?? resolvedAnalysis.signals;
       const analysis: Analysis = {
         ...resolvedAnalysis,
+        issues: finalIssues,
+        detectedIssueCodes: [...new Set(finalIssues.map((issue) => issue.code))],
         signals:
-          expectedImprovement === 'low' && !resolvedAnalysis.signals.includes('Low expected improvement.')
-            ? [...resolvedAnalysis.signals, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
-            : [...resolvedAnalysis.signals, bestImprovementPath(patternFit.primary)].slice(0, 12),
-        summary: summaryForV2({
-          recommendation: rewriteRecommendation,
-          rewritePreference: input.rewritePreference,
-          generatedRewrite: rewrite !== null,
-          role: input.role,
-          prompt: input.prompt,
-          context: resolvedContext,
-        }),
+          expectedImprovement === 'low' && !finalSignalsBase.includes('Low expected improvement.')
+            ? [...finalSignalsBase, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
+            : [...finalSignalsBase, bestImprovementPath(patternFit.primary)].slice(0, 12),
+        summary:
+          sliceAFindings?.summary ??
+          summaryForV2({
+            recommendation: rewriteRecommendation,
+            rewritePreference: input.rewritePreference,
+            generatedRewrite: rewrite !== null,
+            role: input.role,
+            prompt: input.prompt,
+            context: resolvedContext,
+          }),
       };
       const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
       const payload: AnalyzeAndRewriteV2Response = {
@@ -1226,7 +1267,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         bestNextMove,
         gating: {
           rewritePreference: input.rewritePreference,
-          expectedImprovement,
+          expectedImprovement: publicExpectedImprovement,
           majorBlockingIssues,
         },
         rewrite,

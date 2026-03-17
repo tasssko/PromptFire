@@ -5,3 +5,8 @@ export * from './improvementSuggestions';
 export * from './opportunityEngine';
 export * from './patternFit';
 export * from './missingContext';
+export * from './semantic/sliceA/extractDeveloperImplementationTags';
+export * from './semantic/sliceA/buildDeveloperImplementationContext';
+export * from './semantic/sliceA/buildDeveloperImplementationDecision';
+export * from './semantic/sliceA/generateDeveloperImplementationFindings';
+export * from './semantic/sliceA/projectDeveloperImplementationScores';
