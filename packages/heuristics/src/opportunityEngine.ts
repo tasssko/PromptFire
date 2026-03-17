@@ -123,7 +123,18 @@ function hasResponseOutcome(prompt: string): boolean {
 }
 
 function hasSpecificBuyerContext(prompt: string): boolean {
-  return /\b(cto|ctos|ciso|cisos|vp|vps|directors?|managers?|operators?|admins?|buyers?|decision-makers?|procurement)\b/i.test(prompt);
+  return /\b(cto|ctos|ciso|cisos|vp|vps|directors?|managers?|operators?|admins?|buyers?|decision[-\s]?makers?|procurement|it leaders?)\b/i.test(
+    prompt,
+  );
+}
+
+function hasCompanySegment(prompt: string, context?: Record<string, unknown>): boolean {
+  return (
+    Boolean(context?.audienceHint || context?.companySegment) ||
+    /\b(mid[-\s]?sized|enterprise|enterprises|smb|small business|startup|startups|scale[-\s]?ups?|public sector|regulated industries?)\b/i.test(
+      prompt,
+    )
+  );
 }
 
 function hasLandingPageBuyerContext(prompt: string, context?: Record<string, unknown>): boolean {
@@ -131,7 +142,7 @@ function hasLandingPageBuyerContext(prompt: string, context?: Record<string, unk
     return true;
   }
 
-  return hasSpecificBuyerContext(prompt);
+  return hasSpecificBuyerContext(prompt) || (hasAudience(prompt, context) && hasCompanySegment(prompt, context));
 }
 
 function hasTaskOverload(prompt: string): boolean {
@@ -424,7 +435,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
     (params.input.role !== 'developer' || missingContextType === 'audience') &&
     (
       theme === 'landing_page'
-        ? !hasAudience(prompt, context) || issueSet.has('AUDIENCE_MISSING') || !landingPageHasBuyerContext
+        ? !hasAudience(prompt, context) || !landingPageHasBuyerContext
         : !hasAudience(prompt, context) || issueSet.has('AUDIENCE_MISSING') || params.analysis.scores.scope <= 5
     );
   if (shouldSuggestAudience) {

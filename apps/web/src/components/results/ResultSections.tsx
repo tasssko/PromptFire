@@ -3,11 +3,12 @@ import { ImpactBadge, MetricTile, Section, SurfaceCard, TechnicalMetric, section
 import {
   bandLabel,
   formatSuggestionTitle,
-  lowerFirst,
   methodFitLabel,
   scoreDimensionLabel,
-  verdictCopy,
+  type GuidedCompletionView,
   type HeroView,
+  type NoRewriteView,
+  type RewritePanelView,
 } from './helpers';
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -17,20 +18,11 @@ function cx(...classes: Array<string | false | null | undefined>) {
 type HeroCardProps = {
   result: AnalyzeAndRewriteV2Response;
   hero: HeroView;
-  primaryActionLabel: string;
-  secondaryActionLabel?: string;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
 };
 
-export function HeroCard({
-  result,
-  hero,
-  primaryActionLabel,
-  secondaryActionLabel,
-  onPrimaryAction,
-  onSecondaryAction,
-}: HeroCardProps) {
+export function HeroCard({ result, hero, onPrimaryAction, onSecondaryAction }: HeroCardProps) {
   return (
     <section className={cx('pf-hero-card', `pf-hero-${result.scoreBand}`)}>
       <p className="text-[0.8rem] uppercase tracking-[0.08em] text-pf-text-inverse">Overall score</p>
@@ -46,11 +38,11 @@ export function HeroCard({
       <p className="max-w-[42rem] text-pf-text-inverse">{hero.supporting}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" className="pf-button-primary-on-hero" onClick={onPrimaryAction}>
-          {primaryActionLabel}
+          {hero.primaryAction}
         </button>
-        {secondaryActionLabel && onSecondaryAction && (
+        {hero.secondaryAction && onSecondaryAction && (
           <button type="button" className="pf-button-ghost-on-hero" onClick={onSecondaryAction}>
-            {secondaryActionLabel}
+            {hero.secondaryAction}
           </button>
         )}
       </div>
@@ -58,9 +50,9 @@ export function HeroCard({
   );
 }
 
-export function FindingsList({ findings }: { findings: string[] }) {
+export function FindingsList({ findings, title }: { findings: string[]; title: string }) {
   return (
-    <Section title="Key findings">
+    <Section title={title}>
       <ul className="grid list-disc gap-2 pl-[1.2rem]">
         {findings.map((finding) => (
           <li key={finding} className="text-pf-text-secondary">
@@ -72,9 +64,9 @@ export function FindingsList({ findings }: { findings: string[] }) {
   );
 }
 
-export function ScoreBreakdown({ result }: { result: AnalyzeAndRewriteV2Response }) {
+export function ScoreBreakdown({ result, title }: { result: AnalyzeAndRewriteV2Response; title: string }) {
   return (
-    <Section title="Score breakdown">
+    <Section title={title}>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
         <MetricTile label="Scope" value={result.analysis.scores.scope} />
         <MetricTile label="Contrast" value={result.analysis.scores.contrast} />
@@ -87,11 +79,11 @@ export function ScoreBreakdown({ result }: { result: AnalyzeAndRewriteV2Response
   );
 }
 
-export function NextStepCard({ bestNextMove, optional = false }: { bestNextMove: BestNextMove; optional?: boolean }) {
+export function NextStepCard({ bestNextMove, title }: { bestNextMove: BestNextMove; title: string }) {
   return (
     <SurfaceCard tone="suggestion">
       <div className="flex items-center justify-between gap-2">
-        <h2 className={sectionTitleClass}>{optional ? 'Optional next step' : 'Next step'}</h2>
+        <h2 className={sectionTitleClass}>{title}</h2>
         <ImpactBadge impact={bestNextMove.expectedImpact} />
       </div>
       <p className="font-semibold text-pf-text-primary">{bestNextMove.title}</p>
@@ -107,26 +99,25 @@ export function NextStepCard({ bestNextMove, optional = false }: { bestNextMove:
 
 type FullRewriteCardProps = {
   result: AnalyzeAndRewriteV2Response;
+  view: RewritePanelView;
   onCopyRewrite: () => void;
 };
 
-export function FullRewriteCard({ result, onCopyRewrite }: FullRewriteCardProps) {
+export function FullRewriteCard({ result, view, onCopyRewrite }: FullRewriteCardProps) {
   if (!result.rewrite || !result.evaluation) {
     return null;
   }
 
-  const verdict = verdictCopy(result.evaluation);
-
   return (
     <SurfaceCard tone="rewrite">
-      <h2 className={sectionTitleClass}>Recommended rewrite</h2>
-      <p className="font-semibold text-pf-text-primary">{verdict.label}</p>
-      <p>{verdict.recommendation}</p>
+      <h2 className={sectionTitleClass}>{view.title}</h2>
+      <p className="font-semibold text-pf-text-primary">{view.verdictLabel}</p>
+      <p>{view.verdictRecommendation}</p>
       <pre>{result.rewrite.rewrittenPrompt}</pre>
       {result.rewrite.explanation && <p>{result.rewrite.explanation}</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="pf-button-primary" onClick={onCopyRewrite}>
-          Copy rewritten prompt
+          {view.primaryActionLabel}
         </button>
       </div>
     </SurfaceCard>
@@ -137,6 +128,7 @@ type GuidedCompletionCardProps = {
   prompt: string;
   result: AnalyzeAndRewriteV2Response;
   topSuggestions: ImprovementSuggestion[];
+  view: GuidedCompletionView;
   showOptionalRewrite: boolean;
   onCopyPrompt: (value: string) => void;
   onToggleOptionalRewrite: () => void;
@@ -147,6 +139,7 @@ export function GuidedCompletionCard({
   prompt,
   result,
   topSuggestions,
+  view,
   showOptionalRewrite,
   onCopyPrompt,
   onToggleOptionalRewrite,
@@ -154,19 +147,7 @@ export function GuidedCompletionCard({
 }: GuidedCompletionCardProps) {
   const guidedCompletion = result.guidedCompletion ?? null;
   const questionsText = (guidedCompletion?.questions ?? []).map((question, index) => `${index + 1}. ${question}`).join('\n');
-  const primaryLabel = guidedCompletion?.template
-    ? 'Copy template'
-    : guidedCompletion?.example
-      ? 'Copy example'
-      : questionsText
-        ? 'Copy questions'
-        : 'Copy original prompt';
   const primaryValue = guidedCompletion?.template ?? guidedCompletion?.example ?? (questionsText || prompt);
-  const summary =
-    guidedCompletion?.summary ??
-    (result.bestNextMove
-      ? `Start by ${lowerFirst(result.bestNextMove.title)}. ${result.bestNextMove.rationale}`
-      : 'Tighten the missing boundaries before spending time on a rewrite.');
   const fallbackList =
     topSuggestions.length > 0
       ? topSuggestions.slice(0, 2).map((suggestion) => `${formatSuggestionTitle(suggestion)}: ${suggestion.reason}`)
@@ -175,11 +156,9 @@ export function GuidedCompletionCard({
 
   return (
     <SurfaceCard tone="suggestion">
-      <h2 className={sectionTitleClass}>{guidedCompletion?.title ?? 'Guided completion'}</h2>
-      <p className="font-semibold text-pf-text-primary">
-        {guidedCompletion?.title ?? (result.bestNextMove ? result.bestNextMove.title : 'Complete the missing details first')}
-      </p>
-      <p>{summary}</p>
+      <h2 className={sectionTitleClass}>{view.title}</h2>
+      {view.detailTitle && <p className="font-semibold text-pf-text-primary">{view.detailTitle}</p>}
+      <p>{view.summary}</p>
 
       {guidedCompletion?.questions && guidedCompletion.questions.length > 0 && (
         <ul className="grid list-disc gap-1 pl-[1.2rem]">
@@ -199,45 +178,41 @@ export function GuidedCompletionCard({
 
       {guidedCompletion?.template && (
         <>
-          <p className="font-semibold text-pf-text-primary">Template</p>
+          <p className="font-semibold text-pf-text-primary">{view.templateLabel}</p>
           <pre>{guidedCompletion.template}</pre>
         </>
       )}
 
       {!guidedCompletion?.template && guidedCompletion?.example && (
         <>
-          <p className="font-semibold text-pf-text-primary">Example</p>
+          <p className="font-semibold text-pf-text-primary">{view.exampleLabel}</p>
           <pre>{guidedCompletion.example}</pre>
         </>
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="pf-button-primary"
-          onClick={() => onCopyPrompt(primaryValue)}
-        >
-          {primaryLabel}
+        <button type="button" className="pf-button-primary" onClick={() => onCopyPrompt(primaryValue)}>
+          {view.primaryActionLabel}
         </button>
-        {hiddenRewrite && (
+        {hiddenRewrite && view.secondaryActionLabel && (
           <button type="button" className="pf-button-secondary" onClick={onToggleOptionalRewrite}>
-            {showOptionalRewrite ? 'Hide rewrite anyway' : 'Show rewrite anyway'}
+            {showOptionalRewrite ? view.secondaryActionExpandedLabel : view.secondaryActionLabel}
           </button>
         )}
         {!result.rewrite && (
           <button type="button" className="pf-button-secondary" onClick={() => void onForceRewrite()}>
-            Generate rewrite anyway
+            {view.forceRewriteLabel}
           </button>
         )}
       </div>
 
       {hiddenRewrite && showOptionalRewrite && result.rewrite && (
         <SurfaceCard tone="rewrite" className="mt-1">
-          <p className="font-semibold text-pf-text-primary">Rewrite preview</p>
+          <p className="font-semibold text-pf-text-primary">{view.rewritePreviewTitle}</p>
           <pre>{result.rewrite.rewrittenPrompt}</pre>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="pf-button-secondary" onClick={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)}>
-              Copy rewrite anyway
+              {view.previewCopyLabel}
             </button>
           </div>
         </SurfaceCard>
@@ -249,6 +224,7 @@ export function GuidedCompletionCard({
 type NoRewriteNeededCardProps = {
   result: AnalyzeAndRewriteV2Response;
   prompt: string;
+  view: NoRewriteView;
   showOptionalRewrite: boolean;
   onCopyPrompt: (value: string) => void;
   onToggleOptionalRewrite: () => void;
@@ -258,6 +234,7 @@ type NoRewriteNeededCardProps = {
 export function NoRewriteNeededCard({
   result,
   prompt,
+  view,
   showOptionalRewrite,
   onCopyPrompt,
   onToggleOptionalRewrite,
@@ -265,25 +242,19 @@ export function NoRewriteNeededCard({
 }: NoRewriteNeededCardProps) {
   return (
     <SurfaceCard tone="verdict">
-      <h2 className={sectionTitleClass}>No rewrite needed</h2>
-      <p className="font-semibold text-pf-text-primary">
-        {result.gating.rewritePreference === 'suppress' ? 'Rewrite suppressed by preference' : 'The current prompt is already strong'}
-      </p>
-      <p>
-        {result.gating.rewritePreference === 'suppress'
-          ? 'You asked to suppress rewrites, and the current prompt is already in good shape.'
-          : 'The expected gain from rewriting is low, so the original prompt remains the best default.'}
-      </p>
+      <h2 className={sectionTitleClass}>{view.title}</h2>
+      <p className="font-semibold text-pf-text-primary">{view.label}</p>
+      <p>{view.supporting}</p>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="pf-button-primary" onClick={() => onCopyPrompt(prompt)}>
-          Copy original prompt
+          {view.primaryActionLabel}
         </button>
         <button
           type="button"
           className="pf-button-secondary"
           onClick={result.rewrite ? onToggleOptionalRewrite : () => void onForceRewrite()}
         >
-          {result.rewrite ? (showOptionalRewrite ? 'Hide rewrite anyway' : 'Show rewrite anyway') : 'Generate rewrite anyway'}
+          {result.rewrite ? (showOptionalRewrite ? view.secondaryActionExpandedLabel : view.secondaryActionLabel) : view.secondaryActionLabel}
         </button>
       </div>
 
@@ -292,7 +263,7 @@ export function NoRewriteNeededCard({
           <pre>{result.rewrite.rewrittenPrompt}</pre>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="pf-button-secondary" onClick={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)}>
-              Copy rewrite anyway
+              {view.previewCopyLabel}
             </button>
           </div>
         </SurfaceCard>
@@ -304,15 +275,17 @@ export function NoRewriteNeededCard({
 export function TechnicalDetailsDrawer({
   result,
   topSuggestions,
+  title,
 }: {
   result: AnalyzeAndRewriteV2Response;
   topSuggestions: ImprovementSuggestion[];
+  title: string;
 }) {
   const rewritePresentationMode = result.rewritePresentationMode ?? (result.rewrite ? 'full_rewrite' : 'suppressed');
 
   return (
     <details className="border-t border-pf-border-subtle pt-3">
-      <summary className="cursor-pointer text-pf-text-muted">Technical details</summary>
+      <summary className="cursor-pointer text-pf-text-muted">{title}</summary>
       <div className="my-3 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-x-4 gap-y-2">
         <TechnicalMetric>
           Recommendation <strong>{result.rewriteRecommendation}</strong>
@@ -354,7 +327,6 @@ export function TechnicalDetailsDrawer({
       {result.evaluation && (
         <SurfaceCard tone="default">
           <p className="font-semibold text-pf-text-primary">Rewrite evaluation</p>
-          <p>{verdictCopy(result.evaluation).recommendation}</p>
           <div className="grid gap-1">
             {(['scope', 'contrast', 'clarity'] as const).map((dimension) => (
               <p key={dimension}>

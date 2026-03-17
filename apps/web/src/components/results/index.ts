@@ -3,8 +3,13 @@ export { ResultsCard } from './ResultsCard';
 export { LoadingCard } from './LoadingCard';
 export {
   toProductState,
-  heroCopy,
-  suggestedFindings,
+  resolveActionModule,
+  resolveFindingIds,
+  resolveHeroView,
+  resolveResultsPresentation,
+  resolveSectionTitles,
+  resolveVerdictId,
+  resolveVisibleSections,
   type ProductState,
 } from './helpers';
 export {

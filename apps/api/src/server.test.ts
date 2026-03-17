@@ -453,10 +453,14 @@ describe('API vertical slice', () => {
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
     expect(body.analysis.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
+    expect(body.bestNextMove).toBeTruthy();
     expect(body.bestNextMove?.id).not.toBe('add_buyer_context');
     expect(body.bestNextMove?.type).not.toBe('shift_to_audience_outcome_pattern');
     expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/buyer context|audience/);
     expect(String(body.bestNextMove?.rationale ?? '').toLowerCase()).not.toMatch(/buyer context|audience.*missing|lacks clear buyer/);
+    expect(['add_framing_boundary', 'clarify_output_structure', 'add_proof_requirement', 'add_exclusion']).toContain(
+      body.bestNextMove?.type,
+    );
   });
 
   it('improves low-contrast general prompts without inventing specific business context or drifting task type', async () => {
