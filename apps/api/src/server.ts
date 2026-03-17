@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto';
 import {
   analyzePrompt,
-  buildDeveloperImplementationDecision,
-  classifyDeveloperImplementationPrompt,
+  buildDecisionState,
+  classifySemanticPrompt,
   detectPatternFit,
+  deriveFindings,
   evaluateRewrite,
   generateBestNextMove,
-  generateDeveloperImplementationFindings,
   generateImprovementSuggestions,
-  projectDeveloperImplementationScores,
+  projectScores,
 } from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
 import {
@@ -1061,28 +1061,28 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       });
     }
 
-    const sliceAClassification = classifyDeveloperImplementationPrompt(input.prompt, input.role);
-    const sliceAInScope = sliceAClassification.extraction.inScope;
-    const sliceADecision = sliceAInScope
-      ? buildDeveloperImplementationDecision(sliceAClassification.context, input.rewritePreference)
+    const semanticClassification = classifySemanticPrompt(input.prompt, input.role);
+    const semanticPathInScope = semanticClassification.extraction.inScope;
+    const semanticDecision = semanticPathInScope
+      ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
       : null;
 
-    if (sliceAInScope && sliceADecision) {
+    if (semanticPathInScope && semanticDecision) {
       resolvedAnalysis = {
         ...resolvedAnalysis,
-        scores: projectDeveloperImplementationScores(resolvedAnalysis.scores, sliceAClassification.context, sliceADecision),
+        scores: projectScores(resolvedAnalysis.scores, semanticClassification.inventory, semanticDecision),
       };
     }
 
     const overallScore = computeOverallScore(resolvedAnalysis.scores);
     const scoreBand = scoreBandFromOverallScore(overallScore);
-    const expectedImprovement = sliceADecision
-      ? sliceADecision.expectedImprovement
+    const expectedImprovement = semanticDecision
+      ? semanticDecision.expectedImprovement
       : hasLowExpectedImprovementV2(resolvedAnalysis.scores, input.prompt, resolvedContext)
         ? 'low'
         : 'high';
     const publicExpectedImprovement = expectedImprovement === 'low' ? 'low' : 'high';
-    const majorBlockingIssues = sliceADecision ? sliceADecision.majorBlockingIssues : hasMajorBlockingIssues(resolvedAnalysis.issues);
+    const majorBlockingIssues = semanticDecision ? semanticDecision.majorBlockingIssues : hasMajorBlockingIssues(resolvedAnalysis.issues);
     const cleanStrongPrompt = expectedImprovement === 'low' && resolvedAnalysis.issues.length === 0;
     const shouldSuppressByStrength =
       (overallScore >= 75 || cleanStrongPrompt) &&
@@ -1090,13 +1090,13 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       expectedImprovement === 'low' &&
       input.rewritePreference !== 'force';
     const shouldSuppress = input.rewritePreference === 'suppress' || shouldSuppressByStrength;
-    let rewriteRecommendation = sliceADecision?.rewriteRecommendation ?? recommendationFromState({
+    let rewriteRecommendation = semanticDecision?.rewriteRecommendation ?? recommendationFromState({
       overallScore,
       rewritePreference: input.rewritePreference,
       shouldSuppress,
       expectedImprovementLow: expectedImprovement === 'low',
     });
-    if (!sliceADecision) {
+    if (!semanticDecision) {
       if (
         rewriteRecommendation === 'rewrite_recommended' &&
         shouldFloorDeveloperRecommendation({
@@ -1128,11 +1128,11 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       patternFit,
       effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
-    const sliceAFindings =
-      sliceAInScope && sliceADecision
-        ? generateDeveloperImplementationFindings(resolvedAnalysis, sliceAClassification.context, sliceADecision)
+    const semanticFindings =
+      semanticPathInScope && semanticDecision
+        ? deriveFindings(resolvedAnalysis, semanticClassification.inventory, semanticDecision)
         : null;
-    const bestNextMove: BestNextMove | null = sliceAFindings?.bestNextMove ?? generatedBestNextMove;
+    const bestNextMove: BestNextMove | null = semanticFindings?.bestNextMove ?? generatedBestNextMove;
 
     try {
       let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
@@ -1235,8 +1235,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         rewritePresentationMode = 'suppressed';
       }
 
-      const finalIssues = sliceAFindings?.issues ?? resolvedAnalysis.issues;
-      const finalSignalsBase = sliceAFindings?.signals ?? resolvedAnalysis.signals;
+      const finalIssues = semanticFindings?.issues ?? resolvedAnalysis.issues;
+      const finalSignalsBase = semanticFindings?.signals ?? resolvedAnalysis.signals;
       const analysis: Analysis = {
         ...resolvedAnalysis,
         issues: finalIssues,
@@ -1246,7 +1246,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
             ? [...finalSignalsBase, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
             : [...finalSignalsBase, bestImprovementPath(patternFit.primary)].slice(0, 12),
         summary:
-          sliceAFindings?.summary ??
+          semanticFindings?.summary ??
           summaryForV2({
             recommendation: rewriteRecommendation,
             rewritePreference: input.rewritePreference,

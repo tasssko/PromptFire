@@ -1,16 +1,12 @@
 import type { ScoreSet } from '@promptfire/shared';
-import type { SliceAContextInventory } from './buildDeveloperImplementationContext';
-import type { SliceADecisionState } from './buildDeveloperImplementationDecision';
+import type { DecisionState } from './buildDecision';
+import type { ContextInventory } from './buildInventory';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function projectDeveloperImplementationScores(
-  scores: ScoreSet,
-  context: SliceAContextInventory,
-  decision: SliceADecisionState,
-): ScoreSet {
+export function projectScores(scores: ScoreSet, context: ContextInventory, decision: DecisionState): ScoreSet {
   if (!context.deliverable.handlerLike || !context.deliverable.codeLike) {
     return scores;
   }

@@ -1,6 +1,7 @@
-import { extractDeveloperImplementationTags, type SliceATagExtraction, type SliceASemanticTag } from './extractDeveloperImplementationTags';
+import type { Role } from '@promptfire/shared';
+import { extractSemanticTags, type SemanticTag, type SemanticTagExtraction } from './extractTags';
 
-export interface SliceAContextInventory {
+export interface ContextInventory {
   deliverable: {
     handlerLike: boolean;
     codeLike: boolean;
@@ -39,16 +40,16 @@ export interface SliceAContextInventory {
   };
 }
 
-export interface SliceAClassification {
-  extraction: SliceATagExtraction;
-  context: SliceAContextInventory;
+export interface SemanticClassification {
+  extraction: SemanticTagExtraction;
+  inventory: ContextInventory;
 }
 
-function hasTag(tags: SliceASemanticTag[], tag: SliceASemanticTag): boolean {
+function hasTag(tags: SemanticTag[], tag: SemanticTag): boolean {
   return tags.includes(tag);
 }
 
-export function buildDeveloperImplementationContext(extraction: SliceATagExtraction): SliceAContextInventory {
+export function buildContextInventory(extraction: SemanticTagExtraction): ContextInventory {
   const { evidence, tags } = extraction;
   const executionPresent =
     hasTag(tags, 'has_runtime_context') || hasTag(tags, 'has_framework_context') || hasTag(tags, 'has_language_context');
@@ -102,10 +103,10 @@ export function buildDeveloperImplementationContext(extraction: SliceATagExtract
   };
 }
 
-export function classifyDeveloperImplementationPrompt(prompt: string, role: import('@promptfire/shared').Role): SliceAClassification {
-  const extraction = extractDeveloperImplementationTags(prompt, role);
+export function classifySemanticPrompt(prompt: string, role: Role): SemanticClassification {
+  const extraction = extractSemanticTags(prompt, role);
   return {
     extraction,
-    context: buildDeveloperImplementationContext(extraction),
+    inventory: buildContextInventory(extraction),
   };
 }

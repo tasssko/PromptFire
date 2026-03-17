@@ -1,8 +1,8 @@
 import type { Analysis, BestNextMove, Issue } from '@promptfire/shared';
-import type { SliceAContextInventory } from './buildDeveloperImplementationContext';
-import type { SliceADecisionState } from './buildDeveloperImplementationDecision';
+import type { DecisionState } from './buildDecision';
+import type { ContextInventory } from './buildInventory';
 
-export interface SliceAFindings {
+export interface SemanticFindings {
   issues: Issue[];
   signals: string[];
   summary: string;
@@ -21,7 +21,7 @@ function dedupeIssues(issues: Issue[]): Issue[] {
   });
 }
 
-function buildBestNextMove(context: SliceAContextInventory, decision: SliceADecisionState): BestNextMove | null {
+function buildBestNextMove(context: ContextInventory, decision: DecisionState): BestNextMove | null {
   if (decision.semanticState === 'strong') {
     return {
       id: 'define_contract_detail',
@@ -75,11 +75,7 @@ function buildBestNextMove(context: SliceAContextInventory, decision: SliceADeci
   };
 }
 
-export function generateDeveloperImplementationFindings(
-  analysis: Analysis,
-  context: SliceAContextInventory,
-  decision: SliceADecisionState,
-): SliceAFindings {
+export function deriveFindings(analysis: Analysis, context: ContextInventory, decision: DecisionState): SemanticFindings {
   const issues = analysis.issues.filter((issue) => {
     if (context.boundedness.isBounded && issue.code === 'CONSTRAINTS_MISSING') {
       return false;
@@ -115,13 +111,13 @@ export function generateDeveloperImplementationFindings(
 
   const signals = analysis.signals.filter((signal) => !/\b(runtime|language)\b/i.test(signal) || !context.boundedness.isBounded);
   if (context.boundedness.isBounded) {
-    signals.push('Slice A semantic path: bounded developer implementation prompt detected.');
+    signals.push('Semantic path: bounded prompt detected.');
   }
   if (context.executionContext.present && context.validationContext.present) {
     signals.push('Useful runtime and validation constraints are included.');
   }
   if (decision.semanticState === 'strong') {
-    signals.push('Slice A semantic path: validation, response behavior, and exclusions are explicit.');
+    signals.push('Semantic path: validation, response behavior, and exclusions are explicit.');
   }
 
   const summary =

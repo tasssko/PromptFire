@@ -1,6 +1,6 @@
 import type { Role } from '@promptfire/shared';
 
-export type SliceASemanticTag =
+export type SemanticTag =
   | 'has_code_deliverable'
   | 'has_handler_deliverable'
   | 'has_runtime_context'
@@ -15,20 +15,16 @@ export type SliceASemanticTag =
   | 'has_operational_retry_or_idempotency'
   | 'has_internal_contradiction';
 
-export type SliceATaskClass = 'implementation' | 'other';
+export type TaskClass = 'implementation' | 'other';
 
-export interface SliceATagExtraction {
-  taskClass: SliceATaskClass;
+export interface SemanticTagExtraction {
+  taskClass: TaskClass;
   inScope: boolean;
-  tags: SliceASemanticTag[];
-  evidence: Partial<Record<SliceASemanticTag, string[]>>;
+  tags: SemanticTag[];
+  evidence: Partial<Record<SemanticTag, string[]>>;
 }
 
-function pushEvidence(
-  evidence: Partial<Record<SliceASemanticTag, string[]>>,
-  tag: SliceASemanticTag,
-  values: string[],
-): void {
+function pushEvidence(evidence: Partial<Record<SemanticTag, string[]>>, tag: SemanticTag, values: string[]): void {
   if (values.length > 0) {
     evidence[tag] = values;
   }
@@ -38,17 +34,17 @@ function collect(patterns: Array<[string, RegExp]>, prompt: string): string[] {
   return patterns.filter(([, pattern]) => pattern.test(prompt)).map(([label]) => label);
 }
 
-function hasImplementationIntent(prompt: string): boolean {
+function hasCurrentNarrowIntent(prompt: string): boolean {
   return (
     /\b(write|build|implement|create|develop)\b/i.test(prompt) &&
     /\b(webhook|handler|endpoint|route|api|function|serverless)\b/i.test(prompt)
   );
 }
 
-export function extractDeveloperImplementationTags(prompt: string, role: Role): SliceATagExtraction {
-  const evidence: Partial<Record<SliceASemanticTag, string[]>> = {};
-  const tags = new Set<SliceASemanticTag>();
-  const taskClass: SliceATaskClass = role === 'developer' && hasImplementationIntent(prompt) ? 'implementation' : 'other';
+export function extractSemanticTags(prompt: string, role: Role): SemanticTagExtraction {
+  const evidence: Partial<Record<SemanticTag, string[]>> = {};
+  const tags = new Set<SemanticTag>();
+  const taskClass: TaskClass = role === 'developer' && hasCurrentNarrowIntent(prompt) ? 'implementation' : 'other';
 
   const codeDeliverableEvidence = collect(
     [
