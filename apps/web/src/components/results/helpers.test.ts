@@ -1,17 +1,242 @@
 import { describe, expect, it } from 'vitest';
-import { heroCopy, methodFitLabel, resolvePrimarySurface } from './helpers';
+import type { AnalyzeAndRewriteV2Response } from '@promptfire/shared';
+import {
+  resolveActionModule,
+  resolveFindingIds,
+  resolvePrimarySurface,
+  resolveResultsPresentation,
+  resolveVerdictId,
+} from './helpers';
 
-describe('methodFitLabel', () => {
-  it('renders public method-fit projections as plain language', () => {
-    expect(methodFitLabel('break_into_steps')).toBe('break the reasoning into steps');
-    expect(methodFitLabel('supply_missing_context')).toBe('supply the missing context');
+function buildResult(overrides: Partial<AnalyzeAndRewriteV2Response> = {}): AnalyzeAndRewriteV2Response {
+  return {
+    id: 'par_test',
+    overallScore: 58,
+    scoreBand: 'usable',
+    rewriteRecommendation: 'rewrite_optional',
+    analysis: {
+      scores: {
+        scope: 6,
+        contrast: 6,
+        clarity: 6,
+        constraintQuality: 5,
+        genericOutputRisk: 4,
+        tokenWasteRisk: 4,
+      },
+      issues: [],
+      detectedIssueCodes: [],
+      signals: [],
+      summary: 'Usable prompt.',
+    },
+    improvementSuggestions: [],
+    bestNextMove: null,
+    gating: {
+      rewritePreference: 'auto',
+      expectedImprovement: 'low',
+      majorBlockingIssues: false,
+    },
+    rewrite: null,
+    evaluation: null,
+    rewritePresentationMode: 'template_with_example',
+    guidedCompletion: {
+      mode: 'template_with_example',
+      title: 'Fill in the missing details',
+      summary: 'Add boundaries first.',
+      template: 'Write [deliverable].',
+    },
+    meta: {
+      version: '2',
+      requestId: 'req_1',
+      latencyMs: 1,
+      providerMode: 'mock',
+    },
+    ...overrides,
+  };
+}
+
+describe('results presentation resolvers', () => {
+  it('resolves hero copy from config for strong prompts', () => {
+    const presentation = resolveResultsPresentation(
+      buildResult({
+        scoreBand: 'excellent',
+        rewriteRecommendation: 'no_rewrite_needed',
+        gating: { rewritePreference: 'auto', expectedImprovement: 'low', majorBlockingIssues: false },
+      }),
+      'general',
+    );
+
+    expect(presentation.hero.headline).toBe('Excellent prompt');
+    expect(presentation.noRewrite.label).toBe('The current prompt is already strong');
   });
 
-  it('uses template-copy hero action for guided completion fallback', () => {
-    const hero = heroCopy({
-      id: 'par_test',
-      overallScore: 45,
-      scoreBand: 'weak',
+  it('uses config-driven action labels for usable prompts', () => {
+    const presentation = resolveResultsPresentation(buildResult(), 'general');
+    expect(presentation.guidedCompletion.primaryActionLabel).toBe('Copy template');
+  });
+
+  it('uses the configured rewrite panel title for weak prompts', () => {
+    const presentation = resolveResultsPresentation(
+      buildResult({
+        rewriteRecommendation: 'rewrite_recommended',
+        rewrite: {
+          role: 'general',
+          mode: 'balanced',
+          rewrittenPrompt: 'Materially improved prompt',
+        },
+        evaluation: {
+          status: 'material_improvement',
+          overallDelta: 8,
+          signals: [],
+          scoreComparison: {
+            original: { scope: 4, contrast: 5, clarity: 5 },
+            rewrite: { scope: 8, contrast: 8, clarity: 8 },
+          },
+        },
+        rewritePresentationMode: 'full_rewrite',
+      }),
+      'general',
+    );
+
+    expect(presentation.rewritePanel.title).toBe('Recommended rewrite');
+  });
+
+  it('resolves suppressed-state verdict copy from config', () => {
+    const presentation = resolveResultsPresentation(
+      buildResult({
+        rewriteRecommendation: 'no_rewrite_needed',
+        gating: { rewritePreference: 'suppress', expectedImprovement: 'low', majorBlockingIssues: false },
+      }),
+      'general',
+    );
+
+    expect(resolveVerdictId(buildResult({
+      rewriteRecommendation: 'no_rewrite_needed',
+      gating: { rewritePreference: 'suppress', expectedImprovement: 'low', majorBlockingIssues: false },
+    }))).toBe('strong_suppressed');
+    expect(presentation.noRewrite.label).toBe('Rewrite suppressed by preference');
+  });
+
+  it('resolves forced strong verdicts when a rewrite exists', () => {
+    const result = buildResult({
+      rewriteRecommendation: 'no_rewrite_needed',
+      gating: { rewritePreference: 'force', expectedImprovement: 'low', majorBlockingIssues: false },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: 'Forced rewrite',
+      },
+      evaluation: {
+        status: 'no_significant_change',
+        overallDelta: 0,
+        signals: [],
+        scoreComparison: {
+          original: { scope: 8, contrast: 8, clarity: 8 },
+          rewrite: { scope: 8, contrast: 8, clarity: 8 },
+        },
+      },
+    });
+
+    expect(resolveVerdictId(result)).toBe('strong_forced');
+    expect(resolveResultsPresentation(result, 'general').hero.headline).toBe('Strong prompt, forced rewrite available');
+  });
+
+  it('gives evaluation-specific verdict ids precedence', () => {
+    expect(
+      resolveVerdictId(
+        buildResult({
+          rewriteRecommendation: 'rewrite_recommended',
+          rewrite: { role: 'general', mode: 'balanced', rewrittenPrompt: 'Improved' },
+          evaluation: {
+            status: 'material_improvement',
+            overallDelta: 9,
+            signals: [],
+            scoreComparison: {
+              original: { scope: 3, contrast: 4, clarity: 5 },
+              rewrite: { scope: 8, contrast: 8, clarity: 8 },
+            },
+          },
+          rewritePresentationMode: 'full_rewrite',
+        }),
+      ),
+    ).toBe('rewrite_material_improvement');
+
+    expect(
+      resolveVerdictId(
+        buildResult({
+          rewrite: { role: 'general', mode: 'balanced', rewrittenPrompt: 'Regression' },
+          evaluation: {
+            status: 'possible_regression',
+            overallDelta: -2,
+            signals: [],
+            scoreComparison: {
+              original: { scope: 6, contrast: 6, clarity: 6 },
+              rewrite: { scope: 5, contrast: 5, clarity: 5 },
+            },
+          },
+        }),
+      ),
+    ).toBe('rewrite_possible_regression');
+
+    expect(
+      resolveVerdictId(
+        buildResult({
+          rewriteRecommendation: 'no_rewrite_needed',
+          rewrite: { role: 'general', mode: 'balanced', rewrittenPrompt: 'Unneeded rewrite' },
+          evaluation: {
+            status: 'already_strong',
+            overallDelta: 0,
+            signals: [],
+            scoreComparison: {
+              original: { scope: 8, contrast: 8, clarity: 8 },
+              rewrite: { scope: 8, contrast: 8, clarity: 8 },
+            },
+          },
+        }),
+      ),
+    ).toBe('rewrite_already_strong');
+  });
+
+  it('resolves findings through stable ids before rendering text', () => {
+    const result = buildResult({
+      analysis: {
+        scores: {
+          scope: 8,
+          contrast: 8,
+          clarity: 8,
+          constraintQuality: 3,
+          genericOutputRisk: 8,
+          tokenWasteRisk: 2,
+        },
+        issues: [{ code: 'CONSTRAINTS_MISSING', severity: 'high', message: 'Need runtime and payload boundaries.' }],
+        detectedIssueCodes: ['CONSTRAINTS_MISSING', 'GENERIC_OUTPUT_RISK_HIGH'],
+        signals: [],
+        summary: 'Needs more structure.',
+      },
+    });
+
+    expect(resolveFindingIds(result)).toEqual(
+      expect.arrayContaining(['clear_scope', 'strong_contrast', 'clear_instruction', 'constraints_missing', 'high_generic_risk']),
+    );
+    expect(resolveResultsPresentation(result, 'general').findings).toContain('Key constraints are missing.');
+  });
+
+  it('changes section visibility by verdict', () => {
+    const strong = resolveResultsPresentation(
+      buildResult({
+        rewriteRecommendation: 'no_rewrite_needed',
+        gating: { rewritePreference: 'auto', expectedImprovement: 'low', majorBlockingIssues: false },
+      }),
+      'general',
+    );
+    const weak = resolveResultsPresentation(buildResult({ rewriteRecommendation: 'rewrite_recommended' }), 'general');
+
+    expect(strong.visibleSectionIds).toContain('why_no_rewrite');
+    expect(strong.visibleSectionIds).not.toContain('rewrite_panel');
+    expect(weak.visibleSectionIds).toContain('rewrite_panel');
+  });
+
+  it('applies developer wording overrides without changing surface logic', () => {
+    const result = buildResult({
       rewriteRecommendation: 'rewrite_recommended',
       analysis: {
         scores: {
@@ -20,152 +245,80 @@ describe('methodFitLabel', () => {
           clarity: 5,
           constraintQuality: 2,
           genericOutputRisk: 7,
-          tokenWasteRisk: 4,
+          tokenWasteRisk: 3,
         },
-        issues: [],
-        detectedIssueCodes: [],
+        issues: [{ code: 'CONSTRAINTS_MISSING', severity: 'high', message: 'Need runtime and payload boundaries.' }],
+        detectedIssueCodes: ['CONSTRAINTS_MISSING'],
         signals: [],
         summary: 'Weak prompt.',
       },
-      improvementSuggestions: [],
-      bestNextMove: null,
-      gating: {
-        rewritePreference: 'auto',
-        expectedImprovement: 'high',
-        majorBlockingIssues: true,
-      },
-      rewrite: null,
-      evaluation: {
-        status: 'no_significant_change',
-        overallDelta: 0,
-        signals: [],
-        scoreComparison: {
-          original: { scope: 3, contrast: 4, clarity: 5 },
-          rewrite: { scope: 3, contrast: 4, clarity: 5 },
-        },
-      },
-      rewritePresentationMode: 'template_with_example',
+    });
+
+    const developerPresentation = resolveResultsPresentation(result, 'developer');
+    expect(developerPresentation.hero.supporting).toContain('runtime');
+    expect(resolvePrimarySurface(result)).toBe('guided-completion');
+  });
+
+  it('keeps guided-completion actions aligned with the available payload', () => {
+    const result = buildResult({
+      rewriteRecommendation: 'rewrite_recommended',
       guidedCompletion: {
         mode: 'template_with_example',
         title: 'Fill in the missing details',
         summary: 'Add boundaries first.',
-        template: 'Write [deliverable].',
-      },
-      meta: {
-        version: '2',
-        requestId: 'req_1',
-        latencyMs: 1,
-        providerMode: 'mock',
+        example: 'Example prompt',
       },
     });
 
-    expect(hero.primaryAction).toBe('Copy template');
+    const module = resolveActionModule(result, 'general');
+    expect(module.primaryActionLabel).toBe('Copy example');
   });
 
   it('suppresses full rewrite surfaces when the rewrite is not materially better', () => {
-    const surface = resolvePrimarySurface({
-      id: 'par_test',
-      overallScore: 58,
-      scoreBand: 'usable',
-      rewriteRecommendation: 'rewrite_optional',
-      analysis: {
-        scores: {
-          scope: 6,
-          contrast: 6,
-          clarity: 6,
-          constraintQuality: 5,
-          genericOutputRisk: 4,
-          tokenWasteRisk: 4,
+    const surface = resolvePrimarySurface(
+      buildResult({
+        rewrite: {
+          role: 'general',
+          mode: 'balanced',
+          rewrittenPrompt: 'Refined prompt',
         },
-        issues: [],
-        detectedIssueCodes: [],
-        signals: [],
-        summary: 'Usable prompt.',
-      },
-      improvementSuggestions: [],
-      bestNextMove: null,
-      gating: {
-        rewritePreference: 'auto',
-        expectedImprovement: 'low',
-        majorBlockingIssues: false,
-      },
-      rewrite: {
-        role: 'general',
-        mode: 'balanced',
-        rewrittenPrompt: 'Refined prompt',
-      },
-      evaluation: {
-        status: 'no_significant_change',
-        overallDelta: 0,
-        signals: [],
-        scoreComparison: {
-          original: { scope: 6, contrast: 6, clarity: 6 },
-          rewrite: { scope: 6, contrast: 6, clarity: 6 },
+        evaluation: {
+          status: 'no_significant_change',
+          overallDelta: 0,
+          signals: [],
+          scoreComparison: {
+            original: { scope: 6, contrast: 6, clarity: 6 },
+            rewrite: { scope: 6, contrast: 6, clarity: 6 },
+          },
         },
-      },
-      rewritePresentationMode: 'full_rewrite',
-      guidedCompletion: null,
-      meta: {
-        version: '2',
-        requestId: 'req_2',
-        latencyMs: 1,
-        providerMode: 'mock',
-      },
-    });
+        rewritePresentationMode: 'full_rewrite',
+      }),
+    );
 
     expect(surface).toBe('guided-completion');
   });
 
   it('keeps a full rewrite as the primary surface only when it is materially better', () => {
-    const surface = resolvePrimarySurface({
-      id: 'par_test',
-      overallScore: 52,
-      scoreBand: 'weak',
-      rewriteRecommendation: 'rewrite_recommended',
-      analysis: {
-        scores: {
-          scope: 4,
-          contrast: 5,
-          clarity: 5,
-          constraintQuality: 3,
-          genericOutputRisk: 6,
-          tokenWasteRisk: 4,
+    const surface = resolvePrimarySurface(
+      buildResult({
+        rewriteRecommendation: 'rewrite_recommended',
+        rewrite: {
+          role: 'general',
+          mode: 'balanced',
+          rewrittenPrompt: 'Materially improved prompt',
         },
-        issues: [],
-        detectedIssueCodes: [],
-        signals: [],
-        summary: 'Weak prompt.',
-      },
-      improvementSuggestions: [],
-      bestNextMove: null,
-      gating: {
-        rewritePreference: 'auto',
-        expectedImprovement: 'high',
-        majorBlockingIssues: true,
-      },
-      rewrite: {
-        role: 'general',
-        mode: 'balanced',
-        rewrittenPrompt: 'Materially improved prompt',
-      },
-      evaluation: {
-        status: 'material_improvement',
-        overallDelta: 11,
-        signals: [],
-        scoreComparison: {
-          original: { scope: 4, contrast: 5, clarity: 5 },
-          rewrite: { scope: 8, contrast: 8, clarity: 8 },
+        evaluation: {
+          status: 'material_improvement',
+          overallDelta: 11,
+          signals: [],
+          scoreComparison: {
+            original: { scope: 4, contrast: 5, clarity: 5 },
+            rewrite: { scope: 8, contrast: 8, clarity: 8 },
+          },
         },
-      },
-      rewritePresentationMode: 'full_rewrite',
-      guidedCompletion: null,
-      meta: {
-        version: '2',
-        requestId: 'req_3',
-        latencyMs: 1,
-        providerMode: 'mock',
-      },
-    });
+        rewritePresentationMode: 'full_rewrite',
+      }),
+    );
 
     expect(surface).toBe('full-rewrite');
   });

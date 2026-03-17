@@ -1,4 +1,4 @@
-import type { AnalyzeAndRewriteV2Response, EvaluationV2, ImprovementSuggestion } from '@promptfire/shared';
+import type { AnalyzeAndRewriteV2Response, ImprovementSuggestion } from '@promptfire/shared';
 import {
   FindingsList,
   FullRewriteCard,
@@ -9,16 +9,13 @@ import {
   ScoreBreakdown,
   TechnicalDetailsDrawer,
 } from './ResultSections';
-import { getRewritePresentationMode, heroCopy, resolvePrimarySurface, type ProductState } from './helpers';
+import { getRewritePresentationMode, type ResultsPresentation } from './helpers';
 
 type ResultsCardProps = {
   prompt: string;
   result: AnalyzeAndRewriteV2Response;
-  state: ProductState;
-  hero: ReturnType<typeof heroCopy>;
-  findings: string[];
+  presentation: ResultsPresentation;
   topSuggestions: ImprovementSuggestion[];
-  evaluation: EvaluationV2 | null;
   showOptionalRewrite: boolean;
   onToggleOptionalRewrite: () => void;
   onForceRewrite: () => Promise<void>;
@@ -28,28 +25,24 @@ type ResultsCardProps = {
 export function ResultsCard({
   prompt,
   result,
-  state,
-  hero,
-  findings,
+  presentation,
   topSuggestions,
-  evaluation,
   showOptionalRewrite,
   onToggleOptionalRewrite,
   onForceRewrite,
   onCopyPrompt,
 }: ResultsCardProps) {
-  const primarySurface = resolvePrimarySurface(result);
   const rewritePresentationMode = getRewritePresentationMode(result);
   const questionsText = (result.guidedCompletion?.questions ?? []).map((question, index) => `${index + 1}. ${question}`).join('\n');
   const guidedPrimaryValue =
     result.guidedCompletion?.template ?? result.guidedCompletion?.example ?? (questionsText.length > 0 ? questionsText : prompt);
   const heroPrimaryAction = () => {
-    if (primarySurface === 'no-rewrite-needed') {
+    if (presentation.primarySurface === 'no-rewrite-needed') {
       onCopyPrompt(prompt);
       return;
     }
 
-    if (primarySurface === 'full-rewrite' && result.rewrite) {
+    if (presentation.primarySurface === 'full-rewrite' && result.rewrite) {
       onCopyPrompt(result.rewrite.rewrittenPrompt);
       return;
     }
@@ -57,7 +50,7 @@ export function ResultsCard({
     onCopyPrompt(guidedPrimaryValue);
   };
   const heroSecondaryAction =
-    primarySurface === 'full-rewrite'
+    presentation.primarySurface === 'full-rewrite'
       ? undefined
       : result.rewrite || rewritePresentationMode === 'suppressed'
         ? () => {
@@ -68,37 +61,31 @@ export function ResultsCard({
             void onForceRewrite();
           }
         : undefined;
-  const heroSecondaryLabel =
-    primarySurface === 'full-rewrite' ? undefined : result.rewrite ? 'Show rewrite anyway' : 'Generate rewrite anyway';
+
+  const visibleSections = new Set(presentation.visibleSectionIds);
 
   return (
     <section className="grid gap-4 rounded-xl border border-pf-border-default bg-pf-bg-card p-6 shadow-md max-sm:p-4">
-      <HeroCard
-        result={result}
-        hero={hero}
-        primaryActionLabel={hero.primaryAction}
-        secondaryActionLabel={heroSecondaryLabel}
-        onPrimaryAction={heroPrimaryAction}
-        onSecondaryAction={heroSecondaryAction}
-      />
+      <HeroCard result={result} hero={presentation.hero} onPrimaryAction={heroPrimaryAction} onSecondaryAction={heroSecondaryAction} />
 
-      <ScoreBreakdown result={result} />
+      {visibleSections.has('subscores') && <ScoreBreakdown result={result} title={presentation.sectionTitles.subscores} />}
 
-      <FindingsList findings={findings} />
+      {visibleSections.has('findings') && <FindingsList findings={presentation.findings} title={presentation.sectionTitles.findings} />}
 
-      {result.bestNextMove && primarySurface !== 'no-rewrite-needed' && (
-        <NextStepCard bestNextMove={result.bestNextMove} optional={state === 'strong'} />
+      {visibleSections.has('best_next_move') && result.bestNextMove && (
+        <NextStepCard bestNextMove={result.bestNextMove} title={presentation.nextStep.title} />
       )}
 
-      {primarySurface === 'full-rewrite' && result.rewrite && evaluation && (
-        <FullRewriteCard result={result} onCopyRewrite={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)} />
+      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'full-rewrite' && result.rewrite && result.evaluation && (
+        <FullRewriteCard result={result} view={presentation.rewritePanel} onCopyRewrite={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)} />
       )}
 
-      {primarySurface === 'guided-completion' && (
+      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'guided-completion' && (
         <GuidedCompletionCard
           prompt={prompt}
           result={result}
           topSuggestions={topSuggestions}
+          view={presentation.guidedCompletion}
           showOptionalRewrite={showOptionalRewrite}
           onCopyPrompt={onCopyPrompt}
           onToggleOptionalRewrite={onToggleOptionalRewrite}
@@ -106,10 +93,11 @@ export function ResultsCard({
         />
       )}
 
-      {primarySurface === 'no-rewrite-needed' && (
+      {visibleSections.has('why_no_rewrite') && presentation.primarySurface === 'no-rewrite-needed' && (
         <NoRewriteNeededCard
           result={result}
           prompt={prompt}
+          view={presentation.noRewrite}
           showOptionalRewrite={showOptionalRewrite}
           onCopyPrompt={onCopyPrompt}
           onToggleOptionalRewrite={onToggleOptionalRewrite}
@@ -117,7 +105,9 @@ export function ResultsCard({
         />
       )}
 
-      <TechnicalDetailsDrawer result={result} topSuggestions={topSuggestions} />
+      {visibleSections.has('technical_details') && (
+        <TechnicalDetailsDrawer result={result} topSuggestions={topSuggestions} title={presentation.sectionTitles.technical_details} />
+      )}
     </section>
   );
 }

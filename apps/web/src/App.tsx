@@ -6,11 +6,9 @@ import {
   LoadingCard,
   ResultsCard,
   TopShell,
-  heroCopy,
   panelForState,
+  resolveResultsPresentation,
   resolveSuccessState,
-  suggestedFindings,
-  toProductState,
   type AnalysisUiState,
 } from './components/results';
 import { applyTheme, resolveInitialTheme, type ThemeMode } from './theme';
@@ -92,12 +90,9 @@ export function App() {
     void navigator.clipboard.writeText(value);
   }
 
-  const state = result ? toProductState(result.rewriteRecommendation) : null;
-  const hero = result ? heroCopy(result) : null;
-  const findings = result ? suggestedFindings(result) : [];
+  const presentation = result ? resolveResultsPresentation(result, role) : null;
   const topSuggestions = result ? result.improvementSuggestions.slice(0, 3) : [];
-  const evaluation = result?.evaluation ?? null;
-  const panel = panelForState(uiState, Boolean(result && hero && state));
+  const panel = panelForState(uiState, Boolean(result && presentation));
 
   return (
     <main className="mx-auto grid max-w-[980px] gap-4 p-6 text-pf-text-primary max-sm:p-3">
@@ -136,15 +131,12 @@ export function App() {
         <LoadingCard state={uiState === 'loading-inference' ? 'loading-inference' : 'loading-local'} />
       )}
 
-      {panel === 'result' && result && hero && state && (
+      {panel === 'result' && result && presentation && (
         <ResultsCard
           prompt={prompt}
           result={result}
-          state={state}
-          hero={hero}
-          findings={findings}
+          presentation={presentation}
           topSuggestions={topSuggestions}
-          evaluation={evaluation}
           showOptionalRewrite={showOptionalRewrite}
           onToggleOptionalRewrite={() => setShowOptionalRewrite((value) => !value)}
           onForceRewrite={handleForceRewrite}
