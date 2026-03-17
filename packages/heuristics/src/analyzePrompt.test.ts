@@ -69,6 +69,24 @@ describe('analyzePrompt', () => {
     expect(result.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
   });
 
+  it('treats bounded webhook implementation prompts as scoped, contrastive, and non-blocking', () => {
+    const result = analyzePrompt({
+      prompt:
+        'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+      role: 'developer',
+      mode: 'balanced',
+    });
+
+    expect(result.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(result.detectedIssueCodes).not.toContain('AUDIENCE_MISSING');
+    expect(result.detectedIssueCodes).not.toContain('GENERIC_OUTPUT_RISK_HIGH');
+    expect(result.scores.contrast).toBeGreaterThan(0);
+    expect(result.summary).toContain('well scoped');
+    expect(result.signals).toContain('Direct implementation instructions are present.');
+    expect(result.signals).toContain('Clear implementation boundaries are defined.');
+    expect(result.signals).toContain('Useful runtime and validation constraints are included.');
+  });
+
   it('does not mark single marketer deliverable briefs as TASK_OVERLOADED', () => {
     const result = analyzePrompt({
       prompt:

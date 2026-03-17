@@ -160,7 +160,10 @@ function hasConstraintsV2(prompt: string, context?: Record<string, unknown>): bo
   return (
     Boolean(context?.mustInclude || context?.systemGoals) ||
     /\b(must|should|exactly|limit|only|at least|at most)\b/i.test(prompt) ||
-    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt)
+    /\b(use one|use two|include one|include two|avoid|keep the tone|focus on|rather than|lead with)\b/i.test(prompt) ||
+    /\b(node\.?js|typescript|python|go|java|json|schema|validate|validation|payload|request body|response body|status code|http 200|http 400|error logging)\b/i.test(
+      prompt,
+    )
   );
 }
 
@@ -233,13 +236,36 @@ function taskLoadScoreV2(prompt: string, overloaded: boolean): 0 | 1 | 2 {
   return 2;
 }
 
+function isImplementationOrTransformationPromptV2(prompt: string): boolean {
+  return /\b(code|implement|implementation|build|develop|webhook|handler|api|extract|transformation|transform|summarize|summary)\b/i.test(
+    prompt,
+  );
+}
+
+function technicalBoundaryBonusV2(prompt: string, context?: Record<string, unknown>): 0 | 1 {
+  if (!isImplementationOrTransformationPromptV2(prompt)) {
+    return 0;
+  }
+
+  const runtimeSpecificity =
+    /\b(node\.?js|typescript|python|go|java|json|schema|validate|validation|payload|request body|response body|error logging|http\s*(?:status|200|400|500))\b/i.test(
+      prompt,
+    );
+  const explicitBranching =
+    /\b(on success|on failure|success|failure|error|invalid|valid)\b/i.test(prompt) &&
+    /\b(return|respond|http|status code|2\d\d|4\d\d|5\d\d)\b/i.test(prompt);
+
+  return runtimeSpecificity && (explicitBranching || hasExclusions(prompt, context)) ? 1 : 0;
+}
+
 function computeScopeScoreV2(analysis: Analysis, prompt: string, context?: Record<string, unknown>): number {
   const overloaded = analysis.detectedIssueCodes.includes('TASK_OVERLOADED');
   return (
     hasClearDeliverableV2(prompt) +
     audienceOrContextSpecificityV2(prompt, context) +
     taskBoundariesV2(prompt, context) +
-    taskLoadScoreV2(prompt, overloaded)
+    taskLoadScoreV2(prompt, overloaded) +
+    technicalBoundaryBonusV2(prompt, context)
   );
 }
 
@@ -326,16 +352,45 @@ function recommendationFromState(params: {
   return 'rewrite_optional';
 }
 
+function shouldFloorDeveloperRecommendation(params: {
+  role: Role;
+  prompt: string;
+  context?: Record<string, unknown>;
+  analysis: Analysis;
+  majorBlockingIssues: boolean;
+}): boolean {
+  return (
+    params.role === 'developer' &&
+    !params.majorBlockingIssues &&
+    isImplementationOrTransformationPromptV2(params.prompt) &&
+    hasConstraintsV2(params.prompt, params.context) &&
+    hasExclusions(params.prompt, params.context) &&
+    params.analysis.scores.scope >= 7 &&
+    params.analysis.scores.contrast >= 1
+  );
+}
+
 function summaryForV2(params: {
   recommendation: RewriteRecommendation;
   rewritePreference: RewritePreference;
   generatedRewrite: boolean;
+  role: Role;
+  prompt: string;
+  context?: Record<string, unknown>;
 }): string {
   if (params.rewritePreference === 'suppress') {
     return 'Rewrite generation was suppressed by request.';
   }
   if (params.rewritePreference === 'force' && params.generatedRewrite) {
     return 'Strong prompt. Rewrite was generated because it was explicitly requested.';
+  }
+  if (
+    params.role === 'developer' &&
+    isImplementationOrTransformationPromptV2(params.prompt) &&
+    hasConstraintsV2(params.prompt, params.context) &&
+    hasExclusions(params.prompt, params.context)
+  ) {
+    return 'Prompt is well scoped with direct implementation instructions and useful constraints.';
   }
   if (params.recommendation === 'no_rewrite_needed') {
     return 'Strong prompt. It is already well scoped and well directed.';
@@ -1007,12 +1062,24 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       expectedImprovement === 'low' &&
       input.rewritePreference !== 'force';
     const shouldSuppress = input.rewritePreference === 'suppress' || shouldSuppressByStrength;
-    const rewriteRecommendation = recommendationFromState({
+    let rewriteRecommendation = recommendationFromState({
       overallScore,
       rewritePreference: input.rewritePreference,
       shouldSuppress,
       expectedImprovementLow: expectedImprovement === 'low',
     });
+    if (
+      rewriteRecommendation === 'rewrite_recommended' &&
+      shouldFloorDeveloperRecommendation({
+        role: input.role,
+        prompt: input.prompt,
+        context: resolvedContext,
+        analysis: resolvedAnalysis,
+        majorBlockingIssues,
+      })
+    ) {
+      rewriteRecommendation = 'rewrite_optional';
+    }
     const improvementSuggestions = generateImprovementSuggestions({
       input: effectiveInput,
       analysis: resolvedAnalysis,
@@ -1143,6 +1210,9 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           recommendation: rewriteRecommendation,
           rewritePreference: input.rewritePreference,
           generatedRewrite: rewrite !== null,
+          role: input.role,
+          prompt: input.prompt,
+          context: resolvedContext,
         }),
       };
       const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);

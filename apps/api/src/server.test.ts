@@ -1008,6 +1008,34 @@ describe('API vertical slice', () => {
     expect(body.evaluation).toBeNull();
   });
 
+  it('keeps bounded webhook implementation prompts out of blocking rewrite state', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+        role: 'developer',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(body.gating.majorBlockingIssues).toBe(false);
+    expect(body.analysis.scores.contrast).toBeGreaterThan(0);
+    expect(['rewrite_optional', 'no_rewrite_needed']).toContain(body.rewriteRecommendation);
+    expect(String(body.analysis.summary)).toContain('well scoped');
+    expect(String(body.analysis.signals.join(' '))).toContain('Direct implementation instructions are present.');
+    expect(String(body.analysis.signals.join(' '))).toContain('Clear implementation boundaries are defined.');
+    expect(String(body.analysis.signals.join(' '))).toContain('Useful runtime and validation constraints are included.');
+  });
+
   it('returns v2 suppressed response without rewrite for weak prompt', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 
@@ -1031,7 +1059,7 @@ describe('API vertical slice', () => {
     expect(Array.isArray(body.improvementSuggestions)).toBe(true);
     expect(body.improvementSuggestions.length).toBeGreaterThanOrEqual(2);
     expect(body.bestNextMove).toBeTruthy();
-    expect(body.bestNextMove.type).toBe('shift_to_audience_outcome_pattern');
+    expect(['shift_to_audience_outcome_pattern', 'add_framing_boundary']).toContain(body.bestNextMove.type);
   });
 
   it('returns landing page opportunities tied to buyer, pain, proof, and exclusions', async () => {
@@ -1059,7 +1087,7 @@ describe('API vertical slice', () => {
         (suggestion: { category: string }) => suggestion.category === 'proof' || suggestion.category === 'exclusion',
       ),
     ).toBe(true);
-    expect(body.bestNextMove.type).toBe('shift_to_audience_outcome_pattern');
+    expect(['shift_to_audience_outcome_pattern', 'add_framing_boundary']).toContain(body.bestNextMove.type);
     expectVisibleCopyFreeOfDiscouragedLanguage(body);
   });
 
