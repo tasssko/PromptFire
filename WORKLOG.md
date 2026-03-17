@@ -1,5 +1,25 @@
 # WORKLOG
 
+## 2026-03-17: Semantic Decision Core spec added
+
+### Summary
+Added the new architecture spec:
+
+- `specs/semantic-decision-core-v0.6.0.md`
+- `specs/semantic-decision-core-migration-plan-v0.6.0.md`
+
+### Why this matters
+This introduces a semantic-first direction for prompt analysis. The intended shift is from score-first recommendation with late rescue logic to an internal decision pipeline based on task class, context inventory, and decision state.
+
+### Immediate repo impact
+- The main spec now points to a real follow-on migration-plan file instead of a dangling path.
+- The migration plan captures a phased implementation path without changing the current API or UI contract yet.
+
+### Next implementation targets
+1. Define the semantic decision core internal types.
+2. Add deterministic semantic inventory extraction.
+3. Move recommendation logic ahead of score projection.
+
 ## 2026-03-16: Postgres migration issue on a different machine
 
 ### Summary
