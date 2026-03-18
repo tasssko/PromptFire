@@ -247,6 +247,36 @@ describe('API vertical slice', () => {
     }
   });
 
+  describe('semantic routing ownership', () => {
+    it('keeps thin explicit decision-support prompts on the local semantic route', async () => {
+      const body = await analyzeV2('Help engineering managers decide whether to adopt TypeScript.', 'general');
+
+      expect(body.rewriteRecommendation).toBe('rewrite_recommended');
+      expect(body.inferenceFallbackUsed).toBe(false);
+      expect(body.resolutionSource).toBe('local');
+      expect(body.bestNextMove?.type).toBe('add_decision_criteria');
+    });
+
+    it('keeps target-only analysis prompts on the local semantic route', async () => {
+      const body = await analyzeV2(
+        'What drives stalled incident response handoffs for a mid-sized SaaS team? Use ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case.',
+        'general',
+      );
+
+      expect(body.rewriteRecommendation).toBe('rewrite_optional');
+      expect(body.inferenceFallbackUsed).toBe(false);
+      expect(body.resolutionSource).toBe('local');
+      expect(body.bestNextMove?.type).toBe('add_analysis_criteria');
+    });
+
+    it('does not broaden routing ownership for topic-only prompts', async () => {
+      const body = await analyzeV2('Write about TypeScript adoption for engineering managers.', 'general');
+
+      expect(body.inferenceFallbackUsed).toBe(true);
+      expect(body.resolutionSource).toBe('local');
+    });
+  });
+
   it('supports magic-link login, session lookup, and logout', async () => {
     process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
 
@@ -742,6 +772,15 @@ describe('API vertical slice', () => {
     expect(Array.isArray(body.improvementSuggestions)).toBe(true);
     expect(body.improvementSuggestions.length).toBeLessThanOrEqual(2);
     expect(body.bestNextMove).toBeNull();
+  });
+
+  it('keeps the AI-agents uncertainty framing prompt at semantic score 78 for marketer role', async () => {
+    const body = await analyzeV2(
+      'Write a technical blog post for DevOps engineers explaining why AI agents are not infallible, using determinism versus probabilistic behavior as the core frame. Show how infrastructure, automation, guardrails, and operational processes are designed to manage that uncertainty in real systems. Keep the tone practical rather than philosophical. Include one concrete delivery example and avoid generic hype about autonomous agents.',
+      'marketer',
+    );
+
+    expect(body.overallScore).toBe(78);
   });
 
   it('does not call inference when local pattern match is strong', async () => {

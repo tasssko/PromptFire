@@ -132,6 +132,24 @@ describe('semantic core', () => {
     expect(whenWorthIt.inventory.boundedness.isBounded).toBe(true);
   });
 
+  it('normalizes equivalent analysis prompts into the same task family and boundedness', () => {
+    const analyze = classifySemanticPrompt(
+      'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+      'general',
+    );
+    const diagnose = classifySemanticPrompt(
+      'Diagnose the breakdowns in incident response handoffs for a mid-sized SaaS engineering org. Use ownership ambiguity, escalation gaps, and on-call load as the analysis criteria. Include one startup example and one enterprise example, and keep the findings grounded rather than generic.',
+      'general',
+    );
+
+    expect(analyze.extraction.taskClass).toBe('analysis');
+    expect(diagnose.extraction.taskClass).toBe('analysis');
+    expect(analyze.inventory.analysisContext.present).toBe(true);
+    expect(diagnose.inventory.analysisContext.present).toBe(true);
+    expect(analyze.inventory.boundedness.isBounded).toBe(true);
+    expect(diagnose.inventory.boundedness.isBounded).toBe(true);
+  });
+
   it('normalizes equivalent decision-support prompts into the same task family and boundedness', () => {
     const helpsHurts = classifySemanticPrompt(
       'Write a practical piece on when TypeScript improves maintainability and when it adds unnecessary complexity. Help engineering managers decide with one startup example and one enterprise example. Avoid hype and keep it practical.',
@@ -196,6 +214,64 @@ describe('semantic core', () => {
     expect(decision.semanticState).toBe('weak');
     expect(decision.missingContextType).toBe('constraints_missing');
     expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
+  });
+
+  it('keeps thin explicit decision prompts on the semantic path without treating them as bounded', () => {
+    const thin = classifySemanticPrompt('Help engineering managers decide whether to adopt TypeScript.', 'general');
+    const decision = buildDecisionState(thin.inventory, 'auto');
+
+    expect(thin.extraction.taskClass).toBe('decision_support');
+    expect(thin.extraction.inScope).toBe(true);
+    expect(thin.inventory.decisionContext.decisionObject.length).toBeGreaterThan(0);
+    expect(thin.inventory.boundedness.isBounded).toBe(false);
+    expect(decision.semanticState).toBe('weak');
+    expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
+  });
+
+  it('keeps topic-only prompts out of narrow decision-support ownership', () => {
+    const topicOnly = classifySemanticPrompt('Write about TypeScript adoption for engineering managers.', 'general');
+
+    expect(topicOnly.extraction.inScope).toBe(false);
+    expect(topicOnly.extraction.taskClass).toBe('other');
+  });
+
+  it('keeps thin explicit analysis prompts on the semantic path without treating them as bounded', () => {
+    const thin = classifySemanticPrompt('Analyze our incident response process.', 'general');
+    const decision = buildDecisionState(thin.inventory, 'auto');
+
+    expect(thin.extraction.taskClass).toBe('analysis');
+    expect(thin.extraction.inScope).toBe(true);
+    expect(thin.inventory.analysisContext.present).toBe(true);
+    expect(thin.inventory.boundedness.isBounded).toBe(false);
+    expect(decision.semanticState).toBe('weak');
+    expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
+  });
+
+  it('treats analysis context blocks as relevant when the prompt is analysis-shaped', () => {
+    const classification = classifySemanticPrompt(
+      'We are a mid-sized SaaS team with frequent incident escalations, thin on-call coverage, and unclear service ownership.\nGiven this situation, analyze why incident response handoffs keep stalling. Use ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case.',
+      'general',
+    );
+
+    expect(classification.extraction.taskClass).toBe('analysis');
+    expect(classification.inventory.contextBlock.present).toBe(true);
+    expect(classification.inventory.contextBlock.relevant).toBe(true);
+    expect(classification.inventory.boundedness.isBounded).toBe(true);
+    expect(classification.inventory.boundedness.boundedSignals).toContain('scenario context');
+  });
+
+  it('keeps target-only analysis prompts on the semantic path', () => {
+    const targetOnly = classifySemanticPrompt(
+      'What drives stalled incident response handoffs for a mid-sized SaaS team? Use ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case.',
+      'general',
+    );
+    const decision = buildDecisionState(targetOnly.inventory, 'auto');
+
+    expect(targetOnly.extraction.taskClass).toBe('analysis');
+    expect(targetOnly.extraction.inScope).toBe(true);
+    expect(targetOnly.inventory.analysisContext.target.length).toBeGreaterThan(0);
+    expect(targetOnly.inventory.boundedness.isBounded).toBe(true);
+    expect(decision.rewriteRecommendation).toBe('rewrite_optional');
   });
 
   it('treats exactly three boundedness groups as bounded for implementation prompts', () => {

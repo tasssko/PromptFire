@@ -18,6 +18,60 @@ const genericWeakPhrases = ['too open-ended', 'needs more detail'];
 
 export const semanticEvalFixtures: SemanticEvalFixture[] = [
   {
+    id: 'analysis-thin-incident-review',
+    family: 'analysis',
+    role: 'general',
+    prompt: 'Analyze our incident response process.',
+    expectedTaskClass: 'analysis',
+    expectedRecommendation: 'rewrite_recommended',
+    acceptableScoreBands: ['poor', 'weak', 'usable'],
+    forbiddenLegacyPhrases: ['runtime', 'contract detail'],
+  },
+  {
+    id: 'analysis-bounded-incident-review',
+    family: 'analysis',
+    role: 'general',
+    prompt:
+      'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+    expectedTaskClass: 'analysis',
+    expectedRecommendation: 'no_rewrite_needed',
+    acceptableScoreBands: ['strong', 'excellent'],
+    forbiddenLegacyPhrases: [...genericWeakPhrases, ...nonImplementationLegacyPhrases],
+  },
+  {
+    id: 'analysis-diagnose-breakdowns',
+    family: 'analysis',
+    role: 'general',
+    prompt:
+      'Diagnose the breakdowns in incident response handoffs for a mid-sized SaaS engineering org. Use ownership ambiguity, escalation gaps, and on-call load as the analysis criteria. Include one startup example and one enterprise example, and keep the findings grounded rather than generic.',
+    expectedTaskClass: 'analysis',
+    expectedRecommendation: 'no_rewrite_needed',
+    acceptableScoreBands: ['strong', 'excellent'],
+    forbiddenLegacyPhrases: [...genericWeakPhrases, ...nonImplementationLegacyPhrases],
+  },
+  {
+    id: 'analysis-root-cause-review',
+    family: 'analysis',
+    role: 'general',
+    prompt:
+      'Review the root causes behind stalled incident response handoffs for a mid-sized SaaS team using ownership clarity, escalation flow, and on-call load as the criteria. Include one startup case and one enterprise case, and avoid generic management advice.',
+    expectedTaskClass: 'analysis',
+    expectedRecommendation: 'no_rewrite_needed',
+    acceptableScoreBands: ['strong', 'excellent'],
+    forbiddenLegacyPhrases: [...genericWeakPhrases, ...nonImplementationLegacyPhrases],
+  },
+  {
+    id: 'analysis-customer-onboarding-risks',
+    family: 'analysis',
+    role: 'general',
+    prompt:
+      'Assess why customer onboarding keeps slipping for a mid-sized SaaS team. Analyze handoff gaps, approval latency, and implementation ownership as the criteria. Include one case for a fast-growing startup and one for an enterprise team. Keep the findings practical and avoid generic advice.',
+    expectedTaskClass: 'analysis',
+    expectedRecommendation: 'no_rewrite_needed',
+    acceptableScoreBands: ['strong', 'excellent'],
+    forbiddenLegacyPhrases: [...genericWeakPhrases, ...nonImplementationLegacyPhrases],
+  },
+  {
     id: 'implementation-thin-webhook',
     family: 'implementation',
     role: 'developer',
@@ -130,11 +184,12 @@ export const semanticEvalFixtures: SemanticEvalFixture[] = [
     id: 'decision-thin-typescript',
     family: 'decision_support',
     role: 'general',
-    prompt: 'Help engineering managers decide whether to adopt TypeScript using maintainability and onboarding cost as the criteria.',
+    prompt: 'Help engineering managers decide whether to adopt TypeScript.',
     expectedTaskClass: 'decision_support',
     expectedRecommendation: 'rewrite_recommended',
     acceptableScoreBands: ['poor', 'weak', 'usable'],
     forbiddenLegacyPhrases: ['runtime', 'contract detail'],
+    notes: 'Thin decision-support prompts should stay on the semantic route when the decision target is explicit.',
   },
   {
     id: 'decision-bounded-typescript',

@@ -39,6 +39,15 @@ function decideSemanticState(context: ContextInventory): DecisionState['semantic
     return strongEnoughForLowImprovement ? 'strong' : 'usable';
   }
 
+  if (taskClass === 'analysis') {
+    const strongEnoughForLowImprovement =
+      context.analysisContext.present &&
+      (context.audienceContext.present || context.contextBlock.relevant) &&
+      context.analysisContext.criteria.length > 0 &&
+      (context.boundaryContext.present || context.boundaryContext.groundedFraming.length > 0);
+    return strongEnoughForLowImprovement ? 'strong' : 'usable';
+  }
+
   if (taskClass === 'decision_support') {
     const strongEnoughForLowImprovement =
       context.decisionContext.present &&
@@ -79,6 +88,10 @@ function decideRewriteRisk(context: ContextInventory, semanticState: DecisionSta
   }
 
   if (context.taskShape.taskClass === 'context_first') {
+    return semanticState === 'strong' ? 'medium' : 'low';
+  }
+
+  if (context.taskShape.taskClass === 'analysis') {
     return semanticState === 'strong' ? 'medium' : 'low';
   }
 

@@ -47,6 +47,8 @@ describe('semantic eval suite', () => {
       expect(body.rewriteRecommendation).toBe(fixture.expectedRecommendation);
       expect(fixture.acceptableScoreBands).toContain(body.scoreBand);
       expectVisibleCopyToAvoidSnippets(visibleCopy, fixture.forbiddenLegacyPhrases);
+      expect(body.inferenceFallbackUsed).toBe(false);
+      expect(body.resolutionSource).toBe('local');
 
       if (fixture.expectedRecommendation === 'no_rewrite_needed') {
         expect(body.bestNextMove).toBeNull();

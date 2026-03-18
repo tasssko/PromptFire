@@ -960,8 +960,11 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     });
 
     const semanticClassification = classifySemanticPrompt(input.prompt, input.role);
-    const semanticPathInScope = semanticClassification.extraction.inScope;
-    const inferenceTrigger = semanticPathInScope
+    const semanticDecision = semanticClassification.extraction.inScope
+      ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
+      : null;
+    const hasSemanticDecision = semanticDecision !== null;
+    const inferenceTrigger = hasSemanticDecision
       ? {
           shouldInfer: false,
           reasons: [],
@@ -1068,11 +1071,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       });
     }
 
-    const semanticDecision = semanticPathInScope
-      ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
-      : null;
-
-    if (semanticPathInScope && semanticDecision) {
+    if (hasSemanticDecision && semanticDecision) {
       resolvedAnalysis = {
         ...resolvedAnalysis,
         scores: projectScores(resolvedAnalysis.scores, semanticClassification.inventory, semanticDecision),
@@ -1125,7 +1124,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
     const semanticFindings =
-      semanticPathInScope && semanticDecision
+      hasSemanticDecision && semanticDecision
         ? deriveFindings(resolvedAnalysis, semanticClassification.inventory, semanticDecision)
         : null;
     const generatedBestNextMove = semanticFindings
