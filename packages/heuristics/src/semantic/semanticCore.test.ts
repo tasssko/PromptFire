@@ -9,6 +9,7 @@ import {
 import { analyzePrompt } from '../analyzePrompt';
 import { buildDecisionState } from './buildDecision';
 import { classifySemanticPrompt } from './buildInventory';
+import { buildRewritePolicy } from './buildRewritePolicy';
 import { deriveFindings } from './deriveFindings';
 import { projectScores } from './projectScores';
 
@@ -207,6 +208,7 @@ describe('semantic core', () => {
   it('marks a thin webhook prompt as weak and rewrite recommended', () => {
     const thin = classifySemanticPrompt('Write a webhook handler.', 'developer');
     const decision = buildDecisionState(thin.inventory, 'auto');
+    const policy = buildRewritePolicy(thin.inventory, decision);
 
     expect(thin.extraction.inScope).toBe(true);
     expect(thin.inventory.boundedness.isBounded).toBe(false);
@@ -214,6 +216,45 @@ describe('semantic core', () => {
     expect(decision.semanticState).toBe('weak');
     expect(decision.missingContextType).toBe('constraints_missing');
     expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
+    expect(policy.allowedPresentationModes).toEqual(['full_rewrite', 'template_with_example', 'questions_only']);
+    expect(policy.primaryGap).toBe('execution');
+  });
+
+  it('maps strong bounded prompts to suppressed-only rewrite policy', () => {
+    const classification = classifySemanticPrompt(
+      'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+      'developer',
+    );
+    const decision = buildDecisionState(classification.inventory, 'auto');
+    const policy = buildRewritePolicy(classification.inventory, decision);
+
+    expect(decision.semanticState).toBe('strong');
+    expect(decision.rewriteRecommendation).toBe('no_rewrite_needed');
+    expect(policy.allowedPresentationModes).toEqual(['suppressed']);
+    expect(policy.family).toBe('implementation');
+  });
+
+  it('maps usable comparison prompts to optional help modes without full rewrite', () => {
+    const classification = classifySemanticPrompt(
+      'Compare Kubernetes and ECS for a mid-sized SaaS team. Include one startup case and one enterprise case.',
+      'general',
+    );
+    const decision = buildDecisionState(classification.inventory, 'auto');
+    const policy = buildRewritePolicy(classification.inventory, decision);
+
+    expect(decision.semanticState).toBe('usable');
+    expect(decision.rewriteRecommendation).toBe('rewrite_optional');
+    expect(policy.allowedPresentationModes).toEqual(['suppressed', 'template_with_example', 'questions_only']);
+    expect(policy.primaryGap).toBe('boundary');
+  });
+
+  it('maps thin comparison prompts to criteria as the primary semantic gap', () => {
+    const classification = classifySemanticPrompt('Compare Kubernetes and ECS.', 'general');
+    const decision = buildDecisionState(classification.inventory, 'auto');
+    const policy = buildRewritePolicy(classification.inventory, decision);
+
+    expect(decision.semanticState).toBe('weak');
+    expect(policy.primaryGap).toBe('criteria');
   });
 
   it('keeps thin explicit decision prompts on the semantic path without treating them as bounded', () => {

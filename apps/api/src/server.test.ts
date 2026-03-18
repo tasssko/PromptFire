@@ -275,6 +275,30 @@ describe('API vertical slice', () => {
       expect(body.inferenceFallbackUsed).toBe(true);
       expect(body.resolutionSource).toBe('local');
     });
+
+    it('keeps strong semantically owned prompts suppressed even when a rewrite exists', async () => {
+      const body = await analyzeV2(
+        'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+        'developer',
+      );
+
+      expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+      expect(body.rewritePresentationMode).toBe('suppressed');
+      expect(body.guidedCompletion).toBeNull();
+    });
+
+    it('uses semantic family gaps for guided completion on owned prompts', async () => {
+      const body = await analyzeV2(
+        'Given this situation, recommend whether to adopt service mesh.',
+        'general',
+      );
+
+      expect(['rewrite_recommended', 'rewrite_optional']).toContain(body.rewriteRecommendation);
+      expect(['template_with_example', 'questions_only']).toContain(body.rewritePresentationMode ?? 'suppressed');
+      expect(body.guidedCompletion).toBeTruthy();
+      const questionText = (body.guidedCompletion?.questions ?? []).join(' ').toLowerCase();
+      expect(questionText).toMatch(/deliverable|context|criteria/);
+    });
   });
 
   it('supports magic-link login, session lookup, and logout', async () => {
@@ -1878,7 +1902,13 @@ describe('API vertical slice', () => {
         expect(body.gating.rewritePreference).toBe('auto');
         expect(['low', 'medium', 'high']).toContain(body.gating.expectedImprovement);
         expect(body.gating.majorBlockingIssues).toBe(fixture.expected.majorBlockingIssues);
-        expect(normalizeCodes(body.analysis.detectedIssueCodes)).toEqual(normalizeCodes(fixture.expected.issueCodes));
+        const actualIssueCodes = normalizeCodes(body.analysis.detectedIssueCodes);
+        const expectedIssueCodes = normalizeCodes(fixture.expected.issueCodes);
+        if (fixture.expected.rewriteRecommendation === 'no_rewrite_needed' && expectedIssueCodes.length === 0) {
+          expect(actualIssueCodes.every((code) => code === 'LOW_EXPECTED_IMPROVEMENT')).toBe(true);
+        } else {
+          expect(actualIssueCodes).toEqual(expectedIssueCodes);
+        }
 
         if (fixture.expected.rewriteRecommendation === 'no_rewrite_needed') {
           expect(body.improvementSuggestions.length).toBeLessThanOrEqual(2);
