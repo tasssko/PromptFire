@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { findDiscouragedDefaultLanguage } from '@promptfire/shared';
+import {
+  findDiscouragedDefaultLanguage,
+  type AnalyzeAndRewriteV2Response,
+  type ScoreSet,
+} from '@promptfire/shared';
+import { semanticConsistencyCases, semanticEquivalenceFamilies, semanticFindingCases } from '@promptfire/shared/src/semanticFixtures';
 import { handleHttpRequest } from './server';
 
 const originalEnv = { ...process.env };
@@ -11,6 +16,54 @@ afterEach(() => {
 });
 
 describe('API vertical slice', () => {
+  function computeOverallScore(scores: ScoreSet): number {
+    const raw =
+      2.75 * scores.scope +
+      2.25 * scores.contrast +
+      1.25 * scores.clarity +
+      2.0 * scores.constraintQuality +
+      1.5 * (10 - scores.genericOutputRisk) +
+      0.5 * (10 - scores.tokenWasteRisk);
+
+    return Math.max(0, Math.min(100, Math.round(raw)));
+  }
+
+  async function analyzeV2(prompt: string, role: 'general' | 'developer' | 'marketer'): Promise<AnalyzeAndRewriteV2Response> {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        role,
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    return JSON.parse(response.body);
+  }
+
+  function expectTextToAvoidSnippets(text: string, forbidden: string[]): void {
+    const lowered = text.toLowerCase();
+    for (const snippet of forbidden) {
+      expect(lowered).not.toContain(snippet.toLowerCase());
+    }
+  }
+
+  function expectScoreStability(a: number, b: number, maxDelta = 8): void {
+    expect(Math.abs(a - b)).toBeLessThanOrEqual(maxDelta);
+  }
+
+  function expectSubscoreStability(a: ScoreSet, b: ScoreSet, keys: (keyof ScoreSet)[], maxDelta = 2): void {
+    for (const key of keys) {
+      expect(Math.abs(a[key] - b[key])).toBeLessThanOrEqual(maxDelta);
+    }
+  }
+
   function expectVisibleCopyFreeOfDiscouragedLanguage(body: any) {
     expect(findDiscouragedDefaultLanguage(String(body.analysis?.summary ?? ''))).toEqual([]);
 
@@ -71,6 +124,73 @@ describe('API vertical slice', () => {
     expect(response.statusCode).toBe(200);
     expect(body.status).toBe('ok');
     expect(body.meta.version).toBe('2');
+  });
+
+  describe('final response consistency for covered families', () => {
+    for (const fixture of semanticConsistencyCases) {
+      it(fixture.name, async () => {
+        const body = await analyzeV2(fixture.prompt, fixture.role);
+        const visibleFindings = body.analysis.issues.map((issue) => issue.message).join(' ');
+        const bestNextMoveText = `${body.bestNextMove?.title ?? ''} ${body.bestNextMove?.rationale ?? ''}`;
+
+        expect(body.rewriteRecommendation).toBe(fixture.expectedRecommendation);
+
+        if (fixture.forbiddenScoreBands) {
+          expect(fixture.forbiddenScoreBands).not.toContain(body.scoreBand);
+        }
+        if (fixture.forbiddenSummarySnippets) {
+          expectTextToAvoidSnippets(body.analysis.summary, fixture.forbiddenSummarySnippets);
+        }
+        if (fixture.forbiddenFindingSnippets) {
+          expectTextToAvoidSnippets(visibleFindings, fixture.forbiddenFindingSnippets);
+        }
+        if (fixture.forbiddenBestNextMoveSnippets) {
+          expectTextToAvoidSnippets(bestNextMoveText, fixture.forbiddenBestNextMoveSnippets);
+        }
+      });
+    }
+  });
+
+  describe('no stale fallback findings for covered families', () => {
+    for (const fixture of semanticFindingCases) {
+      it(fixture.name, async () => {
+        const body = await analyzeV2(fixture.prompt, fixture.role);
+        const visibleFindingText = [
+          body.analysis.summary,
+          ...body.analysis.issues.map((issue) => issue.message),
+          body.bestNextMove?.title ?? '',
+          body.bestNextMove?.rationale ?? '',
+        ].join(' ');
+
+        expect(body.rewriteRecommendation).toBe(fixture.expectedRecommendation);
+        expectTextToAvoidSnippets(visibleFindingText, fixture.forbiddenFindingSnippets);
+        expect(fixture.allowedFindingSnippets.some((snippet) => visibleFindingText.toLowerCase().includes(snippet.toLowerCase()))).toBe(
+          true,
+        );
+      });
+    }
+  });
+
+  describe('semantic equivalence holds in API output', () => {
+    for (const family of semanticEquivalenceFamilies) {
+      it(`${family.family} variants keep stable API recommendations and scores`, async () => {
+        const baselineVariant = family.variants[0]!;
+        const baseline = await analyzeV2(baselineVariant.prompt, family.role);
+
+        expect(baseline.rewriteRecommendation).toBe(family.expectedRecommendation);
+        expect(baseline.gating.majorBlockingIssues).toBe(family.expectedMajorBlockingIssues);
+
+        for (const variant of family.variants.slice(1)) {
+          const current = await analyzeV2(variant.prompt, family.role);
+
+          expect(current.rewriteRecommendation).toBe(baseline.rewriteRecommendation);
+          expect(current.gating.majorBlockingIssues).toBe(baseline.gating.majorBlockingIssues);
+          expect(current.bestNextMove?.type ?? null).toBe(baseline.bestNextMove?.type ?? null);
+          expectScoreStability(computeOverallScore(baseline.analysis.scores), computeOverallScore(current.analysis.scores));
+          expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
+        }
+      });
+    }
   });
 
   it('supports magic-link login, session lookup, and logout', async () => {
