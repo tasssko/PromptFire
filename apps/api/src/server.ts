@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   analyzePrompt,
   buildDecisionState,
+  buildRewritePolicy,
   classifySemanticPrompt,
   detectPatternFit,
   deriveFindings,
@@ -11,7 +12,6 @@ import {
   projectScores,
 } from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
-import { buildRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
 import {
   AnalyzeAndRewriteV2RequestSchema,
   AnalyzeAndRewriteRequestSchema,
@@ -1221,8 +1221,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           },
         };
 
-        // For semantically owned prompts, late evaluation only selects a presentation mode
-        // inside semantic policy bounds. It is not allowed to reinterpret rewrite posture.
+        // Semantic findings/policy own covered prompts. Late evaluation only selects a
+        // bounded presentation mode or safe downgrade after that point.
         rewritePresentationMode = selectRewritePresentationMode({
           rewriteRecommendation,
           rewritePreference: input.rewritePreference,
@@ -1254,8 +1254,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       const finalIssues = semanticFindings?.issues ?? resolvedAnalysis.issues;
       const finalSignalsBase = semanticFindings?.signals ?? resolvedAnalysis.signals;
       const finalSignals = [...finalSignalsBase];
-      // Once semantic findings exist, late signals must not replace or crowd out semantic framing.
-      // Keep generic signal appends on the non-owned path only.
+      // Generic signal appends are non-owned fallback only.
       if (!semanticOwned && expectedImprovement === 'low' && !finalSignals.includes('Low expected improvement.')) {
         finalSignals.push('Low expected improvement.');
       }

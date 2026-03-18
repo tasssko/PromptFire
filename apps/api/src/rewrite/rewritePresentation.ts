@@ -11,8 +11,7 @@ import type {
   ScoreBand,
   EvaluationV2,
 } from '@promptfire/shared';
-import type { PrimaryGap } from '@promptfire/heuristics/src/semantic/selectPrimaryGap';
-import type { SemanticRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
+import type { PrimaryGap, SemanticRewritePolicy } from '@promptfire/heuristics';
 
 type EffectiveContextLike = {
   role?: 'general' | 'developer' | 'marketer';
@@ -69,9 +68,8 @@ function selectSemanticOwnedPresentationMode(params: {
     return 'suppressed';
   };
 
-  // For semantically owned prompts, late presentation logic is bounded policy selection only.
-  // It may downgrade, suppress, or recover when eval data is absent, but it may not escalate
-  // beyond the semantic policy's allowed modes.
+  // Owned prompts stay inside semantic policy. Late logic can only suppress, downgrade,
+  // or recover when eval data is absent.
   if (params.rewritePreference === 'suppress' || params.rewriteRecommendation === 'no_rewrite_needed' || !params.rewrite) {
     return 'suppressed';
   }
@@ -94,8 +92,7 @@ function selectSemanticOwnedPresentationMode(params: {
     return fallbackMode();
   }
 
-  // For owned prompts, regression/no-change handling stays downgrade-only.
-  // Do not re-read score bands or generic boundary heuristics after semantic policy exists.
+  // For owned prompts, regression/no-change handling is downgrade-only.
   if (params.evaluation.status === 'possible_regression') {
     return allow('template_with_example') ? 'template_with_example' : fallbackMode();
   }
@@ -329,7 +326,7 @@ export function buildGuidedCompletionQuestions(params: {
     }
   }
 
-  // Non-owned fallback only. Owned prompts should have returned from the semantic family/gap path above.
+  // Non-owned fallback only.
   if (role === 'developer') {
     pushUnique(questions, 'What runtime or framework should be used?');
     pushUnique(questions, 'What does the input payload look like?');
