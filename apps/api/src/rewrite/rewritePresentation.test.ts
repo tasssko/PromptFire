@@ -127,6 +127,7 @@ describe('rewrite presentation fallback', () => {
       scoreBand: 'poor',
       prompt: 'Write better copy.',
       semanticPolicy: semanticPolicy({
+        semanticOwned: false,
         family: 'analysis',
         primaryGap: 'criteria',
       }),
@@ -201,6 +202,29 @@ describe('rewrite presentation fallback', () => {
       },
     });
     expect(mode).toBe('template_with_example');
+  });
+
+  it('E2: keeps owned no-significant-change handling free of score-band heuristics', () => {
+    const strongBandMode = selectRewritePresentationMode({
+      rewriteRecommendation: 'rewrite_optional',
+      rewritePreference: 'auto',
+      evaluation: evaluation('no_significant_change', 0.4),
+      analysis: analysis({
+        detectedIssueCodes: [],
+      }),
+      rewrite: rewrite(),
+      scoreBand: 'strong',
+      prompt: 'Compare two options for our team.',
+      semanticPolicy: semanticPolicy({
+        family: 'comparison',
+        primaryGap: 'criteria',
+        allowedPresentationModes: ['suppressed', 'template_with_example', 'questions_only'],
+        semanticState: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
+    });
+
+    expect(strongBandMode).toBe('template_with_example');
   });
 
   it('F: prevents rewrite_optional from escalating to full_rewrite on material improvement', () => {
@@ -333,5 +357,51 @@ describe('rewrite presentation fallback', () => {
     const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
     expect(joined).toMatch(/context|requested outcome|criteria/);
     expect(joined).not.toMatch(/who is the exact audience|format or structure should the response follow/);
+  });
+
+  it('K: keeps semantic-owned guided completion copy out of generic underspecification wording', () => {
+    const guided = buildGuidedCompletion({
+      prompt: 'Given this context, recommend whether to adopt service mesh.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis(),
+      semanticPolicy: semanticPolicy({
+        family: 'context_first',
+        primaryGap: 'context_linkage',
+        allowedPresentationModes: ['suppressed', 'template_with_example', 'questions_only'],
+        semanticState: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: null,
+      },
+    });
+
+    expect(guided?.summary.toLowerCase()).not.toContain('too underspecified');
+    expect(guided?.summary.toLowerCase()).not.toContain('too broad');
+    expect(guided?.rationale?.toLowerCase()).toContain('semantic path');
+  });
+
+  it('L: preserves generic guided-completion fallback for non-owned prompts', () => {
+    const guided = buildGuidedCompletion({
+      prompt: 'Write better copy.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis(),
+      semanticPolicy: null,
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: 'audience',
+      },
+    });
+
+    const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
+    expect(joined).toMatch(/who is the exact audience|format or structure should the response follow/);
+    expect(guided?.summary.toLowerCase()).toContain('too underspecified');
   });
 });
