@@ -6,12 +6,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function projectScores(scores: ScoreSet, context: ContextInventory, decision: DecisionState): ScoreSet {
-  if (!context.deliverable.handlerLike || !context.deliverable.codeLike) {
-    return scores;
-  }
-
-  const next = { ...scores };
+function projectImplementationScores(next: ScoreSet, context: ContextInventory, decision: DecisionState): void {
   if (context.boundedness.isBounded) {
     next.constraintQuality = Math.max(next.constraintQuality, context.boundedness.satisfiedGroups + 3);
     next.contrast = Math.max(next.contrast, context.boundaryContext.present ? 3 : 2);
@@ -20,9 +15,50 @@ export function projectScores(scores: ScoreSet, context: ContextInventory, decis
     if (context.executionContext.present && context.ioContext.successFailure.length > 0) {
       next.scope = Math.max(next.scope, 7);
     }
-  } else if (context.executionContext.present || context.ioContext.present) {
+    return;
+  }
+
+  if (context.executionContext.present || context.ioContext.present) {
     next.scope = Math.max(next.scope, 5);
     next.constraintQuality = Math.max(next.constraintQuality, 2);
+  }
+}
+
+function projectPhase2Scores(next: ScoreSet, context: ContextInventory, decision: DecisionState): void {
+  const bounded = context.boundedness.isBounded;
+  const strong = decision.semanticState === 'strong';
+  const hasUsefulCriteria = context.comparisonContext.axes.length > 0 || context.decisionContext.criteria.length > 0;
+  const hasUsefulExamples = context.exampleContext.present;
+  const hasUsefulContext = context.contextBlock.relevant || context.audienceContext.present;
+  const hasGrounding = context.boundaryContext.present || context.boundaryContext.groundedFraming.length > 0;
+
+  if (bounded) {
+    next.scope = Math.max(next.scope, strong ? 8 : 7);
+    next.constraintQuality = Math.max(next.constraintQuality, strong ? 8 : 7);
+    next.contrast = Math.max(next.contrast, hasUsefulCriteria || context.comparisonContext.tradeoffFrame || hasGrounding ? 7 : 6);
+    next.genericOutputRisk = Math.min(next.genericOutputRisk, strong ? 3 : 4);
+    next.tokenWasteRisk = Math.min(next.tokenWasteRisk, 5);
+    if (hasUsefulExamples || hasUsefulContext) {
+      next.clarity = Math.max(next.clarity, 7);
+    }
+    return;
+  }
+
+  if (hasUsefulCriteria || hasUsefulExamples || hasUsefulContext) {
+    next.scope = Math.max(next.scope, 5);
+    next.constraintQuality = Math.max(next.constraintQuality, 5);
+    next.contrast = Math.max(next.contrast, 5);
+    next.genericOutputRisk = Math.min(next.genericOutputRisk, 6);
+  }
+}
+
+export function projectScores(scores: ScoreSet, context: ContextInventory, decision: DecisionState): ScoreSet {
+  const next = { ...scores };
+
+  if (context.taskShape.taskClass === 'implementation' && context.deliverable.handlerLike && context.deliverable.codeLike) {
+    projectImplementationScores(next, context, decision);
+  } else if (context.taskShape.taskClass !== 'other') {
+    projectPhase2Scores(next, context, decision);
   }
 
   return {
