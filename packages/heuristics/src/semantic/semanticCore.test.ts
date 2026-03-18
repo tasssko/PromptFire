@@ -6,6 +6,7 @@ import {
   semanticEquivalenceFamilies,
   semanticFindingCases,
 } from '@promptfire/shared/src/semanticFixtures';
+import { semanticParaphraseEvalFamilies } from '@promptfire/shared/src/semanticParaphraseEvalFixtures';
 import { analyzePrompt } from '../analyzePrompt';
 import { buildDecisionState } from './buildDecision';
 import { classifySemanticPrompt } from './buildInventory';
@@ -491,6 +492,48 @@ describe('semantic core', () => {
           expect(bounded.decision.rewriteRecommendation).not.toBe(thin.decision.rewriteRecommendation);
         }
       });
+    }
+  });
+
+  describe('paraphrase eval set', () => {
+    for (const family of semanticParaphraseEvalFamilies) {
+      for (const positive of family.strongPositives) {
+        it(`${family.family} keeps "${positive.name}" aligned across paraphrases`, () => {
+          const baseline = buildSemanticEvaluation(positive.prompt, family.role);
+
+          expect(baseline.classification.extraction.taskClass).toBe(family.family);
+          expect(baseline.classification.extraction.inScope).toBe(true);
+          expect(baseline.classification.inventory.boundedness.isBounded).toBe(true);
+          expect(baseline.decision.rewriteRecommendation).toBe(family.expectedRecommendation);
+
+          for (const paraphrase of positive.paraphrases) {
+            const current = buildSemanticEvaluation(paraphrase, family.role);
+
+            expect(current.classification.extraction.taskClass).toBe(family.family);
+            expect(current.classification.extraction.inScope).toBe(true);
+            expect(current.classification.inventory.boundedness.isBounded).toBe(true);
+            expect(current.decision.rewriteRecommendation).toBe(baseline.decision.rewriteRecommendation);
+            expect(current.decision.majorBlockingIssues).toBe(baseline.decision.majorBlockingIssues);
+            expect(current.decision.missingContextType).toBe(baseline.decision.missingContextType);
+            expect(current.findings.bestNextMove?.type ?? null).toBe(baseline.findings.bestNextMove?.type ?? null);
+            expect(current.scoreBand).toBe(baseline.scoreBand);
+            expectScoreStability(baseline.overallScore, current.overallScore);
+            expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
+          }
+        });
+      }
+
+      for (const nearMiss of family.nearMisses) {
+        it(`${family.family} rejects near miss "${nearMiss.name}"`, () => {
+          const classification = classifySemanticPrompt(nearMiss.prompt, family.role);
+
+          expect(classification.extraction.taskClass).toBe(nearMiss.expectedFamily);
+          expect(classification.extraction.taskClass).not.toBe(family.family);
+          if (nearMiss.expectedFamily === 'other') {
+            expect(classification.extraction.inScope).toBe(false);
+          }
+        });
+      }
     }
   });
 });
