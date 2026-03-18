@@ -21,6 +21,10 @@ type EffectiveContextLike = {
   missingContextType?: 'audience' | 'operating' | 'execution' | 'io' | 'comparison' | 'source' | 'boundary' | null;
 };
 
+function isSemanticOwned(policy?: SemanticRewritePolicy | null): policy is SemanticRewritePolicy {
+  return policy?.semanticOwned === true;
+}
+
 function hasConcreteRewriteGains(evaluation: EvaluationV2): boolean {
   const scoreGainCount =
     Number(evaluation.scoreComparison.rewrite.scope > evaluation.scoreComparison.original.scope) +
@@ -50,6 +54,76 @@ function isExtremelyUnderspecified(prompt: string, analysis: Analysis): boolean 
   return wordCount <= 6 || (analysis.scores.scope <= 3 && analysis.scores.constraintQuality <= 3);
 }
 
+function selectSemanticOwnedPresentationMode(params: {
+  allowedModes: RewritePresentationMode[];
+  rewritePreference: RewritePreference;
+  rewriteRecommendation: RewriteRecommendation;
+  evaluation: EvaluationV2 | null;
+  analysis: Analysis;
+  prompt: string;
+  scoreBand: ScoreBand;
+  rewrite: Rewrite | null;
+  effectiveAnalysisContext?: EffectiveContextLike;
+}): RewritePresentationMode {
+  const allow = (mode: RewritePresentationMode): boolean => params.allowedModes.includes(mode);
+  const fallbackMode = (): RewritePresentationMode => {
+    if (allow('template_with_example')) return 'template_with_example';
+    if (allow('questions_only')) return 'questions_only';
+    if (allow('full_rewrite')) return 'full_rewrite';
+    return 'suppressed';
+  };
+
+  // For semantically owned prompts, late presentation logic is bounded policy selection only.
+  // It may downgrade, suppress, or recover when eval data is absent, but it may not escalate
+  // beyond the semantic policy's allowed modes.
+  if (params.rewritePreference === 'suppress' || params.rewriteRecommendation === 'no_rewrite_needed' || !params.rewrite) {
+    return 'suppressed';
+  }
+  if (params.allowedModes.length === 1 && params.allowedModes[0] === 'suppressed') {
+    return 'suppressed';
+  }
+  if (!params.evaluation) {
+    return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
+  }
+  if (params.evaluation.status === 'already_strong') {
+    return 'suppressed';
+  }
+  if (params.evaluation.status === 'material_improvement') {
+    return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
+  }
+  if (params.evaluation.status === 'minor_improvement') {
+    if (hasConcreteRewriteGains(params.evaluation) && allow('full_rewrite')) {
+      return 'full_rewrite';
+    }
+    return fallbackMode();
+  }
+  if (params.evaluation.status === 'possible_regression') {
+    if (
+      isExtremelyUnderspecified(params.prompt, params.analysis) &&
+      !hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+      allow('questions_only')
+    ) {
+      return 'questions_only';
+    }
+    return allow('template_with_example') ? 'template_with_example' : fallbackMode();
+  }
+  if (params.evaluation.status === 'no_significant_change') {
+    if (
+      (params.scoreBand === 'poor' || params.scoreBand === 'weak' || params.scoreBand === 'usable') &&
+      hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+      allow('template_with_example')
+    ) {
+      return 'template_with_example';
+    }
+    if (allow('questions_only')) {
+      return 'questions_only';
+    }
+    return fallbackMode();
+  }
+
+  return fallbackMode();
+}
+
 export function selectRewritePresentationMode(params: {
   rewriteRecommendation: RewriteRecommendation;
   rewritePreference: RewritePreference;
@@ -61,6 +135,7 @@ export function selectRewritePresentationMode(params: {
   semanticPolicy?: SemanticRewritePolicy | null;
   effectiveAnalysisContext?: EffectiveContextLike;
 }): RewritePresentationMode {
+  const semanticOwned = isSemanticOwned(params.semanticPolicy);
   const allowedModes = params.semanticPolicy?.allowedPresentationModes ?? [
     params.rewriteRecommendation === 'no_rewrite_needed'
       ? 'suppressed'
@@ -78,6 +153,20 @@ export function selectRewritePresentationMode(params: {
     if (allow('full_rewrite')) return 'full_rewrite';
     return 'suppressed';
   };
+
+  if (semanticOwned) {
+    return selectSemanticOwnedPresentationMode({
+      allowedModes,
+      rewritePreference: params.rewritePreference,
+      rewriteRecommendation: params.rewriteRecommendation,
+      evaluation: params.evaluation,
+      analysis: params.analysis,
+      prompt: params.prompt,
+      scoreBand: params.scoreBand,
+      rewrite: params.rewrite,
+      effectiveAnalysisContext: params.effectiveAnalysisContext,
+    });
+  }
 
   if (params.rewritePreference === 'suppress' || params.rewriteRecommendation === 'no_rewrite_needed' || !params.rewrite) {
     return 'suppressed';
@@ -262,6 +351,7 @@ export function buildGuidedCompletionQuestions(params: {
     }
   }
 
+  // Non-owned fallback only. Owned prompts should have returned from the semantic family/gap path above.
   if (role === 'developer') {
     pushUnique(questions, 'What runtime or framework should be used?');
     pushUnique(questions, 'What does the input payload look like?');
@@ -287,6 +377,7 @@ export function buildGuidedCompletionQuestions(params: {
     pushUnique(questions, 'What source material must the output be grounded in?');
   }
 
+  // Generic fallback for non-owned prompts when semantic family/gap data is absent.
   pushUnique(questions, 'What concrete outcome should the output drive?');
   pushUnique(questions, 'What must be included versus explicitly excluded?');
   pushUnique(questions, 'What format or structure should the response follow?');
