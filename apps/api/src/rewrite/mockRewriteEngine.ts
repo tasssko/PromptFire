@@ -401,6 +401,26 @@ function inferPatchClause(input: RewriteInput, patchKind: PatchKind): string | n
   return inferExampleClause(input);
 }
 
+function ladderPatchBudget(input: RewriteInput): number {
+  const target = input.ladder?.target;
+  if (!target) {
+    return 0;
+  }
+  if (input.ladder?.current === 'poor' && target === 'weak') {
+    return 2;
+  }
+  if (input.ladder?.current === 'good' && target === 'strong') {
+    return 2;
+  }
+  if (input.ladder?.current === 'strong' && target === 'excellent') {
+    return 1;
+  }
+  if (input.ladder?.current === 'excellent' && target === 'excellent') {
+    return 1;
+  }
+  return 3;
+}
+
 export class MockRewriteEngine implements RewriteEngine {
   async rewrite(input: RewriteInput): Promise<Rewrite> {
     const basePrompt = input.prompt.trim().replace(/\s+/g, ' ');
@@ -408,9 +428,23 @@ export class MockRewriteEngine implements RewriteEngine {
     const rankedKinds = rankedPatchKinds(input);
     const selectedPatches: Partial<Record<PatchKind, string>> = {};
     const selectedKinds: PatchKind[] = [];
+    const patchBudget = input.ladder ? ladderPatchBudget(input) : 4;
+
+    if (input.ladder && !input.ladder.target) {
+      return {
+        role: input.role,
+        mode: input.mode,
+        rewrittenPrompt: basePrompt,
+        explanation: substitutePreferredLanguage(
+          `Skipped rewrite because the prompt is already at the ${input.ladder.current} ladder stop point.`,
+          'specificity',
+        ),
+        changes: ['No bounded next-rung rewrite was justified.'],
+      };
+    }
 
     for (const patchKind of rankedKinds) {
-      if (selectedKinds.length >= 4) {
+      if (selectedKinds.length >= patchBudget) {
         break;
       }
       if (selectedPatches[patchKind]) {
@@ -447,7 +481,10 @@ export class MockRewriteEngine implements RewriteEngine {
       rewrittenPrompt,
       explanation:
         finalAdditions.length > 0
-          ? substitutePreferredLanguage(`Applied ${pattern} rewrite guidance with concrete, task-grounded additions.`, 'specificity')
+          ? substitutePreferredLanguage(
+              `Applied ${pattern} rewrite guidance for a bounded ${input.ladder?.current ?? 'current'} to ${input.ladder?.target ?? 'next'} step with concrete, task-grounded additions.`,
+              'specificity',
+            )
           : substitutePreferredLanguage('Applied a minimal rewrite because concrete improvements were not safely inferable.', 'specificity'),
       changes: finalAdditions.length > 0 ? finalAdditions : ['Kept rewrite minimal to avoid abstract scaffolding.'],
     };

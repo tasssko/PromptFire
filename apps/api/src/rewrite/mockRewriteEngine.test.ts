@@ -311,6 +311,58 @@ describe('MockRewriteEngine marketer behavior', () => {
     expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 
+  it('respects ladder stop states by skipping rewrite generation', async () => {
+    const prompt =
+      'Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.';
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'marketer',
+      mode: 'high_contrast',
+      preferences: normalizePreferences(),
+      ladder: {
+        current: 'strong',
+        next: 'excellent',
+        target: null,
+        maxSafeTarget: 'strong',
+        stopReason: 'already_strong',
+      },
+    });
+
+    expect(rewrite.rewrittenPrompt).toBe(prompt);
+    expect(rewrite.changes).toEqual(['No bounded next-rung rewrite was justified.']);
+  });
+
+  it('keeps poor to weak rewrites bounded to a small set of concrete additions', async () => {
+    const prompt = 'Write about AI agents.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+      analysis,
+      ladder: {
+        current: 'poor',
+        next: 'weak',
+        target: 'weak',
+        maxSafeTarget: 'good',
+        stopReason: null,
+      },
+    });
+
+    expect((rewrite.changes ?? []).length).toBeLessThanOrEqual(2);
+    expect(rewrite.explanation).toContain('poor to weak step');
+  });
+
   it('branches rewrite style for stepwise_reasoning pattern', async () => {
     const prompt = 'Compare monolith and microservices options for our platform migration.';
     const analysis = analyzePrompt({

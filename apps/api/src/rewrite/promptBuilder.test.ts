@@ -118,6 +118,31 @@ describe('buildRewriteInstructions', () => {
     expect(instructions.user).toContain('"primary": "decision_rubric"');
   });
 
+  it('includes ladder guidance and metadata when available', () => {
+    const instructions = buildRewriteInstructions({
+      prompt: 'Write about cloud cost optimization.',
+      role: 'general',
+      mode: 'balanced',
+      preferences: {
+        includeScores: true,
+        includeExplanation: true,
+        includeAlternatives: false,
+        preserveTone: false,
+      },
+      ladder: {
+        current: 'weak',
+        next: 'good',
+        target: 'good',
+        maxSafeTarget: 'strong',
+        stopReason: null,
+      },
+    });
+
+    expect(instructions.system).toContain('Rewrite ladder: current weak, target good, max safe target strong');
+    expect(instructions.user).toContain('"current": "weak"');
+    expect(instructions.user).toContain('"target": "good"');
+  });
+
   it.each([
     ['direct_instruction', 'Pattern fit: direct_instruction'],
     ['few_shot', 'Pattern fit: few_shot'],
