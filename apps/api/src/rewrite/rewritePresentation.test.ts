@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Analysis, EvaluationV2, Rewrite } from '@promptfire/shared';
-import type { SemanticRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
+import type { SemanticRewritePolicy } from '@promptfire/heuristics';
 import { buildGuidedCompletion, selectRewritePresentationMode } from './rewritePresentation';
 
 function analysis(overrides?: Partial<Analysis>): Analysis {
