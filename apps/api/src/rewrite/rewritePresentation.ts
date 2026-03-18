@@ -59,11 +59,7 @@ function selectSemanticOwnedPresentationMode(params: {
   rewritePreference: RewritePreference;
   rewriteRecommendation: RewriteRecommendation;
   evaluation: EvaluationV2 | null;
-  analysis: Analysis;
-  prompt: string;
-  scoreBand: ScoreBand;
   rewrite: Rewrite | null;
-  effectiveAnalysisContext?: EffectiveContextLike;
 }): RewritePresentationMode {
   const allow = (mode: RewritePresentationMode): boolean => params.allowedModes.includes(mode);
   const fallbackMode = (): RewritePresentationMode => {
@@ -97,28 +93,14 @@ function selectSemanticOwnedPresentationMode(params: {
     }
     return fallbackMode();
   }
+
+  // For owned prompts, regression/no-change handling stays downgrade-only.
+  // Do not re-read score bands or generic boundary heuristics after semantic policy exists.
   if (params.evaluation.status === 'possible_regression') {
-    if (
-      isExtremelyUnderspecified(params.prompt, params.analysis) &&
-      !hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
-      allow('questions_only')
-    ) {
-      return 'questions_only';
-    }
     return allow('template_with_example') ? 'template_with_example' : fallbackMode();
   }
   if (params.evaluation.status === 'no_significant_change') {
-    if (
-      (params.scoreBand === 'poor' || params.scoreBand === 'weak' || params.scoreBand === 'usable') &&
-      hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
-      allow('template_with_example')
-    ) {
-      return 'template_with_example';
-    }
-    if (allow('questions_only')) {
-      return 'questions_only';
-    }
-    return fallbackMode();
+    return allow('template_with_example') ? 'template_with_example' : fallbackMode();
   }
 
   return fallbackMode();
@@ -160,11 +142,7 @@ export function selectRewritePresentationMode(params: {
       rewritePreference: params.rewritePreference,
       rewriteRecommendation: params.rewriteRecommendation,
       evaluation: params.evaluation,
-      analysis: params.analysis,
-      prompt: params.prompt,
-      scoreBand: params.scoreBand,
       rewrite: params.rewrite,
-      effectiveAnalysisContext: params.effectiveAnalysisContext,
     });
   }
 
@@ -457,19 +435,29 @@ export function buildGuidedCompletion(params: {
     return null;
   }
 
+  const semanticOwned = params.semanticPolicy?.semanticOwned === true;
+
   return {
     mode: params.mode,
     title: params.mode === 'questions_only' ? 'Questions to tighten this prompt' : 'Fill in the missing details',
     summary:
-      params.mode === 'questions_only'
-        ? 'This prompt is too underspecified for a safe rewrite. Answer these questions first, then resubmit.'
-        : 'This prompt is too broad for a safe rewrite, but adding concrete boundaries will make it much stronger.',
+      semanticOwned
+        ? params.mode === 'questions_only'
+          ? 'Answer these questions to fill the remaining semantic gaps before rewriting.'
+          : 'Add the missing details below to keep the rewrite aligned with the prompt intent.'
+        : params.mode === 'questions_only'
+          ? 'This prompt is too underspecified for a safe rewrite. Answer these questions first, then resubmit.'
+          : 'This prompt is too broad for a safe rewrite, but adding concrete boundaries will make it much stronger.',
     questions: questions.length > 0 ? questions : undefined,
     template: template ?? undefined,
     example: example ?? undefined,
     rationale:
-      params.mode === 'questions_only'
-        ? 'Questions are safer than a full rewrite because key assumptions are still missing.'
-        : 'A template is safer here than a full rewrite because the original prompt is missing concrete boundaries.',
+      semanticOwned
+        ? params.mode === 'questions_only'
+          ? 'The semantic path identified specific gaps that should be clarified before rewriting.'
+          : 'The semantic path identified specific gaps, so a bounded template is safer than expanding the request.'
+        : params.mode === 'questions_only'
+          ? 'Questions are safer than a full rewrite because key assumptions are still missing.'
+          : 'A template is safer here than a full rewrite because the original prompt is missing concrete boundaries.',
   };
 }
