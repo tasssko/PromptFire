@@ -35,9 +35,18 @@ function readEffectiveMissingContextOverride(context?: Record<string, unknown>) 
   return undefined;
 }
 
-interface EvaluateRewriteOutput {
+export interface RewriteEvaluationDiagnostics {
+  groundedImprovementCount: number;
+  rubricEchoRisk: 'low' | 'medium' | 'high';
+  intentPreservation: 'high' | 'medium' | 'low';
+  significantChange: boolean;
+  deliverableDrift: boolean;
+}
+
+export interface EvaluateRewriteOutput {
   improvement: Improvement;
   signals: string[];
+  diagnostics: RewriteEvaluationDiagnostics;
 }
 
 const OVERALL_DELTA_WEIGHTS = {
@@ -257,10 +266,10 @@ function rubricEchoRiskLevel(input: {
   return 'low';
 }
 
-function intentPreservationLevel(input: {
+function detectDeliverableDrift(input: {
   originalPrompt: string;
   rewrittenPrompt: string;
-}): 'high' | 'medium' | 'low' {
+}): boolean {
   const taskTypeChanged = getTaskType(input.originalPrompt) !== getTaskType(input.rewrittenPrompt);
   const originalDeliverable = getPrimaryDeliverable(input.originalPrompt);
   const rewrittenDeliverable = getPrimaryDeliverable(input.rewrittenPrompt);
@@ -268,13 +277,21 @@ function intentPreservationLevel(input: {
     Boolean(originalDeliverable) &&
     Boolean(rewrittenDeliverable) &&
     originalDeliverable !== rewrittenDeliverable;
+  return taskTypeChanged || deliverableChanged;
+}
+
+function intentPreservationLevel(input: {
+  originalPrompt: string;
+  rewrittenPrompt: string;
+}): 'high' | 'medium' | 'low' {
+  const deliverableDrift = detectDeliverableDrift(input);
   const importedFramingAnchors = countPatternAdds(
     input.originalPrompt,
     input.rewrittenPrompt,
     FRAMING_IMPORT_PATTERNS,
   );
 
-  if (taskTypeChanged || deliverableChanged || importedFramingAnchors >= 3) {
+  if (deliverableDrift || importedFramingAnchors >= 3) {
     return 'low';
   }
   if (importedFramingAnchors >= 1) {
@@ -435,6 +452,7 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
   const paraphraseHeavy = isParaphraseHeavy(scoreDeltas, input);
   const rubricEchoRisk = rubricEchoRiskLevel(input);
   const intentPreservation = intentPreservationLevel(input);
+  const deliverableDrift = detectDeliverableDrift(input);
   let groundedImprovementCount = countGroundedImprovementGains({
     ...input,
     allowAudienceGain,
@@ -443,6 +461,11 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
     groundedImprovementCount += 1;
   }
   const abstractInstructionCount = getAbstractInstructionCount(input);
+  const significantChange =
+    Math.abs(overallDelta) >= 1 ||
+    groundedImprovementCount > 0 ||
+    abstractInstructionCount > 0 ||
+    !paraphraseHeavy;
 
   const abstractScaffoldingDominates =
     abstractInstructionCount >= 2 && abstractInstructionCount > groundedImprovementCount;
@@ -549,5 +572,12 @@ export function evaluateRewrite(input: EvaluateRewriteInput): EvaluateRewriteOut
       notes: notes.slice(0, 12),
     },
     signals: [...new Set(signals)].slice(0, 12),
+    diagnostics: {
+      groundedImprovementCount,
+      rubricEchoRisk,
+      intentPreservation,
+      significantChange,
+      deliverableDrift,
+    },
   };
 }

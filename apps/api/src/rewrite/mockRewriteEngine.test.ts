@@ -400,6 +400,72 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(rewrite.explanation).toContain('stepwise_reasoning');
   });
 
+  it('keeps decision_rubric structure under ladder control', async () => {
+    const prompt = 'Score these deployment options and rank them.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+      analysis,
+      patternFit: {
+        primary: 'decision_rubric',
+        confidence: 'high',
+        reasons: ['Prompt requests ranking.'],
+      },
+      ladder: {
+        current: 'weak',
+        next: 'good',
+        target: 'good',
+        maxSafeTarget: 'strong',
+        stopReason: null,
+      },
+    });
+
+    expect(rewrite.rewrittenPrompt).toContain('Define criteria first, then score each option against those criteria, and finish with a ranked verdict.');
+  });
+
+  it('keeps decomposition structure under ladder control', async () => {
+    const prompt = 'Create a complete guide to Kubernetes, migration strategy, cost optimization, and troubleshooting.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+      analysis,
+      patternFit: {
+        primary: 'decomposition',
+        confidence: 'high',
+        reasons: ['Task is overloaded.'],
+      },
+      ladder: {
+        current: 'poor',
+        next: 'weak',
+        target: 'weak',
+        maxSafeTarget: 'good',
+        stopReason: null,
+      },
+    });
+
+    expect(rewrite.rewrittenPrompt).toContain('Break the work into phases and start with the first phase output.');
+  });
+
   it('branches rewrite style for context_first pattern', async () => {
     const prompt = 'Write a detailed case study about our customer migration with measurable outcomes.';
     const analysis = analyzePrompt({
@@ -436,5 +502,72 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(rewrite.rewrittenPrompt).toContain('request the missing source context');
     expect(rewrite.rewrittenPrompt).toContain('grounded only in supplied source material');
     expectNoDiscouragedLanguage(rewrite.explanation ?? '');
+  });
+
+  it('keeps context_first requests grounded under ladder control', async () => {
+    const prompt = 'Write a case study about our migration outcomes.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'marketer',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'marketer',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+      analysis,
+      patternFit: {
+        primary: 'context_first',
+        confidence: 'high',
+        reasons: ['Needs source material.'],
+      },
+      ladder: {
+        current: 'good',
+        next: 'strong',
+        target: 'strong',
+        maxSafeTarget: 'strong',
+        stopReason: null,
+      },
+    });
+
+    expect(rewrite.rewrittenPrompt).toContain('request the missing source context');
+    expect(rewrite.rewrittenPrompt).not.toContain('audit pressure');
+  });
+
+  it('keeps stepwise_reasoning trade-off flow under ladder control', async () => {
+    const prompt = 'Compare monolith and microservices.';
+    const analysis = analyzePrompt({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+    });
+
+    const engine = new MockRewriteEngine();
+    const rewrite = await engine.rewrite({
+      prompt,
+      role: 'general',
+      mode: 'balanced',
+      preferences: normalizePreferences(),
+      analysis,
+      patternFit: {
+        primary: 'stepwise_reasoning',
+        confidence: 'high',
+        reasons: ['Comparison prompt.'],
+      },
+      ladder: {
+        current: 'good',
+        next: 'strong',
+        target: 'strong',
+        maxSafeTarget: 'strong',
+        stopReason: null,
+      },
+    });
+
+    expect(rewrite.rewrittenPrompt).toContain('Use three steps: identify decision dimensions, compare options across those dimensions, then provide a final recommendation with trade-offs.');
   });
 });

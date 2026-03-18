@@ -11,6 +11,7 @@ import {
   generateBestNextMove,
   generateImprovementSuggestions,
   projectScores,
+  validateLadderStep,
 } from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
 import {
@@ -27,6 +28,7 @@ import {
   type AnalyzeAndRewriteV2Response,
   type Analysis,
   type BestNextMove,
+  type ImprovementStatus,
   type Issue,
   type Role,
   type RewriteRecommendation,
@@ -65,6 +67,7 @@ import { ProviderNotConfiguredError, UpstreamRewriteError } from './rewrite/erro
 import { selectRewriteEngine } from './rewrite/engineSelector';
 import { getProviderConfig } from './rewrite/providerConfig';
 import { buildGuidedCompletion, selectRewritePresentationMode } from './rewrite/rewritePresentation';
+import type { InternalLadderTrace } from './rewrite/types';
 import { evaluateInferenceTrigger, mergeContextWithInference } from './inference/fallbackResolver';
 import { buildEffectiveResolution } from './inference/effectiveContext';
 import { OpenAIInferenceClient } from './inference/openaiInference';
@@ -109,6 +112,7 @@ function logRequest(params: {
   evaluationStatus?: string;
   overallDelta?: number;
   alreadyStrong?: boolean;
+  ladderTrace?: InternalLadderTrace | null;
   errorCode?: string;
 }): void {
   console.info(JSON.stringify(params));
@@ -432,6 +436,34 @@ function bestImprovementPath(pattern: PromptPattern): string {
     return 'Best improvement path: supply missing context or source material.';
   }
   return 'Best improvement path: clarify the request directly.';
+}
+
+function reconcileLadderStatus(input: {
+  currentStatus: ImprovementStatus;
+  overallDelta: number;
+  ladderEvaluation: ReturnType<typeof validateLadderStep> | null;
+}): ImprovementStatus {
+  if (!input.ladderEvaluation) {
+    return input.currentStatus;
+  }
+
+  if (!input.ladderEvaluation.accepted) {
+    if (input.ladderEvaluation.reason === 'intent_drift' || input.ladderEvaluation.reason === 'rubric_echo_risk') {
+      return 'possible_regression';
+    }
+    if (input.ladderEvaluation.reason === 'already_strong') {
+      return 'already_strong';
+    }
+    return 'no_significant_change';
+  }
+
+  if (input.overallDelta >= 4 && input.ladderEvaluation.groundedImprovementCount >= 2) {
+    return 'material_improvement';
+  }
+  if (input.overallDelta > 0 || input.ladderEvaluation.groundedImprovementCount >= 1) {
+    return 'minor_improvement';
+  }
+  return input.currentStatus;
 }
 
 export async function handleHttpRequest(request: HttpRequest): Promise<HttpResponse> {
@@ -1152,6 +1184,22 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       rewritePreference: input.rewritePreference,
       expectedImprovement: publicExpectedImprovement,
     });
+    let ladderTrace: InternalLadderTrace | null = {
+      current: rewriteLadder.current,
+      next: rewriteLadder.next,
+      target: rewriteLadder.target,
+      maxSafeTarget: rewriteLadder.maxSafeTarget,
+      stopReason: rewriteLadder.stopReason,
+      pattern: patternFit.primary,
+      claimedStep: rewriteLadder.target
+        ? {
+            from: rewriteLadder.current,
+            to: rewriteLadder.target,
+          }
+        : null,
+      ladderAccepted: null,
+      ladderReason: null,
+    };
 
     try {
       let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
@@ -1209,12 +1257,36 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           context: effectiveContext,
           role: input.role,
         });
+        const ladderEvaluation =
+          rewriteLadder.target !== null
+            ? validateLadderStep({
+                from: rewriteLadder.current,
+                to: rewriteLadder.target,
+                evaluationStatus: rewriteEvaluation.improvement.status,
+                diagnostics: rewriteEvaluation.diagnostics,
+              })
+            : null;
+        const evaluationStatus = reconcileLadderStatus({
+          currentStatus: rewriteEvaluation.improvement.status,
+          overallDelta: rewriteEvaluation.improvement.overallDelta,
+          ladderEvaluation,
+        });
+        ladderTrace = {
+          ...ladderTrace,
+          claimedStep: ladderEvaluation?.claimedStep ?? ladderTrace?.claimedStep ?? null,
+          ladderAccepted: ladderEvaluation?.accepted ?? null,
+          ladderReason: ladderEvaluation?.reason ?? null,
+        };
+        const evaluationSignals = [...rewriteEvaluation.signals];
+        if (ladderEvaluation) {
+          evaluationSignals.push(`LADDER_${ladderEvaluation.reason.toUpperCase()}`);
+        }
 
         rewrite = generatedRewrite;
         evaluation = {
-          status: rewriteEvaluation.improvement.status,
+          status: evaluationStatus,
           overallDelta: rewriteEvaluation.improvement.overallDelta,
-          signals: rewriteEvaluation.signals,
+          signals: [...new Set(evaluationSignals)].slice(0, 12),
           scoreComparison: {
             original: {
               scope: resolvedAnalysis.scores.scope,
@@ -1241,6 +1313,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           prompt: input.prompt,
           semanticPolicy: semanticRewritePolicy,
           effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+          ladderTrace,
         });
         if (rewritePresentationMode === 'template_with_example' || rewritePresentationMode === 'questions_only') {
           guidedCompletion = buildGuidedCompletion({
@@ -1322,6 +1395,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         evaluationStatus: evaluation?.status,
         overallDelta: evaluation?.overallDelta,
         alreadyStrong: rewriteRecommendation === 'no_rewrite_needed',
+        ladderTrace,
       });
       return response;
     } catch (error) {

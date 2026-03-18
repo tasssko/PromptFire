@@ -34,6 +34,9 @@ export interface LadderEvaluation {
     | 'intent_drift'
     | 'already_strong'
     | 'no_significant_change';
+  groundedImprovementCount: number;
+  rubricEchoRisk: 'low' | 'medium' | 'high';
+  intentPreservation: 'low' | 'medium' | 'high';
 }
 
 const RUNG_ORDER: RewriteLadderRung[] = ['poor', 'weak', 'good', 'strong', 'excellent'];
@@ -172,57 +175,58 @@ function minimumGroundedImprovements(from: RewriteLadderRung, to: RewriteLadderR
   return 2;
 }
 
-export function evaluateLadderStep(input: {
+export function validateLadderStep(input: {
   from: RewriteLadderRung;
   to: RewriteLadderRung;
-  groundedImprovementCount: number;
-  rubricEchoRisk: 'low' | 'medium' | 'high';
-  intentPreservation: 'high' | 'medium' | 'low';
-  significantChange: boolean;
+  evaluationStatus: 'material_improvement' | 'minor_improvement' | 'no_significant_change' | 'possible_regression' | 'already_strong';
+  diagnostics: {
+    groundedImprovementCount: number;
+    rubricEchoRisk: 'low' | 'medium' | 'high';
+    intentPreservation: 'low' | 'medium' | 'high';
+    significantChange: boolean;
+    deliverableDrift: boolean;
+  };
 }): LadderEvaluation {
-  if (!input.significantChange) {
-    return {
-      claimedStep: { from: input.from, to: input.to },
-      accepted: false,
-      reason: 'no_significant_change',
-    };
+  const result = (accepted: boolean, reason: LadderEvaluation['reason']): LadderEvaluation => ({
+    claimedStep: { from: input.from, to: input.to },
+    accepted,
+    reason,
+    groundedImprovementCount: input.diagnostics.groundedImprovementCount,
+    rubricEchoRisk: input.diagnostics.rubricEchoRisk,
+    intentPreservation: input.diagnostics.intentPreservation,
+  });
+
+  if (input.diagnostics.deliverableDrift || input.diagnostics.intentPreservation === 'low') {
+    return result(false, 'intent_drift');
   }
 
-  if (input.intentPreservation === 'low') {
-    return {
-      claimedStep: { from: input.from, to: input.to },
-      accepted: false,
-      reason: 'intent_drift',
-    };
+  if (input.diagnostics.rubricEchoRisk === 'high') {
+    return result(false, 'rubric_echo_risk');
   }
 
-  if (input.from === 'strong' && input.to === 'excellent' && input.rubricEchoRisk !== 'low') {
-    return {
-      claimedStep: { from: input.from, to: input.to },
-      accepted: false,
-      reason: 'already_strong',
-    };
+  if ((input.from === 'strong' || input.from === 'excellent') && input.evaluationStatus === 'already_strong') {
+    return result(false, 'already_strong');
   }
 
-  if (input.rubricEchoRisk === 'high') {
-    return {
-      claimedStep: { from: input.from, to: input.to },
-      accepted: false,
-      reason: 'rubric_echo_risk',
-    };
+  if (!input.diagnostics.significantChange) {
+    return result(false, input.from === 'strong' || input.from === 'excellent' ? 'already_strong' : 'no_significant_change');
   }
 
-  if (input.groundedImprovementCount < minimumGroundedImprovements(input.from, input.to)) {
+  if (input.diagnostics.groundedImprovementCount < minimumGroundedImprovements(input.from, input.to)) {
+    if (input.from === 'strong' || input.from === 'excellent') {
+      return result(false, 'already_strong');
+    }
     return {
       claimedStep: { from: input.from, to: input.to },
       accepted: false,
       reason: 'insufficient_grounded_improvement',
+      groundedImprovementCount: input.diagnostics.groundedImprovementCount,
+      rubricEchoRisk: input.diagnostics.rubricEchoRisk,
+      intentPreservation: input.diagnostics.intentPreservation,
     };
   }
 
-  return {
-    claimedStep: { from: input.from, to: input.to },
-    accepted: true,
-    reason: 'grounded_improvement_sufficient',
-  };
+  return result(true, 'grounded_improvement_sufficient');
 }
+
+export const evaluateLadderStep = validateLadderStep;

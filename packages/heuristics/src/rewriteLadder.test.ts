@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveRewriteLadderState, evaluateLadderStep, ladderRungFromOverallScore } from './rewriteLadder';
+import { deriveRewriteLadderState, validateLadderStep, ladderRungFromOverallScore } from './rewriteLadder';
 
 describe('rewrite ladder', () => {
   it('maps overall score bands to ladder rungs', () => {
@@ -61,13 +61,17 @@ describe('rewrite ladder', () => {
 
   it('rejects ladder progress when grounded improvements are insufficient or rubric-heavy', () => {
     expect(
-      evaluateLadderStep({
+      validateLadderStep({
         from: 'weak',
         to: 'good',
-        groundedImprovementCount: 1,
-        rubricEchoRisk: 'low',
-        intentPreservation: 'high',
-        significantChange: true,
+        evaluationStatus: 'no_significant_change',
+        diagnostics: {
+          groundedImprovementCount: 1,
+          rubricEchoRisk: 'low',
+          intentPreservation: 'high',
+          significantChange: true,
+          deliverableDrift: false,
+        },
       }),
     ).toMatchObject({
       accepted: false,
@@ -75,17 +79,134 @@ describe('rewrite ladder', () => {
     });
 
     expect(
-      evaluateLadderStep({
+      validateLadderStep({
         from: 'good',
         to: 'strong',
-        groundedImprovementCount: 3,
-        rubricEchoRisk: 'high',
-        intentPreservation: 'high',
-        significantChange: true,
+        evaluationStatus: 'possible_regression',
+        diagnostics: {
+          groundedImprovementCount: 3,
+          rubricEchoRisk: 'high',
+          intentPreservation: 'high',
+          significantChange: true,
+          deliverableDrift: false,
+        },
       }),
     ).toMatchObject({
       accepted: false,
       reason: 'rubric_echo_risk',
+    });
+  });
+
+  it('accepts weak to good when two grounded improvements exist', () => {
+    expect(
+      validateLadderStep({
+        from: 'weak',
+        to: 'good',
+        evaluationStatus: 'minor_improvement',
+        diagnostics: {
+          groundedImprovementCount: 2,
+          rubricEchoRisk: 'low',
+          intentPreservation: 'high',
+          significantChange: true,
+          deliverableDrift: false,
+        },
+      }),
+    ).toMatchObject({
+      accepted: true,
+      reason: 'grounded_improvement_sufficient',
+    });
+  });
+
+  it('rejects strong to excellent as already strong when change is negligible', () => {
+    expect(
+      validateLadderStep({
+        from: 'strong',
+        to: 'excellent',
+        evaluationStatus: 'already_strong',
+        diagnostics: {
+          groundedImprovementCount: 0,
+          rubricEchoRisk: 'low',
+          intentPreservation: 'high',
+          significantChange: false,
+          deliverableDrift: false,
+        },
+      }),
+    ).toMatchObject({
+      accepted: false,
+      reason: 'already_strong',
+    });
+  });
+
+  it('keeps rung boundaries stable at 54/55, 74/75, and 89/90', () => {
+    expect(
+      deriveRewriteLadderState({
+        overallScore: 54,
+        rewriteRecommendation: 'rewrite_recommended',
+        rewritePreference: 'auto',
+        expectedImprovement: 'high',
+      }),
+    ).toMatchObject({
+      current: 'weak',
+      target: 'good',
+    });
+    expect(
+      deriveRewriteLadderState({
+        overallScore: 55,
+        rewriteRecommendation: 'rewrite_optional',
+        rewritePreference: 'auto',
+        expectedImprovement: 'high',
+      }),
+    ).toMatchObject({
+      current: 'good',
+      target: 'strong',
+    });
+
+    expect(
+      deriveRewriteLadderState({
+        overallScore: 74,
+        rewriteRecommendation: 'rewrite_optional',
+        rewritePreference: 'auto',
+        expectedImprovement: 'high',
+      }),
+    ).toMatchObject({
+      current: 'good',
+      target: 'strong',
+    });
+    expect(
+      deriveRewriteLadderState({
+        overallScore: 75,
+        rewriteRecommendation: 'no_rewrite_needed',
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+      }),
+    ).toMatchObject({
+      current: 'strong',
+      target: null,
+      stopReason: 'already_strong',
+    });
+
+    expect(
+      deriveRewriteLadderState({
+        overallScore: 89,
+        rewriteRecommendation: 'no_rewrite_needed',
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+      }),
+    ).toMatchObject({
+      current: 'strong',
+      target: null,
+    });
+    expect(
+      deriveRewriteLadderState({
+        overallScore: 90,
+        rewriteRecommendation: 'no_rewrite_needed',
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+      }),
+    ).toMatchObject({
+      current: 'excellent',
+      target: null,
+      stopReason: 'already_excellent',
     });
   });
 });
