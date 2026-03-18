@@ -198,6 +198,25 @@ describe('semantic core', () => {
     expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
   });
 
+  it('keeps thin explicit decision prompts on the semantic path without treating them as bounded', () => {
+    const thin = classifySemanticPrompt('Help engineering managers decide whether to adopt TypeScript.', 'general');
+    const decision = buildDecisionState(thin.inventory, 'auto');
+
+    expect(thin.extraction.taskClass).toBe('decision_support');
+    expect(thin.extraction.inScope).toBe(true);
+    expect(thin.inventory.decisionContext.decisionObject.length).toBeGreaterThan(0);
+    expect(thin.inventory.boundedness.isBounded).toBe(false);
+    expect(decision.semanticState).toBe('weak');
+    expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
+  });
+
+  it('keeps topic-only prompts out of narrow decision-support ownership', () => {
+    const topicOnly = classifySemanticPrompt('Write about TypeScript adoption for engineering managers.', 'general');
+
+    expect(topicOnly.extraction.inScope).toBe(false);
+    expect(topicOnly.extraction.taskClass).toBe('other');
+  });
+
   it('treats exactly three boundedness groups as bounded for implementation prompts', () => {
     const partial = classifySemanticPrompt(
       'Write a Node.js webhook endpoint in TypeScript that accepts JSON and returns 200 on success and 400 on invalid input.',

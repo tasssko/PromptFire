@@ -130,11 +130,12 @@ export const semanticEvalFixtures: SemanticEvalFixture[] = [
     id: 'decision-thin-typescript',
     family: 'decision_support',
     role: 'general',
-    prompt: 'Help engineering managers decide whether to adopt TypeScript using maintainability and onboarding cost as the criteria.',
+    prompt: 'Help engineering managers decide whether to adopt TypeScript.',
     expectedTaskClass: 'decision_support',
     expectedRecommendation: 'rewrite_recommended',
     acceptableScoreBands: ['poor', 'weak', 'usable'],
     forbiddenLegacyPhrases: ['runtime', 'contract detail'],
+    notes: 'Thin decision-support prompts should stay on the semantic route when the decision target is explicit.',
   },
   {
     id: 'decision-bounded-typescript',

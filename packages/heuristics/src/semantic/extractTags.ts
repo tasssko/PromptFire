@@ -16,6 +16,7 @@ export type SemanticTag =
   | 'has_comparison_object'
   | 'has_tradeoff_frame'
   | 'has_decision_frame'
+  | 'has_decision_target'
   | 'has_decision_criteria'
   | 'has_scenario_context'
   | 'has_context_block'
@@ -96,7 +97,8 @@ function determineTaskClass(prompt: string, role: Role, tags: Set<SemanticTag>):
     hasFewShotStructure(prompt) &&
     (tags.has('has_example_transfer_instruction') || tags.has('has_style_reference') || tags.has('has_format_reference'));
   const hasComparisonSignals = tags.has('has_comparison_object') || tags.has('has_tradeoff_frame');
-  const hasDecisionSignals = tags.has('has_decision_frame') || tags.has('has_decision_criteria');
+  const hasDecisionSignals =
+    tags.has('has_decision_frame') || tags.has('has_decision_target') || tags.has('has_decision_criteria');
 
   if (hasFewShotSignals && hasFewShotStructure(prompt)) {
     return 'few_shot';
@@ -130,6 +132,7 @@ function isSemanticPathInScope(taskClass: TaskClass, tags: Set<SemanticTag>): bo
     return (
       tags.has('has_decision_frame') &&
       (tags.has('has_tradeoff_frame') ||
+        tags.has('has_decision_target') ||
         tags.has('has_decision_criteria') ||
         tags.has('has_scenario_context') ||
         tags.has('has_examples') ||
@@ -391,6 +394,22 @@ export function extractSemanticTags(prompt: string, role: Role): SemanticTagExtr
   if (decisionFrameEvidence.length > 0) {
     tags.add('has_decision_frame');
     pushEvidence(evidence, 'has_decision_frame', decisionFrameEvidence);
+  }
+
+  const decisionTargetEvidence = collect(
+    [
+      ['decide whether to', /\bdecide\b[\s\S]{0,40}\bwhether to\b/i],
+      ['help decide whether to', /\bhelp\b[\s\S]{0,20}\bdecide\b[\s\S]{0,40}\bwhether to\b/i],
+      ['recommend whether to', /\brecommend\b[\s\S]{0,20}\bwhether to\b/i],
+      ['advise whether to', /\badvise\b[\s\S]{0,20}\bwhether to\b/i],
+      ['whether to adopt', /\bwhether to\b[\s\S]{0,20}\b(adopt|use|keep|introduce|migrate|centralize|split|buy|build)\b/i],
+      ['should we', /\bshould we\b/i],
+    ],
+    prompt,
+  );
+  if (decisionTargetEvidence.length > 0) {
+    tags.add('has_decision_target');
+    pushEvidence(evidence, 'has_decision_target', decisionTargetEvidence);
   }
 
   const criteriaEvidence = collect(

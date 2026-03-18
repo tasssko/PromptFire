@@ -240,7 +240,11 @@ export function buildContextInventory(extraction: SemanticTagExtraction): Contex
   const audiencePresent = hasTag(tags, 'has_audience') || hasTag(tags, 'has_org_context');
   const comparisonPresent =
     hasTag(tags, 'has_comparison_object') || hasTag(tags, 'has_tradeoff_frame') || hasTag(tags, 'has_decision_criteria');
-  const decisionPresent = hasTag(tags, 'has_decision_frame') || hasTag(tags, 'has_decision_criteria') || hasTag(tags, 'has_tradeoff_frame');
+  const decisionPresent =
+    hasTag(tags, 'has_decision_frame') ||
+    hasTag(tags, 'has_decision_target') ||
+    hasTag(tags, 'has_decision_criteria') ||
+    hasTag(tags, 'has_tradeoff_frame');
   const contextPresent = hasTag(tags, 'has_context_block');
   const examplePresent = hasTag(tags, 'has_examples');
 
@@ -291,7 +295,7 @@ export function buildContextInventory(extraction: SemanticTagExtraction): Contex
     },
     decisionContext: {
       present: decisionPresent,
-      decisionObject: evidence.has_decision_frame ?? [],
+      decisionObject: unique([...(evidence.has_decision_target ?? []), ...(evidence.has_decision_frame ?? [])]),
       criteria: evidence.has_decision_criteria ?? [],
       groundedFraming: evidence.has_grounding_exclusion ?? [],
     },

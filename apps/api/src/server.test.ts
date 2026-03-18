@@ -247,6 +247,24 @@ describe('API vertical slice', () => {
     }
   });
 
+  describe('semantic routing ownership', () => {
+    it('keeps thin explicit decision-support prompts on the local semantic route', async () => {
+      const body = await analyzeV2('Help engineering managers decide whether to adopt TypeScript.', 'general');
+
+      expect(body.rewriteRecommendation).toBe('rewrite_recommended');
+      expect(body.inferenceFallbackUsed).toBe(false);
+      expect(body.resolutionSource).toBe('local');
+      expect(body.bestNextMove?.type).toBe('add_decision_criteria');
+    });
+
+    it('does not broaden routing ownership for topic-only prompts', async () => {
+      const body = await analyzeV2('Write about TypeScript adoption for engineering managers.', 'general');
+
+      expect(body.inferenceFallbackUsed).toBe(true);
+      expect(body.resolutionSource).toBe('local');
+    });
+  });
+
   it('supports magic-link login, session lookup, and logout', async () => {
     process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
 
