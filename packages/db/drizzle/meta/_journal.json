@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1773876859047,
-      "tag": "0000_neat_magus",
+      "when": 1742030000000,
+      "tag": "0000_auth_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1742330000000,
+      "tag": "0001_prompt_runs",
       "breakpoints": true
     }
   ]
