@@ -1,6 +1,83 @@
 import { describe, expect, it } from 'vitest';
+import type { Analysis, Role, ScoreBand, ScoreSet } from '@promptfire/shared';
+import { semanticConsistencyCases, semanticEquivalenceFamilies, semanticFindingCases } from '@promptfire/shared/src/semanticFixtures';
+import { analyzePrompt } from '../analyzePrompt';
 import { buildDecisionState } from './buildDecision';
 import { classifySemanticPrompt } from './buildInventory';
+import { deriveFindings } from './deriveFindings';
+import { projectScores } from './projectScores';
+
+function computeOverallScore(scores: ScoreSet): number {
+  const raw =
+    2.75 * scores.scope +
+    2.25 * scores.contrast +
+    1.25 * scores.clarity +
+    2.0 * scores.constraintQuality +
+    1.5 * (10 - scores.genericOutputRisk) +
+    0.5 * (10 - scores.tokenWasteRisk);
+
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+function scoreBandFromOverallScore(overallScore: number): ScoreBand {
+  if (overallScore >= 85) {
+    return 'excellent';
+  }
+  if (overallScore >= 75) {
+    return 'strong';
+  }
+  if (overallScore >= 60) {
+    return 'usable';
+  }
+  if (overallScore >= 40) {
+    return 'weak';
+  }
+  return 'poor';
+}
+
+function buildSemanticEvaluation(prompt: string, role: Role) {
+  const classification = classifySemanticPrompt(prompt, role);
+  const decision = buildDecisionState(classification.inventory, 'auto');
+  const baseAnalysis = analyzePrompt({ prompt, role, mode: 'balanced' });
+  const projectedScores = projectScores(baseAnalysis.scores, classification.inventory, decision);
+  const analysis: Analysis = {
+    ...baseAnalysis,
+    scores: projectedScores,
+  };
+  const findings = deriveFindings(analysis, classification.inventory, decision);
+  const overallScore = computeOverallScore(projectedScores);
+
+  return {
+    classification,
+    decision,
+    analysis,
+    findings,
+    overallScore,
+    scoreBand: scoreBandFromOverallScore(overallScore),
+  };
+}
+
+function expectTextToAvoidSnippets(text: string, forbidden: string[]): void {
+  const lowered = text.toLowerCase();
+  for (const snippet of forbidden) {
+    expect(lowered).not.toContain(snippet.toLowerCase());
+  }
+}
+
+function expectTextToContainAnySnippet(text: string, allowed: string[]): void {
+  const lowered = text.toLowerCase();
+  expect(allowed.some((snippet) => lowered.includes(snippet.toLowerCase()))).toBe(true);
+}
+
+function expectScoreStability(a: number, b: number, maxDelta = 8): void {
+  expect(Math.abs(a - b)).toBeLessThanOrEqual(maxDelta);
+}
+
+function expectSubscoreStability(a: ScoreSet, b: ScoreSet, keys: (keyof ScoreSet)[], maxDelta = 2): void {
+  for (const key of keys) {
+    expect(Math.abs(a[key] - b[key])).toBeLessThanOrEqual(maxDelta);
+  }
+}
 
 describe('semantic core', () => {
   it('treats canonical and synonym bounded webhook prompts as the same semantic state', () => {
@@ -127,5 +204,77 @@ describe('semantic core', () => {
     expect(partial.inventory.boundedness.isBounded).toBe(true);
     expect(decision.semanticState).toBe('usable');
     expect(decision.rewriteRecommendation).toBe('rewrite_optional');
+  });
+
+  describe('decision state consistency', () => {
+    for (const fixture of semanticConsistencyCases) {
+      it(fixture.name, () => {
+        const result = buildSemanticEvaluation(fixture.prompt, fixture.role);
+        const joinedFindings = result.findings.issues.map((issue) => issue.message).join(' ');
+
+        expect(result.classification.extraction.taskClass).toBe(fixture.family);
+        expect(result.decision.rewriteRecommendation).toBe(fixture.expectedRecommendation);
+
+        if (fixture.forbiddenScoreBands) {
+          expect(fixture.forbiddenScoreBands).not.toContain(result.scoreBand);
+        }
+        if (fixture.forbiddenSummarySnippets) {
+          expectTextToAvoidSnippets(result.findings.summary, fixture.forbiddenSummarySnippets);
+        }
+        if (fixture.forbiddenFindingSnippets) {
+          expectTextToAvoidSnippets(joinedFindings, fixture.forbiddenFindingSnippets);
+        }
+        if (fixture.forbiddenBestNextMoveSnippets && result.findings.bestNextMove) {
+          expectTextToAvoidSnippets(
+            `${result.findings.bestNextMove.title} ${result.findings.bestNextMove.rationale}`,
+            fixture.forbiddenBestNextMoveSnippets,
+          );
+        }
+      });
+    }
+  });
+
+  describe('family-specific findings', () => {
+    for (const fixture of semanticFindingCases) {
+      it(fixture.name, () => {
+        const result = buildSemanticEvaluation(fixture.prompt, fixture.role);
+        const visibleFindingText = [
+          result.findings.summary,
+          ...result.findings.issues.map((issue) => issue.message),
+          result.findings.bestNextMove?.title ?? '',
+          result.findings.bestNextMove?.rationale ?? '',
+        ].join(' ');
+
+        expect(result.classification.extraction.taskClass).toBe(fixture.family);
+        expect(result.decision.rewriteRecommendation).toBe(fixture.expectedRecommendation);
+        expectTextToContainAnySnippet(visibleFindingText, fixture.allowedFindingSnippets);
+        expectTextToAvoidSnippets(visibleFindingText, fixture.forbiddenFindingSnippets);
+      });
+    }
+  });
+
+  describe('semantic equivalence score stability', () => {
+    for (const family of semanticEquivalenceFamilies) {
+      it(`${family.family} variants keep the same semantic state and stable scores`, () => {
+        const baselineVariant = family.variants[0]!;
+        const baseline = buildSemanticEvaluation(baselineVariant.prompt, family.role);
+
+        expect(baseline.classification.extraction.taskClass).toBe(family.family);
+        expect(baseline.decision.rewriteRecommendation).toBe(family.expectedRecommendation);
+        expect(baseline.decision.majorBlockingIssues).toBe(family.expectedMajorBlockingIssues);
+
+        for (const variant of family.variants.slice(1)) {
+          const current = buildSemanticEvaluation(variant.prompt, family.role);
+
+          expect(current.classification.extraction.taskClass).toBe(baseline.classification.extraction.taskClass);
+          expect(current.classification.inventory.boundedness.isBounded).toBe(baseline.classification.inventory.boundedness.isBounded);
+          expect(current.decision.rewriteRecommendation).toBe(baseline.decision.rewriteRecommendation);
+          expect(current.decision.majorBlockingIssues).toBe(baseline.decision.majorBlockingIssues);
+          expect(current.findings.bestNextMove?.type ?? null).toBe(baseline.findings.bestNextMove?.type ?? null);
+          expectScoreStability(baseline.overallScore, current.overallScore);
+          expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
+        }
+      });
+    }
   });
 });
