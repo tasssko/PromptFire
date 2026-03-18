@@ -301,6 +301,30 @@ describe('API vertical slice', () => {
     });
   });
 
+  describe('late-branch cleanup', () => {
+    it('keeps semantically owned optional prompts out of full rewrite even with material improvement eval', async () => {
+      const body = await analyzeV2(
+        'Compare Kubernetes and ECS for a mid-sized SaaS team. Include one startup case and one enterprise case.',
+        'general',
+      );
+
+      expect(body.rewriteRecommendation).toBe('rewrite_optional');
+      expect(body.rewritePresentationMode).not.toBe('full_rewrite');
+      expect(['suppressed', 'template_with_example', 'questions_only']).toContain(body.rewritePresentationMode);
+    });
+
+    it('keeps semantically strong owned prompts suppressed despite late evaluation machinery', async () => {
+      const body = await analyzeV2(
+        'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+        'developer',
+      );
+
+      expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+      expect(body.rewritePresentationMode).toBe('suppressed');
+      expect(body.guidedCompletion).toBeNull();
+    });
+  });
+
   it('supports magic-link login, session lookup, and logout', async () => {
     process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
 

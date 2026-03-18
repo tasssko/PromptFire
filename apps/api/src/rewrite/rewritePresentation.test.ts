@@ -244,4 +244,49 @@ describe('rewrite presentation fallback', () => {
 
     expect(guided?.questions?.join(' ').toLowerCase()).toMatch(/deliverable|context|criteria/);
   });
+
+  it('H: drives analysis guided completion from semantic source gaps before generic fallback', () => {
+    const guided = buildGuidedCompletion({
+      prompt: 'Analyze incident response handoff failures using ownership ambiguity and escalation gaps as the criteria.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis(),
+      semanticPolicy: semanticPolicy({
+        family: 'analysis',
+        primaryGap: 'source',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: 'source',
+      },
+    });
+
+    const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
+    expect(joined).toMatch(/evidence|source material|grounding|authoritative/);
+    expect(joined).not.toMatch(/audience|format or structure/);
+  });
+
+  it('I: keeps implementation execution gaps on execution questions instead of generic developer prompts', () => {
+    const guided = buildGuidedCompletion({
+      prompt: 'Write a webhook handler.',
+      role: 'developer',
+      mode: 'questions_only',
+      analysis: analysis(),
+      semanticPolicy: semanticPolicy({
+        family: 'implementation',
+        primaryGap: 'execution',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'developer',
+        missingContextType: 'execution',
+      },
+    });
+
+    const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
+    expect(joined).toMatch(/runtime|framework|execution surface|environment|integration constraints/);
+  });
 });
