@@ -247,6 +247,33 @@ describe('semantic core', () => {
     expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
   });
 
+  it('treats analysis context blocks as relevant when the prompt is analysis-shaped', () => {
+    const classification = classifySemanticPrompt(
+      'We are a mid-sized SaaS team with frequent incident escalations, thin on-call coverage, and unclear service ownership.\nGiven this situation, analyze why incident response handoffs keep stalling. Use ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case.',
+      'general',
+    );
+
+    expect(classification.extraction.taskClass).toBe('analysis');
+    expect(classification.inventory.contextBlock.present).toBe(true);
+    expect(classification.inventory.contextBlock.relevant).toBe(true);
+    expect(classification.inventory.boundedness.isBounded).toBe(true);
+    expect(classification.inventory.boundedness.boundedSignals).toContain('scenario context');
+  });
+
+  it('keeps target-only analysis prompts on the semantic path', () => {
+    const targetOnly = classifySemanticPrompt(
+      'What drives stalled incident response handoffs for a mid-sized SaaS team? Use ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case.',
+      'general',
+    );
+    const decision = buildDecisionState(targetOnly.inventory, 'auto');
+
+    expect(targetOnly.extraction.taskClass).toBe('analysis');
+    expect(targetOnly.extraction.inScope).toBe(true);
+    expect(targetOnly.inventory.analysisContext.target.length).toBeGreaterThan(0);
+    expect(targetOnly.inventory.boundedness.isBounded).toBe(true);
+    expect(decision.rewriteRecommendation).toBe('rewrite_optional');
+  });
+
   it('treats exactly three boundedness groups as bounded for implementation prompts', () => {
     const partial = classifySemanticPrompt(
       'Write a Node.js webhook endpoint in TypeScript that accepts JSON and returns 200 on success and 400 on invalid input.',

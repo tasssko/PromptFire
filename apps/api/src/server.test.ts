@@ -257,6 +257,18 @@ describe('API vertical slice', () => {
       expect(body.bestNextMove?.type).toBe('add_decision_criteria');
     });
 
+    it('keeps target-only analysis prompts on the local semantic route', async () => {
+      const body = await analyzeV2(
+        'What drives stalled incident response handoffs for a mid-sized SaaS team? Use ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case.',
+        'general',
+      );
+
+      expect(body.rewriteRecommendation).toBe('rewrite_optional');
+      expect(body.inferenceFallbackUsed).toBe(false);
+      expect(body.resolutionSource).toBe('local');
+      expect(body.bestNextMove?.type).toBe('add_analysis_criteria');
+    });
+
     it('does not broaden routing ownership for topic-only prompts', async () => {
       const body = await analyzeV2('Write about TypeScript adoption for engineering managers.', 'general');
 

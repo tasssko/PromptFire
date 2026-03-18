@@ -118,6 +118,7 @@ export const BestNextMoveTypeSchema = z.enum([
   'clarify_output_structure',
   'reduce_task_load',
   'add_framing_boundary',
+  'add_analysis_criteria',
   'add_decision_criteria',
   'require_examples',
   'shift_to_comparison_pattern',

@@ -136,7 +136,7 @@ function isSemanticPathInScope(taskClass: TaskClass, tags: Set<SemanticTag>): bo
   }
 
   if (taskClass === 'analysis') {
-    return tags.has('has_analysis_frame');
+    return tags.has('has_analysis_frame') || tags.has('has_analysis_target');
   }
 
   if (taskClass === 'decision_support') {

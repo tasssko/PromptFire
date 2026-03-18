@@ -117,8 +117,8 @@ function buildBestNextMove(context: ContextInventory, decision: DecisionState): 
   switch (context.taskShape.taskClass) {
     case 'analysis':
       return {
-        id: 'add_decision_criteria',
-        type: 'add_decision_criteria',
+        id: 'add_analysis_criteria',
+        type: 'add_analysis_criteria',
         title: decision.semanticState === 'weak' ? 'Add an analysis lens and one scenario' : 'Sharpen the diagnostic criteria',
         rationale:
           'The next gain is to state what the analysis should examine and under which concrete scenario, so the output diagnoses the right causes instead of drifting into generic advice.',

@@ -328,6 +328,8 @@ export function buildContextInventory(extraction: SemanticTagExtraction): Contex
     analysisContext: {
       present: analysisPresent,
       target: evidence.has_analysis_target ?? [],
+      // The underlying criteria signal is currently shared across analysis,
+      // comparison, and decision-support families even though the tag name is decision-oriented.
       criteria: evidence.has_decision_criteria ?? [],
     },
     decisionContext: {
@@ -338,7 +340,7 @@ export function buildContextInventory(extraction: SemanticTagExtraction): Contex
     },
     contextBlock: {
       present: contextPresent,
-      relevant: contextPresent && (outputRequestPresent || audiencePresent || comparisonPresent || decisionPresent),
+      relevant: contextPresent && (outputRequestPresent || audiencePresent || comparisonPresent || analysisPresent || decisionPresent),
       signals: evidence.has_context_block ?? [],
     },
     exampleContext: {
