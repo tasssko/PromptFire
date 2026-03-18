@@ -11,6 +11,7 @@ import type {
   ScoreBand,
   EvaluationV2,
 } from '@promptfire/shared';
+import type { PrimaryGap } from '@promptfire/heuristics/src/semantic/selectPrimaryGap';
 import type { SemanticRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
 
 type EffectiveContextLike = {
@@ -133,6 +134,114 @@ function pushUnique(items: string[], value: string) {
   }
 }
 
+function pushSemanticGapQuestions(questions: string[], family: SemanticRewritePolicy['family'], primaryGap: PrimaryGap): void {
+  switch (family) {
+    case 'implementation':
+      if (primaryGap === 'execution') {
+        pushUnique(questions, 'What runtime, framework, or execution surface should be used?');
+        pushUnique(questions, 'What setup, environment, or integration constraints should be explicit?');
+        pushUnique(questions, 'What validation or operational behavior must the implementation enforce?');
+        return;
+      }
+      if (primaryGap === 'io') {
+        pushUnique(questions, 'What does the input payload or request shape look like?');
+        pushUnique(questions, 'What exact output, response, or return shape is required?');
+        pushUnique(questions, 'What should happen on success and on failure?');
+        return;
+      }
+      if (primaryGap === 'boundary') {
+        pushUnique(questions, 'What is explicitly in scope versus out of scope?');
+        pushUnique(questions, 'What auth, signature, or middleware behavior should be excluded or included?');
+        pushUnique(questions, 'What constraints should prevent the implementation from expanding beyond the intended surface?');
+        return;
+      }
+      break;
+    case 'comparison':
+    case 'decision_support':
+      if (primaryGap === 'criteria') {
+        pushUnique(questions, 'What criteria or trade-off axes should drive the answer?');
+        pushUnique(questions, 'What outcome should those criteria optimize for?');
+        pushUnique(questions, 'What evidence or examples should the comparison use to apply those criteria?');
+        return;
+      }
+      if (primaryGap === 'boundary') {
+        pushUnique(questions, 'What scenario, scope, or constraints should keep the answer specific?');
+        pushUnique(questions, 'What should the answer explicitly include versus avoid?');
+        pushUnique(questions, 'What decision context should narrow the comparison?');
+        return;
+      }
+      if (primaryGap === 'audience') {
+        pushUnique(questions, 'Who is the decision-maker or audience for this answer?');
+        pushUnique(questions, 'What level of depth or technicality does that audience need?');
+        pushUnique(questions, 'What practical context matters most for that audience?');
+        return;
+      }
+      break;
+    case 'context_first':
+      if (primaryGap === 'context_linkage') {
+        pushUnique(questions, 'Which part of the provided context should drive the answer most?');
+        pushUnique(questions, 'How should the answer connect that context to the requested outcome?');
+        pushUnique(questions, 'What criteria should be applied to the provided context?');
+        return;
+      }
+      if (primaryGap === 'deliverable') {
+        pushUnique(questions, 'What exact deliverable should the model produce from the provided context?');
+        pushUnique(questions, 'What format or structure should that deliverable follow?');
+        pushUnique(questions, 'What outcome should the deliverable help the reader reach?');
+        return;
+      }
+      if (primaryGap === 'boundary') {
+        pushUnique(questions, 'What assumptions should stay out of scope when using this context?');
+        pushUnique(questions, 'What constraints should keep the answer grounded in the provided context?');
+        pushUnique(questions, 'What context should be treated as decisive versus secondary?');
+        return;
+      }
+      break;
+    case 'few_shot':
+      if (primaryGap === 'example_transfer') {
+        pushUnique(questions, 'What should be preserved from the examples?');
+        pushUnique(questions, 'What should change from the examples in the new output?');
+        pushUnique(questions, 'What pattern should transfer versus stay specific to the examples?');
+        return;
+      }
+      if (primaryGap === 'deliverable') {
+        pushUnique(questions, 'What exact new output should be produced from the examples?');
+        pushUnique(questions, 'What format or structure should the new output follow?');
+        pushUnique(questions, 'What success criteria should the new output meet?');
+        return;
+      }
+      if (primaryGap === 'boundary') {
+        pushUnique(questions, 'What drift from the examples should be avoided?');
+        pushUnique(questions, 'What constraints should limit how the new output adapts the pattern?');
+        pushUnique(questions, 'What details are out of scope for the adapted output?');
+        return;
+      }
+      break;
+    case 'analysis':
+      if (primaryGap === 'criteria') {
+        pushUnique(questions, 'What analysis lens, standard, or diagnostic criteria should the output use?');
+        pushUnique(questions, 'What should the analysis optimize for or test against?');
+        pushUnique(questions, 'How should the findings be organized around those criteria?');
+        return;
+      }
+      if (primaryGap === 'source') {
+        pushUnique(questions, 'What evidence, source material, or grounding should the analysis rely on?');
+        pushUnique(questions, 'What real scenario, data, or examples should anchor the analysis?');
+        pushUnique(questions, 'What context should the model treat as authoritative?');
+        return;
+      }
+      if (primaryGap === 'boundary') {
+        pushUnique(questions, 'What scope or scenario should keep the analysis specific?');
+        pushUnique(questions, 'What should the analysis explicitly avoid covering?');
+        pushUnique(questions, 'What practical constraints should shape the analysis?');
+        return;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 export function buildGuidedCompletionQuestions(params: {
   role: Role;
   semanticPolicy?: SemanticRewritePolicy | null;
@@ -146,32 +255,11 @@ export function buildGuidedCompletionQuestions(params: {
   const bestMoveText = `${params.bestNextMove?.title ?? ''} ${params.bestNextMove?.rationale ?? ''}`.toLowerCase();
   const suggestionsText = params.improvementSuggestions.map((item) => `${item.title} ${item.reason}`.toLowerCase()).join(' ');
 
-  switch (params.semanticPolicy?.family) {
-    case 'comparison':
-    case 'decision_support':
-      pushUnique(questions, 'What criteria or trade-off axes should drive the answer?');
-      pushUnique(questions, 'What concrete scenario, case, or operating context should the answer use?');
-      pushUnique(questions, 'What should the output explicitly optimize for or avoid?');
+  if (params.semanticPolicy?.semanticOwned) {
+    pushSemanticGapQuestions(questions, params.semanticPolicy.family, params.semanticPolicy.primaryGap);
+    if (questions.length > 0) {
       return questions.slice(0, 6);
-    case 'context_first':
-      pushUnique(questions, 'What exact deliverable should the model produce?');
-      pushUnique(questions, 'Which part of the provided context should drive the answer most?');
-      pushUnique(questions, 'What criteria or decision frame should the answer apply to that context?');
-      return questions.slice(0, 6);
-    case 'few_shot':
-      pushUnique(questions, 'What should be preserved from the examples?');
-      pushUnique(questions, 'What should change from the examples in the new output?');
-      pushUnique(questions, 'What output shape or structure should the new result follow?');
-      return questions.slice(0, 6);
-    case 'analysis':
-      pushUnique(questions, 'What analysis lens, standard, or diagnostic criteria should the output use?');
-      pushUnique(questions, 'What evidence, source material, or grounding should the analysis rely on?');
-      pushUnique(questions, 'What scenario or boundary should keep the analysis specific?');
-      return questions.slice(0, 6);
-    case 'implementation':
-      break;
-    default:
-      break;
+    }
   }
 
   if (role === 'developer') {

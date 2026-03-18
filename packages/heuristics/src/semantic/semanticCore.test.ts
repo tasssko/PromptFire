@@ -12,6 +12,7 @@ import { classifySemanticPrompt } from './buildInventory';
 import { buildRewritePolicy } from './buildRewritePolicy';
 import { deriveFindings } from './deriveFindings';
 import { projectScores } from './projectScores';
+import { selectPrimaryGap } from './selectPrimaryGap';
 
 function computeOverallScore(scores: ScoreSet): number {
   const raw =
@@ -255,6 +256,44 @@ describe('semantic core', () => {
 
     expect(decision.semanticState).toBe('weak');
     expect(policy.primaryGap).toBe('criteria');
+  });
+
+  it('keeps equivalent implementation wording variants on the same primary gap', () => {
+    const canonical = classifySemanticPrompt(
+      'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. Return HTTP 200 on success and HTTP 400 on validation failure.',
+      'developer',
+    );
+    const synonym = classifySemanticPrompt(
+      'Build a Node.js webhook endpoint in TypeScript for JSON payloads. Check the request body against a contract. Return 200 when valid and 400 when validation fails.',
+      'developer',
+    );
+    const canonicalDecision = buildDecisionState(canonical.inventory, 'auto');
+    const synonymDecision = buildDecisionState(synonym.inventory, 'auto');
+
+    expect(selectPrimaryGap(canonical.inventory, canonicalDecision)).toBe('boundary');
+    expect(selectPrimaryGap(synonym.inventory, synonymDecision)).toBe('boundary');
+  });
+
+  it('prefers source over boundary for analysis prompts with a lens but no grounding', () => {
+    const classification = classifySemanticPrompt(
+      'Analyze incident response handoff failures using ownership ambiguity and escalation gaps as the criteria.',
+      'general',
+    );
+    const decision = buildDecisionState(classification.inventory, 'auto');
+
+    expect(classification.extraction.taskClass).toBe('analysis');
+    expect(selectPrimaryGap(classification.inventory, decision)).toBe('source');
+  });
+
+  it('prefers audience only after criteria and boundary for comparison prompts', () => {
+    const classification = classifySemanticPrompt(
+      'Compare Kubernetes and ECS using operational load and scaling complexity as the criteria. Focus only on real trade-offs.',
+      'general',
+    );
+    const decision = buildDecisionState(classification.inventory, 'auto');
+
+    expect(classification.extraction.taskClass).toBe('comparison');
+    expect(selectPrimaryGap(classification.inventory, decision)).toBe('audience');
   });
 
   it('keeps thin explicit decision prompts on the semantic path without treating them as bounded', () => {

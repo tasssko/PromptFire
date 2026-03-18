@@ -11,3 +11,4 @@ export * from './semantic/buildDecision';
 export * from './semantic/deriveFindings';
 export * from './semantic/projectScores';
 export * from './semantic/buildRewritePolicy';
+export * from './semantic/selectPrimaryGap';
