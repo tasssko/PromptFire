@@ -458,7 +458,7 @@ describe('API vertical slice', () => {
     expect(body.bestNextMove?.type).not.toBe('shift_to_audience_outcome_pattern');
     expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/buyer context|audience/);
     expect(String(body.bestNextMove?.rationale ?? '').toLowerCase()).not.toMatch(/buyer context|audience.*missing|lacks clear buyer/);
-    expect(['add_framing_boundary', 'clarify_output_structure', 'add_proof_requirement', 'add_exclusion']).toContain(
+    expect(['add_framing_boundary', 'clarify_output_structure', 'add_proof_requirement', 'add_exclusion', 'add_decision_criteria']).toContain(
       body.bestNextMove?.type,
     );
   });
@@ -834,11 +834,15 @@ describe('API vertical slice', () => {
     expect(
       body.analysis.issues.some((issue: { message: string }) => /\b(runtime|language)\b/i.test(issue.message)),
     ).toBe(false);
-    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
-    expect(String(body.bestNextMove?.title ?? '').toLowerCase()).not.toContain('examples');
-    expect(String(body.bestNextMove?.rationale ?? '').toLowerCase()).toMatch(
-      /schema|contract|auth|signature|retry|idempot|config|bootstrap|payload|test/,
-    );
+    if (body.bestNextMove) {
+      expect(String(body.bestNextMove.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
+      expect(String(body.bestNextMove.title ?? '').toLowerCase()).not.toContain('examples');
+      expect(String(body.bestNextMove.rationale ?? '').toLowerCase()).toMatch(
+        /schema|contract|auth|signature|retry|idempot|config|bootstrap|payload|test/,
+      );
+    } else {
+      expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+    }
 
     const inferenceLogLine = infoSpy.mock.calls
       .map((call) => String(call[0]))
@@ -1008,6 +1012,86 @@ describe('API vertical slice', () => {
     expect(body.evaluation).toBeNull();
   });
 
+  it('keeps equivalent comparison prompts in the same semantic recommendation state without stale missing-constraints findings', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const compareResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Compare Kubernetes and ECS for a mid-sized SaaS team. Focus on team autonomy, operational load, and scaling complexity. Include one startup case and one enterprise case. Avoid hype and focus on real trade-offs.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const worthItResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Explain when Kubernetes is worth the overhead and when ECS is the better choice for a mid-sized SaaS engineering org. Use a startup example and an enterprise example, and keep the tone grounded in real trade-offs.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const compareBody = JSON.parse(compareResponse.body);
+    const worthItBody = JSON.parse(worthItResponse.body);
+
+    expect(compareResponse.statusCode).toBe(200);
+    expect(worthItResponse.statusCode).toBe(200);
+    expect(compareBody.rewriteRecommendation).toBe(worthItBody.rewriteRecommendation);
+    expect(compareBody.gating.majorBlockingIssues).toBe(false);
+    expect(worthItBody.gating.majorBlockingIssues).toBe(false);
+    expect(String(compareBody.analysis.summary).toLowerCase()).toContain('comparison');
+    expect(String(worthItBody.analysis.summary).toLowerCase()).toContain('comparison');
+    expect(compareBody.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(worthItBody.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    if (compareBody.bestNextMove || worthItBody.bestNextMove) {
+      expect(compareBody.bestNextMove?.type).toBe('add_decision_criteria');
+      expect(worthItBody.bestNextMove?.type).toBe('add_decision_criteria');
+    } else {
+      expect(compareBody.rewriteRecommendation).toBe('no_rewrite_needed');
+      expect(worthItBody.rewriteRecommendation).toBe('no_rewrite_needed');
+    }
+    expect(Math.abs(Number(compareBody.overallScore) - Number(worthItBody.overallScore))).toBeLessThanOrEqual(10);
+  });
+
+  it('keeps context-first prompts focused on deliverable shaping instead of generic missing-detail copy', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'We are a 20-person B2B SaaS team with two product squads, limited SRE support, and a compliance requirement.\nGiven this situation, advise whether service mesh is worth the operational cost now or later.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(body.gating.majorBlockingIssues).toBe(false);
+    expect(body.analysis.detectedIssueCodes).not.toContain('CONSTRAINTS_MISSING');
+    expect(String(body.analysis.summary).toLowerCase()).toContain('context');
+    if (body.bestNextMove) {
+      expect(String(body.bestNextMove.title ?? '').toLowerCase()).toMatch(/deliverable|context/);
+      expect(String(body.bestNextMove.rationale ?? '').toLowerCase()).not.toMatch(/runtime|language|example/);
+    } else {
+      expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+    }
+  });
+
   it('keeps bounded webhook implementation prompts out of blocking rewrite state', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'mock';
 
@@ -1077,8 +1161,12 @@ describe('API vertical slice', () => {
     expect(canonicalBody.gating.majorBlockingIssues).toBe(false);
     expect(synonymBody.gating.majorBlockingIssues).toBe(false);
     expect(synonymBody.rewriteRecommendation).toBe(canonicalBody.rewriteRecommendation);
-    expect(String(synonymBody.bestNextMove?.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
-    expect(String(synonymBody.bestNextMove?.rationale ?? '').toLowerCase()).toMatch(/schema|contract|auth|signature|idempot|payload/);
+    if (synonymBody.bestNextMove) {
+      expect(String(synonymBody.bestNextMove.title ?? '').toLowerCase()).not.toMatch(/runtime|language/);
+      expect(String(synonymBody.bestNextMove.rationale ?? '').toLowerCase()).toMatch(/schema|contract|auth|signature|idempot|payload/);
+    } else {
+      expect(synonymBody.rewriteRecommendation).toBe('no_rewrite_needed');
+    }
     expect(Math.abs(Number(synonymBody.overallScore) - Number(canonicalBody.overallScore))).toBeLessThanOrEqual(10);
   });
 
@@ -1154,7 +1242,7 @@ describe('API vertical slice', () => {
 
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
-    expect(['shift_to_decision_frame', 'shift_to_comparison_pattern']).toContain(body.bestNextMove.type);
+    expect(['shift_to_decision_frame', 'shift_to_comparison_pattern', 'add_decision_criteria']).toContain(body.bestNextMove.type);
     expect(body.bestNextMove.methodFit.recommendedPattern).toBe('break_into_steps');
   });
 

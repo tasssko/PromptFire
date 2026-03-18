@@ -1119,19 +1119,21 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       patternFit,
       effectiveContext: effectiveResolution.effectiveAnalysisContext,
     });
-    const generatedBestNextMove = generateBestNextMove({
-      input: effectiveInput,
-      analysis: resolvedAnalysis,
-      overallScore,
-      scoreBand,
-      rewriteRecommendation,
-      patternFit,
-      effectiveContext: effectiveResolution.effectiveAnalysisContext,
-    });
     const semanticFindings =
       semanticPathInScope && semanticDecision
         ? deriveFindings(resolvedAnalysis, semanticClassification.inventory, semanticDecision)
         : null;
+    const generatedBestNextMove = semanticFindings
+      ? null
+      : generateBestNextMove({
+          input: effectiveInput,
+          analysis: resolvedAnalysis,
+          overallScore,
+          scoreBand,
+          rewriteRecommendation,
+          patternFit,
+          effectiveContext: effectiveResolution.effectiveAnalysisContext,
+        });
     const bestNextMove: BestNextMove | null = semanticFindings?.bestNextMove ?? generatedBestNextMove;
 
     try {
