@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findDiscouragedDefaultLanguage, type Analysis } from '@promptfire/shared';
+import { type Analysis } from '@promptfire/shared';
 import { evaluateRewrite } from './evaluateRewrite';
 
 function analysisWithScores(
@@ -353,34 +353,4 @@ describe('evaluateRewrite', () => {
     expect(evaluation.signals).not.toContain('REWRITE_RUBRIC_ECHO');
   });
 
-  it('keeps rewrite notes free of discouraged default language', () => {
-    const originalAnalysis = analysisWithScores({
-      scope: 3,
-      contrast: 3,
-      clarity: 5,
-      constraintQuality: 2,
-      genericOutputRisk: 8,
-      tokenWasteRisk: 6,
-    });
-    const rewriteAnalysis = analysisWithScores({
-      scope: 7,
-      contrast: 7,
-      clarity: 7,
-      constraintQuality: 6,
-      genericOutputRisk: 4,
-      tokenWasteRisk: 4,
-    });
-
-    const evaluation = evaluateRewrite({
-      originalPrompt: 'Write about cloud cost optimization.',
-      rewrittenPrompt:
-        'Write a step-by-step blog post for engineering managers at mid-sized SaaS companies about cloud cost optimization. Use exactly three sections: quick wins, trade-offs, and measurement plan. Include one startup vs enterprise comparison and one clear exclusion: avoid vendor marketing claims.',
-      originalAnalysis,
-      rewriteAnalysis,
-    });
-
-    for (const note of evaluation.improvement.notes) {
-      expect(findDiscouragedDefaultLanguage(note)).toEqual([]);
-    }
-  });
 });

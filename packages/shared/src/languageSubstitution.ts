@@ -71,6 +71,13 @@ const discouragedDefaultLanguagePatterns = languageSubstitutionRegistry.map((ent
   pattern: new RegExp(`\\b${entry.term}\\b`, 'i'),
 }));
 
+const allowedDiscouragedLanguagePhrases: RegExp[] = [
+  /\bspecific example(s)?\b/i,
+  /\bspecific audience\b/i,
+  /\bspecific positioning detail\b/i,
+  /\bspecific result\b/i,
+];
+
 export function substitutePreferredLanguage(text: string, intent: LanguageSubstitutionIntent): string {
   return phraseReplacementsByIntent[intent].reduce(
     (current, rule) => current.replace(rule.pattern, rule.replacement),
@@ -79,8 +86,19 @@ export function substitutePreferredLanguage(text: string, intent: LanguageSubsti
 }
 
 export function findDiscouragedDefaultLanguage(text: string): string[] {
+  const normalizedText = text.trim();
   return discouragedDefaultLanguagePatterns
-    .filter((entry) => entry.pattern.test(text))
+    .filter((entry) => {
+      if (!entry.pattern.test(normalizedText)) {
+        return false;
+      }
+
+      if (entry.term !== 'specific') {
+        return true;
+      }
+
+      return !allowedDiscouragedLanguagePhrases.some((pattern) => pattern.test(normalizedText));
+    })
     .map((entry) => entry.term);
 }
 

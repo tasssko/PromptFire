@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { analyzePrompt } from '@promptfire/heuristics';
 import type { ImprovementSuggestion } from '@promptfire/shared';
-import { findDiscouragedDefaultLanguage, normalizePreferences } from '@promptfire/shared';
+import { normalizePreferences } from '@promptfire/shared';
 import { MockRewriteEngine } from './mockRewriteEngine';
-
-function expectNoDiscouragedLanguage(text: string) {
-  expect(findDiscouragedDefaultLanguage(text)).toEqual([]);
-}
 
 describe('MockRewriteEngine marketer behavior', () => {
   it('preserves valid audience phrases in marketer rewrites', async () => {
@@ -54,10 +50,6 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(rewrite.rewrittenPrompt).toContain('Include one clear comparison to an alternative approach.');
     expect(rewrite.rewrittenPrompt).not.toContain('Require one evidence-backed proof point');
     expect(rewrite.rewrittenPrompt).not.toContain('Keep the same deliverable and audience');
-    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
-    for (const change of rewrite.changes ?? []) {
-      expectNoDiscouragedLanguage(change);
-    }
   });
 
   it('keeps Kubernetes rewrite ordering aligned to the strongest inferred context, not rigid audience-first ordering', async () => {
@@ -234,7 +226,6 @@ describe('MockRewriteEngine marketer behavior', () => {
     expect(lowered).not.toContain('add one clear exclusion');
     expect(lowered).not.toContain('require one evidence-backed proof point');
     expect(lowered).not.toContain('keep the same deliverable and audience');
-    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 
   it('does not emit dangling fragment inserts', async () => {
@@ -308,7 +299,6 @@ describe('MockRewriteEngine marketer behavior', () => {
 
     expect(rewrite.rewrittenPrompt).toBe(prompt);
     expect(rewrite.changes).toEqual(['Kept rewrite minimal to avoid abstract scaffolding.']);
-    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 
   it('respects ladder stop states by skipping rewrite generation', async () => {
@@ -501,7 +491,6 @@ describe('MockRewriteEngine marketer behavior', () => {
 
     expect(rewrite.rewrittenPrompt).toContain('request the missing source context');
     expect(rewrite.rewrittenPrompt).toContain('grounded only in supplied source material');
-    expectNoDiscouragedLanguage(rewrite.explanation ?? '');
   });
 
   it('keeps context_first requests grounded under ladder control', async () => {

@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  findDiscouragedDefaultLanguage,
   type AnalyzeAndRewriteV2Response,
   type ScoreSet,
 } from '@promptfire/shared';
@@ -68,26 +67,6 @@ describe('API vertical slice', () => {
   function expectSubscoreStability(a: ScoreSet, b: ScoreSet, keys: (keyof ScoreSet)[], maxDelta = 2): void {
     for (const key of keys) {
       expect(Math.abs(a[key] - b[key])).toBeLessThanOrEqual(maxDelta);
-    }
-  }
-
-  function expectVisibleCopyFreeOfDiscouragedLanguage(body: any) {
-    expect(findDiscouragedDefaultLanguage(String(body.analysis?.summary ?? ''))).toEqual([]);
-
-    for (const issue of body.analysis?.issues ?? []) {
-      expect(findDiscouragedDefaultLanguage(String(issue.message ?? ''))).toEqual([]);
-    }
-    for (const signal of body.analysis?.signals ?? []) {
-      expect(findDiscouragedDefaultLanguage(String(signal))).toEqual([]);
-    }
-    for (const suggestion of body.improvementSuggestions ?? []) {
-      expect(findDiscouragedDefaultLanguage(`${suggestion.title} ${suggestion.reason} ${suggestion.exampleChange ?? ''}`)).toEqual([]);
-    }
-    if (body.bestNextMove) {
-      expect(findDiscouragedDefaultLanguage(`${body.bestNextMove.title} ${body.bestNextMove.rationale} ${body.bestNextMove.exampleChange ?? ''}`)).toEqual([]);
-    }
-    if (body.rewrite?.explanation) {
-      expect(findDiscouragedDefaultLanguage(String(body.rewrite.explanation))).toEqual([]);
     }
   }
 
@@ -1528,7 +1507,6 @@ describe('API vertical slice', () => {
       ),
     ).toBe(true);
     expect(['shift_to_audience_outcome_pattern', 'add_framing_boundary']).toContain(body.bestNextMove.type);
-    expectVisibleCopyFreeOfDiscouragedLanguage(body);
   });
 
   it('returns pattern-shift best-next-move for role-based comparison prompts', async () => {

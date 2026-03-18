@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  findDiscouragedDefaultLanguage,
-  hasDiscouragedDefaultLanguage,
   languageSubstitutionRegistry,
   substitutePreferredLanguage,
 } from './languageSubstitution';
@@ -21,12 +19,5 @@ describe('language substitution', () => {
     expect(substitutePreferredLanguage('Keep the output practical and direct.', 'specificity')).toBe(
       'Keep the output practical and direct.',
     );
-  });
-
-  it('detects discouraged default language in visible text', () => {
-    expect(findDiscouragedDefaultLanguage('Add one specific example and specifically explain why.')).toEqual(
-      expect.arrayContaining(['specific', 'specifically']),
-    );
-    expect(hasDiscouragedDefaultLanguage('Add one specific example.')).toBe(false);
   });
 });

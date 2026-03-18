@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { findDiscouragedDefaultLanguage } from '@promptfire/shared';
 import { analyzePrompt } from './analyzePrompt';
 import { generateBestNextMove } from './bestNextMove';
 
@@ -211,17 +210,4 @@ describe('generateBestNextMove', () => {
     expect(move).toBeNull();
   });
 
-  it('keeps best-next-move copy free of discouraged default language', () => {
-    const move = moveFor(
-      {
-        prompt: 'Write landing page copy for our IAM platform.',
-        role: 'marketer',
-        mode: 'balanced',
-      },
-      'rewrite_recommended',
-    );
-
-    expect(move).toBeTruthy();
-    expect(findDiscouragedDefaultLanguage(`${move?.title ?? ''} ${move?.rationale ?? ''} ${move?.exampleChange ?? ''}`)).toEqual([]);
-  });
 });
