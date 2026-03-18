@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { Analysis, Role, ScoreBand, ScoreSet } from '@promptfire/shared';
-import { semanticConsistencyCases, semanticEquivalenceFamilies, semanticFindingCases } from '@promptfire/shared/src/semanticFixtures';
+import {
+  semanticBoundaryFixtures,
+  semanticConsistencyCases,
+  semanticEquivalenceFamilies,
+  semanticFindingCases,
+} from '@promptfire/shared/src/semanticFixtures';
 import { analyzePrompt } from '../analyzePrompt';
 import { buildDecisionState } from './buildDecision';
 import { classifySemanticPrompt } from './buildInventory';
@@ -214,6 +219,11 @@ describe('semantic core', () => {
 
         expect(result.classification.extraction.taskClass).toBe(fixture.family);
         expect(result.decision.rewriteRecommendation).toBe(fixture.expectedRecommendation);
+        if (fixture.expectedBestNextMoveTypes) {
+          expect(fixture.expectedBestNextMoveTypes).toContain(result.findings.bestNextMove?.type as typeof fixture.expectedBestNextMoveTypes[number]);
+        } else {
+          expect(result.findings.bestNextMove?.type ?? null).toBeNull();
+        }
 
         if (fixture.forbiddenScoreBands) {
           expect(fixture.forbiddenScoreBands).not.toContain(result.scoreBand);
@@ -270,9 +280,56 @@ describe('semantic core', () => {
           expect(current.classification.inventory.boundedness.isBounded).toBe(baseline.classification.inventory.boundedness.isBounded);
           expect(current.decision.rewriteRecommendation).toBe(baseline.decision.rewriteRecommendation);
           expect(current.decision.majorBlockingIssues).toBe(baseline.decision.majorBlockingIssues);
+          expect(current.decision.missingContextType).toBe(baseline.decision.missingContextType);
           expect(current.findings.bestNextMove?.type ?? null).toBe(baseline.findings.bestNextMove?.type ?? null);
           expectScoreStability(baseline.overallScore, current.overallScore);
           expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
+        }
+      });
+    }
+  });
+
+  describe('implementation and shared boundary checks', () => {
+    for (const fixture of semanticBoundaryFixtures) {
+      it(fixture.name, () => {
+        const thin = buildSemanticEvaluation(fixture.thinPrompt, fixture.role);
+        const bounded = buildSemanticEvaluation(fixture.boundedPrompt, fixture.role);
+        const boundedText = [
+          bounded.findings.summary,
+          ...bounded.findings.issues.map((issue) => issue.message),
+          bounded.findings.bestNextMove?.title ?? '',
+          bounded.findings.bestNextMove?.rationale ?? '',
+        ].join(' ');
+
+        expect(thin.classification.extraction.taskClass).toBe(fixture.family);
+        expect(thin.decision.rewriteRecommendation).toBe(fixture.thinRecommendation);
+        if (fixture.thinAllowedScoreBands) {
+          expect(fixture.thinAllowedScoreBands).toContain(thin.scoreBand);
+        }
+
+        expect(bounded.classification.extraction.taskClass).toBe(fixture.family);
+        expect(bounded.decision.rewriteRecommendation).toBe(fixture.boundedRecommendation);
+        expect(bounded.overallScore).toBeGreaterThanOrEqual(thin.overallScore);
+        expectTextToAvoidSnippets(boundedText, fixture.boundedForbiddenSnippets);
+        expect(bounded.findings.bestNextMove?.type ?? null).toBe(fixture.expectedBoundedBestNextMoveType ?? null);
+
+        if (fixture.family === 'implementation') {
+          const partial = buildSemanticEvaluation(fixture.partialPrompt!, fixture.role);
+
+          expect(partial.classification.extraction.taskClass).toBe('implementation');
+          expect(partial.decision.rewriteRecommendation).toBe(fixture.partialRecommendation);
+          expect(partial.findings.bestNextMove?.type ?? null).toBe('clarify_output_structure');
+          expect(partial.overallScore).toBeGreaterThanOrEqual(thin.overallScore);
+          expect(partial.overallScore).toBeLessThanOrEqual(bounded.overallScore);
+
+          const synonym = buildSemanticEvaluation(fixture.synonymBoundedPrompt!, fixture.role);
+
+          expect(synonym.classification.extraction.taskClass).toBe('implementation');
+          expect(synonym.decision.rewriteRecommendation).toBe(fixture.boundedRecommendation);
+          expect(synonym.decision.majorBlockingIssues).toBe(false);
+          expect(synonym.findings.bestNextMove?.type ?? null).toBe(fixture.expectedBoundedBestNextMoveType ?? null);
+        } else {
+          expect(bounded.decision.rewriteRecommendation).not.toBe(thin.decision.rewriteRecommendation);
         }
       });
     }
