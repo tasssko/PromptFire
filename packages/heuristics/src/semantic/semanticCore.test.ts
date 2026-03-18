@@ -74,7 +74,9 @@ function expectTextToContainAnySnippet(text: string, allowed: string[]): void {
   expect(allowed.some((snippet) => lowered.includes(snippet.toLowerCase()))).toBe(true);
 }
 
-function expectScoreStability(a: number, b: number, maxDelta = 8): void {
+// Equivalent covered-family prompts should stay close enough that the UI keeps the
+// same narrative posture and score band, while still allowing minor lexical noise.
+function expectScoreStability(a: number, b: number, maxDelta = 6): void {
   expect(Math.abs(a - b)).toBeLessThanOrEqual(maxDelta);
 }
 
@@ -282,6 +284,7 @@ describe('semantic core', () => {
           expect(current.decision.majorBlockingIssues).toBe(baseline.decision.majorBlockingIssues);
           expect(current.decision.missingContextType).toBe(baseline.decision.missingContextType);
           expect(current.findings.bestNextMove?.type ?? null).toBe(baseline.findings.bestNextMove?.type ?? null);
+          expect(current.scoreBand).toBe(baseline.scoreBand);
           expectScoreStability(baseline.overallScore, current.overallScore);
           expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
         }

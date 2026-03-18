@@ -959,14 +959,21 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       context: resolvedContext,
     });
 
-    const inferenceTrigger = evaluateInferenceTrigger({
-      prompt: input.prompt,
-      role: input.role,
-      mode: input.mode,
-      analysis: resolvedAnalysis,
-      context: resolvedContext,
-      patternFit,
-    });
+    const semanticClassification = classifySemanticPrompt(input.prompt, input.role);
+    const semanticPathInScope = semanticClassification.extraction.inScope;
+    const inferenceTrigger = semanticPathInScope
+      ? {
+          shouldInfer: false,
+          reasons: [],
+        }
+      : evaluateInferenceTrigger({
+          prompt: input.prompt,
+          role: input.role,
+          mode: input.mode,
+          analysis: resolvedAnalysis,
+          context: resolvedContext,
+          patternFit,
+        });
     const localMatchStatus = inferenceTrigger.shouldInfer ? inferenceTrigger.reasons.join('|') : 'strong_local_match';
     let inferenceFallbackUsed = false;
     let resolutionSource: 'local' | 'inference' = 'local';
@@ -1061,8 +1068,6 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       });
     }
 
-    const semanticClassification = classifySemanticPrompt(input.prompt, input.role);
-    const semanticPathInScope = semanticClassification.extraction.inScope;
     const semanticDecision = semanticPathInScope
       ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
       : null;
@@ -1239,14 +1244,18 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
 
       const finalIssues = semanticFindings?.issues ?? resolvedAnalysis.issues;
       const finalSignalsBase = semanticFindings?.signals ?? resolvedAnalysis.signals;
+      const finalSignals = [...finalSignalsBase];
+      if (expectedImprovement === 'low' && !finalSignals.includes('Low expected improvement.')) {
+        finalSignals.push('Low expected improvement.');
+      }
+      if (!semanticFindings) {
+        finalSignals.push(bestImprovementPath(patternFit.primary));
+      }
       const analysis: Analysis = {
         ...resolvedAnalysis,
         issues: finalIssues,
         detectedIssueCodes: [...new Set(finalIssues.map((issue) => issue.code))],
-        signals:
-          expectedImprovement === 'low' && !finalSignalsBase.includes('Low expected improvement.')
-            ? [...finalSignalsBase, 'Low expected improvement.', bestImprovementPath(patternFit.primary)].slice(0, 12)
-            : [...finalSignalsBase, bestImprovementPath(patternFit.primary)].slice(0, 12),
+        signals: [...new Set(finalSignals)].slice(0, 12),
         summary:
           semanticFindings?.summary ??
           summaryForV2({

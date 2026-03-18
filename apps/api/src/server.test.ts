@@ -59,7 +59,9 @@ describe('API vertical slice', () => {
     }
   }
 
-  function expectScoreStability(a: number, b: number, maxDelta = 8): void {
+  // Equivalent covered-family prompts should stay within a narrow enough range
+  // that the score-first UI reads them as the same practical judgment.
+  function expectScoreStability(a: number, b: number, maxDelta = 6): void {
     expect(Math.abs(a - b)).toBeLessThanOrEqual(maxDelta);
   }
 
@@ -196,6 +198,7 @@ describe('API vertical slice', () => {
           expect(current.rewriteRecommendation).toBe(baseline.rewriteRecommendation);
           expect(current.gating.majorBlockingIssues).toBe(baseline.gating.majorBlockingIssues);
           expect(current.bestNextMove?.type ?? null).toBe(baseline.bestNextMove?.type ?? null);
+          expect(current.scoreBand).toBe(baseline.scoreBand);
           expectScoreStability(computeOverallScore(baseline.analysis.scores), computeOverallScore(current.analysis.scores));
           expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
         }
@@ -769,6 +772,57 @@ describe('API vertical slice', () => {
     expect(body.resolutionSource).toBe('local');
   });
 
+  it('does not call inference for covered semantic families even when local pattern fit is shaky', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  promptPattern: 'context_first',
+                  taskType: 'recommendation',
+                  deliverableType: 'analysis',
+                  missingContextType: null,
+                  roleHint: 'general',
+                  noveltyCandidate: false,
+                  lookupKeys: ['context', 'decision'],
+                  confidence: 0.91,
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/analyze-and-rewrite',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Given this situation: a 20-person B2B SaaS team, two product squads, limited SRE support, and a compliance requirement, advise whether to adopt service mesh now or later. Base the answer on operational cost, team autonomy, and compliance impact.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'suppress',
+      }),
+    });
+
+    const body = JSON.parse(response.body);
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(body.inferenceFallbackUsed).toBe(false);
+    expect(body.resolutionSource).toBe('local');
+    expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
+  });
+
   it('calls inference once for unfamiliar prompt shapes', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'real';
     process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
@@ -944,14 +998,16 @@ describe('API vertical slice', () => {
 
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
-    expect(body.inferenceFallbackUsed).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(body.inferenceFallbackUsed).toBe(false);
+    expect(body.resolutionSource).toBe('local');
     expect(['poor', 'weak']).toContain(body.scoreBand);
     expect(body.analysis.detectedIssueCodes).toContain('CONSTRAINTS_MISSING');
     expect(body.bestNextMove?.methodFit?.recommendedPattern).not.toBe('add_examples');
     expect(String(body.bestNextMove?.title ?? '').toLowerCase()).toMatch(/runtime|execution|input|output|structure/);
   });
 
-  it('applies inference metadata so bounded developer webhook prompt avoids stale runtime/example advice', async () => {
+  it('keeps bounded developer webhook prompt on the local semantic path and avoids stale runtime/example advice', async () => {
     process.env.REWRITE_PROVIDER_MODE = 'real';
     process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
     process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
@@ -998,9 +1054,9 @@ describe('API vertical slice', () => {
 
     const body = JSON.parse(response.body);
     expect(response.statusCode).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(body.inferenceFallbackUsed).toBe(true);
-    expect(body.resolutionSource).toBe('inference');
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+    expect(body.inferenceFallbackUsed).toBe(false);
+    expect(body.resolutionSource).toBe('local');
     expect(['weak', 'usable', 'strong', 'excellent']).toContain(body.scoreBand);
     expect(
       body.analysis.issues.some((issue: { message: string }) => /\b(runtime|language)\b/i.test(issue.message)),
@@ -1018,16 +1074,7 @@ describe('API vertical slice', () => {
     const inferenceLogLine = infoSpy.mock.calls
       .map((call) => String(call[0]))
       .find((line) => line.includes('"event":"inference_fallback_review"'));
-    expect(inferenceLogLine).toBeTruthy();
-    const inferenceLog = JSON.parse(inferenceLogLine as string);
-    expect(inferenceLog.inference_metadata_applied).toBe(true);
-    expect(inferenceLog.effective_task_type).toBe('implementation_code');
-    expect(inferenceLog.effective_deliverable_type).toBe('code');
-    expect(inferenceLog.effective_missing_context_type).toBeNull();
-    expect(inferenceLog.effective_pattern_fit).toBe('direct_instruction');
-    expect(inferenceLog.effective_calibration_path).toBe('developer_code_bounded');
-    expect(Array.isArray(inferenceLog.scoring_guardrails_applied)).toBe(true);
-    expect(inferenceLog.scoring_guardrails_applied.length).toBeGreaterThan(0);
+    expect(inferenceLogLine).toBeFalsy();
   });
 
   it('keeps stronger bounded Express/JSON-schema prompts out of poor and dedupes findings', async () => {

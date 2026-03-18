@@ -52,6 +52,44 @@ function projectPhase2Scores(next: ScoreSet, context: ContextInventory, decision
   }
 }
 
+function applyCoveredFamilyStabilityFloors(next: ScoreSet, context: ContextInventory, decision: DecisionState): void {
+  if (!context.boundedness.isBounded || decision.semanticState !== 'strong') {
+    return;
+  }
+
+  // Keep semantically equivalent covered-family prompts in the same visible UI band
+  // even when the lexical heuristic layer wobbles slightly between wording variants.
+  switch (context.taskShape.taskClass) {
+    case 'comparison':
+    case 'decision_support':
+      next.scope = Math.max(next.scope, 8);
+      next.contrast = Math.max(next.contrast, 8);
+      next.clarity = Math.max(next.clarity, 7);
+      next.constraintQuality = Math.max(next.constraintQuality, 8);
+      next.genericOutputRisk = Math.min(next.genericOutputRisk, 3);
+      next.tokenWasteRisk = Math.min(next.tokenWasteRisk, 4);
+      return;
+    case 'context_first':
+      next.scope = Math.max(next.scope, 8);
+      next.contrast = Math.max(next.contrast, 7);
+      next.clarity = Math.max(next.clarity, 8);
+      next.constraintQuality = Math.max(next.constraintQuality, 8);
+      next.genericOutputRisk = Math.min(next.genericOutputRisk, 3);
+      next.tokenWasteRisk = Math.min(next.tokenWasteRisk, 4);
+      return;
+    case 'few_shot':
+      next.scope = Math.max(next.scope, 7);
+      next.contrast = Math.max(next.contrast, 6);
+      next.clarity = Math.max(next.clarity, 8);
+      next.constraintQuality = Math.max(next.constraintQuality, 8);
+      next.genericOutputRisk = Math.min(next.genericOutputRisk, 3);
+      next.tokenWasteRisk = Math.min(next.tokenWasteRisk, 4);
+      return;
+    default:
+      return;
+  }
+}
+
 export function projectScores(scores: ScoreSet, context: ContextInventory, decision: DecisionState): ScoreSet {
   const next = { ...scores };
 
@@ -59,6 +97,7 @@ export function projectScores(scores: ScoreSet, context: ContextInventory, decis
     projectImplementationScores(next, context, decision);
   } else if (context.taskShape.taskClass !== 'other') {
     projectPhase2Scores(next, context, decision);
+    applyCoveredFamilyStabilityFloors(next, context, decision);
   }
 
   return {
