@@ -4,7 +4,12 @@ import {
   type AnalyzeAndRewriteV2Response,
   type ScoreSet,
 } from '@promptfire/shared';
-import { semanticConsistencyCases, semanticEquivalenceFamilies, semanticFindingCases } from '@promptfire/shared/src/semanticFixtures';
+import {
+  semanticBoundaryFixtures,
+  semanticConsistencyCases,
+  semanticEquivalenceFamilies,
+  semanticFindingCases,
+} from '@promptfire/shared/src/semanticFixtures';
 import { handleHttpRequest } from './server';
 
 const originalEnv = { ...process.env };
@@ -134,6 +139,11 @@ describe('API vertical slice', () => {
         const bestNextMoveText = `${body.bestNextMove?.title ?? ''} ${body.bestNextMove?.rationale ?? ''}`;
 
         expect(body.rewriteRecommendation).toBe(fixture.expectedRecommendation);
+        if (fixture.expectedBestNextMoveTypes) {
+          expect(fixture.expectedBestNextMoveTypes).toContain(body.bestNextMove?.type as typeof fixture.expectedBestNextMoveTypes[number]);
+        } else {
+          expect(body.bestNextMove?.type ?? null).toBeNull();
+        }
 
         if (fixture.forbiddenScoreBands) {
           expect(fixture.forbiddenScoreBands).not.toContain(body.scoreBand);
@@ -188,6 +198,47 @@ describe('API vertical slice', () => {
           expect(current.bestNextMove?.type ?? null).toBe(baseline.bestNextMove?.type ?? null);
           expectScoreStability(computeOverallScore(baseline.analysis.scores), computeOverallScore(current.analysis.scores));
           expectSubscoreStability(baseline.analysis.scores, current.analysis.scores, family.importantSubscores);
+        }
+      });
+    }
+  });
+
+  describe('family thin-vs-bounded boundary behavior', () => {
+    for (const fixture of semanticBoundaryFixtures) {
+      it(fixture.name, async () => {
+        const thin = await analyzeV2(fixture.thinPrompt, fixture.role);
+        const bounded = await analyzeV2(fixture.boundedPrompt, fixture.role);
+        const boundedText = [
+          bounded.analysis.summary,
+          ...bounded.analysis.issues.map((issue) => issue.message),
+          bounded.bestNextMove?.title ?? '',
+          bounded.bestNextMove?.rationale ?? '',
+        ].join(' ');
+
+        expect(thin.rewriteRecommendation).toBe(fixture.thinRecommendation);
+        if (fixture.thinAllowedScoreBands) {
+          expect(fixture.thinAllowedScoreBands).toContain(thin.scoreBand);
+        }
+
+        expect(bounded.rewriteRecommendation).toBe(fixture.boundedRecommendation);
+        expect(bounded.overallScore).toBeGreaterThanOrEqual(thin.overallScore);
+        expectTextToAvoidSnippets(boundedText, fixture.boundedForbiddenSnippets);
+        expect(bounded.bestNextMove?.type ?? null).toBe(fixture.expectedBoundedBestNextMoveType ?? null);
+
+        if (fixture.family === 'implementation') {
+          const partial = await analyzeV2(fixture.partialPrompt!, fixture.role);
+          const synonym = await analyzeV2(fixture.synonymBoundedPrompt!, fixture.role);
+
+          expect(partial.rewriteRecommendation).toBe(fixture.partialRecommendation);
+          expect(partial.bestNextMove?.type ?? null).toBe('clarify_output_structure');
+          expect(partial.overallScore).toBeGreaterThanOrEqual(thin.overallScore);
+          expect(partial.overallScore).toBeLessThanOrEqual(bounded.overallScore);
+
+          expect(synonym.rewriteRecommendation).toBe(fixture.boundedRecommendation);
+          expect(synonym.gating.majorBlockingIssues).toBe(false);
+          expect(synonym.bestNextMove?.type ?? null).toBe(fixture.expectedBoundedBestNextMoveType ?? null);
+        } else {
+          expect(bounded.rewriteRecommendation).not.toBe(thin.rewriteRecommendation);
         }
       });
     }

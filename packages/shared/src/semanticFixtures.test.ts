@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { semanticConsistencyCases, semanticEquivalenceFamilies, semanticFindingCases } from './semanticFixtures';
+import { semanticBoundaryFixtures, semanticConsistencyCases, semanticEquivalenceFamilies, semanticFindingCases } from './semanticFixtures';
 
 describe('semantic fixtures', () => {
   it('keeps at least one consistency fixture per covered family', () => {
@@ -18,5 +18,11 @@ describe('semantic fixtures', () => {
     for (const family of semanticEquivalenceFamilies) {
       expect(family.variants).toHaveLength(3);
     }
+  });
+
+  it('keeps one shared boundary fixture per family including implementation', () => {
+    expect(new Set(semanticBoundaryFixtures.map((fixture) => fixture.family))).toEqual(
+      new Set(['comparison', 'decision_support', 'context_first', 'few_shot', 'implementation']),
+    );
   });
 });

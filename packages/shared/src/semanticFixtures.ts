@@ -1,13 +1,14 @@
-import type { RewriteRecommendation, Role, ScoreBand, ScoreSet } from './contracts';
+import type { BestNextMoveType, RewriteRecommendation, Role, ScoreBand, ScoreSet } from './contracts';
 
-export type SemanticFixtureFamily = 'comparison' | 'decision_support' | 'context_first' | 'few_shot';
+export type SemanticFixtureFamily = 'implementation' | 'comparison' | 'decision_support' | 'context_first' | 'few_shot';
 
 export interface SemanticConsistencyCase {
   name: string;
-  family: SemanticFixtureFamily;
+  family: Exclude<SemanticFixtureFamily, 'implementation'>;
   role: Role;
   prompt: string;
   expectedRecommendation: RewriteRecommendation;
+  expectedBestNextMoveTypes?: BestNextMoveType[];
   forbiddenScoreBands?: ScoreBand[];
   forbiddenFindingSnippets?: string[];
   forbiddenSummarySnippets?: string[];
@@ -16,7 +17,7 @@ export interface SemanticConsistencyCase {
 
 export interface SemanticFindingCase {
   name: string;
-  family: SemanticFixtureFamily;
+  family: Exclude<SemanticFixtureFamily, 'implementation'>;
   role: Role;
   prompt: string;
   expectedRecommendation: RewriteRecommendation;
@@ -30,12 +31,28 @@ export interface SemanticEquivalenceVariant {
 }
 
 export interface SemanticEquivalenceFamily {
-  family: SemanticFixtureFamily;
+  family: Exclude<SemanticFixtureFamily, 'implementation'>;
   role: Role;
   expectedRecommendation: RewriteRecommendation;
   expectedMajorBlockingIssues: boolean;
   importantSubscores: (keyof ScoreSet)[];
   variants: SemanticEquivalenceVariant[];
+}
+
+export interface SemanticBoundaryFixture {
+  name: string;
+  family: SemanticFixtureFamily;
+  role: Role;
+  thinPrompt: string;
+  thinRecommendation: RewriteRecommendation;
+  thinAllowedScoreBands?: ScoreBand[];
+  boundedPrompt: string;
+  boundedRecommendation: RewriteRecommendation;
+  boundedForbiddenSnippets: string[];
+  expectedBoundedBestNextMoveType?: BestNextMoveType | null;
+  partialPrompt?: string;
+  partialRecommendation?: RewriteRecommendation;
+  synonymBoundedPrompt?: string;
 }
 
 export const semanticConsistencyCases: SemanticConsistencyCase[] = [
@@ -68,9 +85,21 @@ export const semanticConsistencyCases: SemanticConsistencyCase[] = [
     role: 'general',
     prompt: 'Compare Kubernetes and ECS.',
     expectedRecommendation: 'rewrite_recommended',
+    expectedBestNextMoveTypes: ['add_decision_criteria'],
     forbiddenScoreBands: ['strong', 'excellent'],
     forbiddenFindingSnippets: ['already strong', 'use safely without a rewrite'],
     forbiddenSummarySnippets: ['already strong', 'use safely without a rewrite', 'rewrite is optional at most'],
+  },
+  {
+    name: 'thin decision-support prompt stays in rewrite recommended state',
+    family: 'decision_support',
+    role: 'general',
+    prompt: 'Help engineering managers decide whether to adopt TypeScript.',
+    expectedRecommendation: 'rewrite_recommended',
+    expectedBestNextMoveTypes: ['add_decision_criteria', 'shift_to_decision_frame'],
+    forbiddenScoreBands: ['strong', 'excellent'],
+    forbiddenFindingSnippets: ['already strong', 'use safely without a rewrite'],
+    forbiddenSummarySnippets: ['already strong', 'rewrite is optional at most'],
   },
   {
     name: 'context-rich prompt avoids generic missing-context fallback',
@@ -84,6 +113,17 @@ export const semanticConsistencyCases: SemanticConsistencyCase[] = [
     forbiddenSummarySnippets: ['too open-ended', 'needs more detail', 'more contract detail'],
   },
   {
+    name: 'thin context-first prompt stays in rewrite recommended state',
+    family: 'context_first',
+    role: 'general',
+    prompt: 'Given this situation, recommend whether to adopt service mesh.',
+    expectedRecommendation: 'rewrite_recommended',
+    expectedBestNextMoveTypes: ['clarify_output_structure'],
+    forbiddenScoreBands: ['strong', 'excellent'],
+    forbiddenFindingSnippets: ['already strong', 'use safely without a rewrite'],
+    forbiddenSummarySnippets: ['already strong', 'rewrite is optional at most'],
+  },
+  {
     name: 'few-shot transfer prompt avoids stale generic fallback',
     family: 'few_shot',
     role: 'general',
@@ -93,6 +133,17 @@ export const semanticConsistencyCases: SemanticConsistencyCase[] = [
     forbiddenScoreBands: ['poor', 'weak'],
     forbiddenFindingSnippets: ['too open-ended', 'needs more detail', 'add runtime'],
     forbiddenSummarySnippets: ['too open-ended', 'needs more detail', 'implementation detail'],
+  },
+  {
+    name: 'thin few-shot prompt stays in rewrite optional state',
+    family: 'few_shot',
+    role: 'general',
+    prompt: 'Use the following examples and follow this pattern for tone and structure.',
+    expectedRecommendation: 'rewrite_optional',
+    expectedBestNextMoveTypes: ['require_examples'],
+    forbiddenScoreBands: ['strong', 'excellent'],
+    forbiddenFindingSnippets: ['already strong', 'use safely without a rewrite'],
+    forbiddenSummarySnippets: ['already strong', 'rewrite is optional at most'],
   },
 ];
 
@@ -235,5 +286,77 @@ export const semanticEquivalenceFamilies: SemanticEquivalenceFamily[] = [
           'Use these examples as the model for tone and structure. Model the response after these examples and write a new response about zero-trust adoption. Example 1: Short verdict, three bullets, one closing recommendation. Example 2: Short verdict, three bullets, one closing recommendation. Preserve the structure and concise style, change the domain details, and avoid extra marketing language.',
       },
     ],
+  },
+];
+
+export const semanticBoundaryFixtures: SemanticBoundaryFixture[] = [
+  {
+    name: 'comparison thin versus bounded',
+    family: 'comparison',
+    role: 'general',
+    thinPrompt: 'Compare Kubernetes and ECS.',
+    thinRecommendation: 'rewrite_recommended',
+    thinAllowedScoreBands: ['poor', 'weak', 'usable'],
+    boundedPrompt:
+      'Compare Kubernetes and ECS for a mid-sized SaaS team. Focus on team autonomy, operational load, and scaling complexity. Include one startup case and one enterprise case. Avoid hype and focus on real trade-offs.',
+    boundedRecommendation: 'no_rewrite_needed',
+    boundedForbiddenSnippets: ['too open-ended', 'constraints are missing', 'runtime', 'contract detail'],
+    expectedBoundedBestNextMoveType: null,
+  },
+  {
+    name: 'decision-support thin versus bounded',
+    family: 'decision_support',
+    role: 'general',
+    thinPrompt: 'Help engineering managers decide whether to adopt TypeScript.',
+    thinRecommendation: 'rewrite_recommended',
+    thinAllowedScoreBands: ['poor', 'weak', 'usable'],
+    boundedPrompt:
+      'Write a practical piece on when TypeScript improves maintainability and when it adds unnecessary complexity. Help engineering managers decide using maintainability, onboarding cost, and build tooling complexity as the criteria. Include one startup example and one enterprise example. Avoid hype and keep it practical.',
+    boundedRecommendation: 'no_rewrite_needed',
+    boundedForbiddenSnippets: ['too open-ended', 'runtime', 'contract', 'validation'],
+    expectedBoundedBestNextMoveType: null,
+  },
+  {
+    name: 'context-first thin versus bounded',
+    family: 'context_first',
+    role: 'general',
+    thinPrompt: 'Given this situation, recommend whether to adopt service mesh.',
+    thinRecommendation: 'rewrite_recommended',
+    thinAllowedScoreBands: ['poor', 'weak', 'usable'],
+    boundedPrompt:
+      'For a 20-person B2B SaaS team with two product squads, limited SRE support, and a compliance requirement, recommend whether we should adopt service mesh now or later using operational cost, team autonomy, and compliance impact as the decision criteria.',
+    boundedRecommendation: 'no_rewrite_needed',
+    boundedForbiddenSnippets: ['too open-ended', 'needs more detail', 'runtime', 'contract detail'],
+    expectedBoundedBestNextMoveType: null,
+  },
+  {
+    name: 'few-shot thin versus bounded',
+    family: 'few_shot',
+    role: 'general',
+    thinPrompt: 'Use the following examples and follow this pattern for tone and structure.',
+    thinRecommendation: 'rewrite_optional',
+    thinAllowedScoreBands: ['poor', 'weak', 'usable'],
+    boundedPrompt:
+      'Use these examples as the model for tone and structure. Example 1: Short verdict, three bullets, one closing recommendation. Example 2: Short verdict, three bullets, one closing recommendation. Write a new response about zero-trust adoption. Preserve the structure and concise style, adapt the domain details, and avoid extra marketing language.',
+    boundedRecommendation: 'no_rewrite_needed',
+    boundedForbiddenSnippets: ['too open-ended', 'needs more detail', 'runtime', 'implementation detail'],
+    expectedBoundedBestNextMoveType: null,
+  },
+  {
+    name: 'implementation thin partial and bounded',
+    family: 'implementation',
+    role: 'developer',
+    thinPrompt: 'Write a webhook handler.',
+    thinRecommendation: 'rewrite_recommended',
+    thinAllowedScoreBands: ['poor', 'weak', 'usable'],
+    partialPrompt: 'Write a Node.js webhook endpoint in TypeScript that accepts JSON and returns 200 on success and 400 on invalid input.',
+    partialRecommendation: 'rewrite_optional',
+    boundedPrompt:
+      'Write a webhook handler in TypeScript for Node.js that accepts JSON. Validate the request body against a schema. On success, return HTTP 200. On schema validation failure, return HTTP 400. Include error logging. Exclude authorization, signature verification, and business-rule validation.',
+    synonymBoundedPrompt:
+      'Build a small Node.js endpoint in TypeScript for receiving webhook events as JSON. Check the body against a defined contract before processing it. Return HTTP 200 when the payload is accepted and HTTP 400 when the contract check fails. Log failures for debugging. Leave auth, signature checks, and business-rule enforcement out of scope.',
+    boundedRecommendation: 'no_rewrite_needed',
+    boundedForbiddenSnippets: ['too open-ended', 'constraints are missing', 'add runtime, contract, and response detail'],
+    expectedBoundedBestNextMoveType: null,
   },
 ];
