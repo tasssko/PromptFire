@@ -132,6 +132,24 @@ describe('semantic core', () => {
     expect(whenWorthIt.inventory.boundedness.isBounded).toBe(true);
   });
 
+  it('normalizes equivalent analysis prompts into the same task family and boundedness', () => {
+    const analyze = classifySemanticPrompt(
+      'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+      'general',
+    );
+    const diagnose = classifySemanticPrompt(
+      'Diagnose the breakdowns in incident response handoffs for a mid-sized SaaS engineering org. Use ownership ambiguity, escalation gaps, and on-call load as the analysis criteria. Include one startup example and one enterprise example, and keep the findings grounded rather than generic.',
+      'general',
+    );
+
+    expect(analyze.extraction.taskClass).toBe('analysis');
+    expect(diagnose.extraction.taskClass).toBe('analysis');
+    expect(analyze.inventory.analysisContext.present).toBe(true);
+    expect(diagnose.inventory.analysisContext.present).toBe(true);
+    expect(analyze.inventory.boundedness.isBounded).toBe(true);
+    expect(diagnose.inventory.boundedness.isBounded).toBe(true);
+  });
+
   it('normalizes equivalent decision-support prompts into the same task family and boundedness', () => {
     const helpsHurts = classifySemanticPrompt(
       'Write a practical piece on when TypeScript improves maintainability and when it adds unnecessary complexity. Help engineering managers decide with one startup example and one enterprise example. Avoid hype and keep it practical.',
@@ -215,6 +233,18 @@ describe('semantic core', () => {
 
     expect(topicOnly.extraction.inScope).toBe(false);
     expect(topicOnly.extraction.taskClass).toBe('other');
+  });
+
+  it('keeps thin explicit analysis prompts on the semantic path without treating them as bounded', () => {
+    const thin = classifySemanticPrompt('Analyze our incident response process.', 'general');
+    const decision = buildDecisionState(thin.inventory, 'auto');
+
+    expect(thin.extraction.taskClass).toBe('analysis');
+    expect(thin.extraction.inScope).toBe(true);
+    expect(thin.inventory.analysisContext.present).toBe(true);
+    expect(thin.inventory.boundedness.isBounded).toBe(false);
+    expect(decision.semanticState).toBe('weak');
+    expect(decision.rewriteRecommendation).toBe('rewrite_recommended');
   });
 
   it('treats exactly three boundedness groups as bounded for implementation prompts', () => {

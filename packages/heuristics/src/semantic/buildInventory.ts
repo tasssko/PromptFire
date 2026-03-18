@@ -46,6 +46,11 @@ export interface ContextInventory {
     axes: string[];
     tradeoffFrame: boolean;
   };
+  analysisContext: {
+    present: boolean;
+    target: string[];
+    criteria: string[];
+  };
   decisionContext: {
     present: boolean;
     decisionObject: string[];
@@ -151,6 +156,32 @@ function boundednessForFamily(taskClass: TaskClass, inventory: Omit<ContextInven
     };
   }
 
+  if (taskClass === 'analysis') {
+    const hasAnalysisTarget = inventory.analysisContext.target.length > 0 || inventory.analysisContext.criteria.length > 0;
+    const secondaryCount = countPresent([
+      inventory.audienceContext.present || inventory.contextBlock.relevant,
+      inventory.exampleContext.present,
+      inventory.analysisContext.criteria.length > 0,
+      inventory.boundaryContext.present || inventory.boundaryContext.groundedFraming.length > 0,
+    ]);
+    const boundedSignals = unique(
+      [
+        hasAnalysisTarget ? 'analysis target' : '',
+        inventory.audienceContext.present || inventory.contextBlock.relevant ? 'scenario context' : '',
+        inventory.exampleContext.present ? 'examples' : '',
+        inventory.analysisContext.criteria.length > 0 ? 'analysis criteria' : '',
+        inventory.boundaryContext.present || inventory.boundaryContext.groundedFraming.length > 0 ? 'grounded framing' : '',
+      ].filter(Boolean),
+    );
+
+    return {
+      satisfiedGroups: Number(hasAnalysisTarget) + secondaryCount,
+      isBounded: hasAnalysisTarget && secondaryCount >= 2 && !contradictionPresent,
+      family: taskClass,
+      boundedSignals,
+    };
+  }
+
   if (taskClass === 'decision_support') {
     const hasDecisionObject = inventory.decisionContext.decisionObject.length > 0 || inventory.decisionContext.criteria.length > 0;
     const secondaryCount = countPresent([
@@ -240,6 +271,7 @@ export function buildContextInventory(extraction: SemanticTagExtraction): Contex
   const audiencePresent = hasTag(tags, 'has_audience') || hasTag(tags, 'has_org_context');
   const comparisonPresent =
     hasTag(tags, 'has_comparison_object') || hasTag(tags, 'has_tradeoff_frame') || hasTag(tags, 'has_decision_criteria');
+  const analysisPresent = hasTag(tags, 'has_analysis_frame') || hasTag(tags, 'has_analysis_target');
   const decisionPresent =
     hasTag(tags, 'has_decision_frame') ||
     hasTag(tags, 'has_decision_target') ||
@@ -292,6 +324,11 @@ export function buildContextInventory(extraction: SemanticTagExtraction): Contex
       objects: evidence.has_comparison_object ?? [],
       axes: unique([...(evidence.has_decision_criteria ?? []), ...(evidence.has_scenario_context ?? [])]),
       tradeoffFrame: hasTag(tags, 'has_tradeoff_frame'),
+    },
+    analysisContext: {
+      present: analysisPresent,
+      target: evidence.has_analysis_target ?? [],
+      criteria: evidence.has_decision_criteria ?? [],
     },
     decisionContext: {
       present: decisionPresent,

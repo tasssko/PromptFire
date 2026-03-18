@@ -1,6 +1,6 @@
 import type { BestNextMoveType, RewriteRecommendation, Role, ScoreBand, ScoreSet } from './contracts';
 
-export type SemanticFixtureFamily = 'implementation' | 'comparison' | 'decision_support' | 'context_first' | 'few_shot';
+export type SemanticFixtureFamily = 'implementation' | 'analysis' | 'comparison' | 'decision_support' | 'context_first' | 'few_shot';
 
 export interface SemanticConsistencyCase {
   name: string;
@@ -56,6 +56,17 @@ export interface SemanticBoundaryFixture {
 }
 
 export const semanticConsistencyCases: SemanticConsistencyCase[] = [
+  {
+    name: 'bounded analysis prompt stays aligned with non-rewrite verdict',
+    family: 'analysis',
+    role: 'general',
+    prompt:
+      'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+    expectedRecommendation: 'no_rewrite_needed',
+    forbiddenScoreBands: ['poor', 'weak'],
+    forbiddenFindingSnippets: ['too open-ended', 'constraints are missing', 'add runtime'],
+    forbiddenSummarySnippets: ['too open-ended', 'needs more detail', 'decision frame'],
+  },
   {
     name: 'typescript decision prompt stays aligned with non-rewrite verdict',
     family: 'decision_support',
@@ -149,6 +160,16 @@ export const semanticConsistencyCases: SemanticConsistencyCase[] = [
 
 export const semanticFindingCases: SemanticFindingCase[] = [
   {
+    name: 'analysis findings stay on diagnostic lens and grounded context',
+    family: 'analysis',
+    role: 'general',
+    prompt:
+      'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+    expectedRecommendation: 'no_rewrite_needed',
+    allowedFindingSnippets: ['analysis lens', 'scenario', 'grounded boundary'],
+    forbiddenFindingSnippets: ['add runtime', 'add contract detail', 'validation or failure constraints are missing'],
+  },
+  {
     name: 'comparison findings stay on criteria and trade-off guidance',
     family: 'comparison',
     role: 'general',
@@ -191,6 +212,30 @@ export const semanticFindingCases: SemanticFindingCase[] = [
 ];
 
 export const semanticEquivalenceFamilies: SemanticEquivalenceFamily[] = [
+  {
+    family: 'analysis',
+    role: 'general',
+    expectedRecommendation: 'no_rewrite_needed',
+    expectedMajorBlockingIssues: false,
+    importantSubscores: ['scope', 'contrast', 'constraintQuality'],
+    variants: [
+      {
+        variant: 'analyze why it stalls',
+        prompt:
+          'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+      },
+      {
+        variant: 'diagnose the breakdowns',
+        prompt:
+          'Diagnose the breakdowns in incident response handoffs for a mid-sized SaaS engineering org. Use ownership ambiguity, escalation gaps, and on-call load as the analysis criteria. Include one startup example and one enterprise example, and keep the findings grounded rather than generic.',
+      },
+      {
+        variant: 'review the root causes',
+        prompt:
+          'Review the root causes behind stalled incident response handoffs for a mid-sized SaaS team using ownership clarity, escalation flow, and on-call load as the criteria. Include one startup case and one enterprise case, and avoid generic management advice.',
+      },
+    ],
+  },
   {
     family: 'comparison',
     role: 'general',
@@ -290,6 +335,19 @@ export const semanticEquivalenceFamilies: SemanticEquivalenceFamily[] = [
 ];
 
 export const semanticBoundaryFixtures: SemanticBoundaryFixture[] = [
+  {
+    name: 'analysis thin versus bounded',
+    family: 'analysis',
+    role: 'general',
+    thinPrompt: 'Analyze our incident response process.',
+    thinRecommendation: 'rewrite_recommended',
+    thinAllowedScoreBands: ['poor', 'weak', 'usable'],
+    boundedPrompt:
+      'Analyze why incident response handoffs keep stalling for a mid-sized SaaS team. Assess ownership ambiguity, escalation gaps, and on-call load as the criteria. Include one startup case and one enterprise case. Avoid generic management advice and keep the findings practical.',
+    boundedRecommendation: 'no_rewrite_needed',
+    boundedForbiddenSnippets: ['too open-ended', 'needs more detail', 'runtime', 'contract detail'],
+    expectedBoundedBestNextMoveType: null,
+  },
   {
     name: 'comparison thin versus bounded',
     family: 'comparison',

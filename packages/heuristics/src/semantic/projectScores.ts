@@ -62,6 +62,7 @@ function applyCoveredFamilyStabilityFloors(next: ScoreSet, context: ContextInven
   switch (context.taskShape.taskClass) {
     case 'comparison':
     case 'decision_support':
+    case 'analysis':
       next.scope = Math.max(next.scope, 8);
       next.contrast = Math.max(next.contrast, 8);
       next.clarity = Math.max(next.clarity, 7);

@@ -15,6 +15,8 @@ export type SemanticTag =
   | 'has_operational_retry_or_idempotency'
   | 'has_comparison_object'
   | 'has_tradeoff_frame'
+  | 'has_analysis_frame'
+  | 'has_analysis_target'
   | 'has_decision_frame'
   | 'has_decision_target'
   | 'has_decision_criteria'
@@ -30,7 +32,7 @@ export type SemanticTag =
   | 'has_output_request'
   | 'has_internal_contradiction';
 
-export type TaskClass = 'implementation' | 'comparison' | 'decision_support' | 'context_first' | 'few_shot' | 'other';
+export type TaskClass = 'implementation' | 'analysis' | 'comparison' | 'decision_support' | 'context_first' | 'few_shot' | 'other';
 
 export interface SemanticTagExtraction {
   taskClass: TaskClass;
@@ -96,7 +98,9 @@ function determineTaskClass(prompt: string, role: Role, tags: Set<SemanticTag>):
     tags.has('has_examples') &&
     hasFewShotStructure(prompt) &&
     (tags.has('has_example_transfer_instruction') || tags.has('has_style_reference') || tags.has('has_format_reference'));
+  const hasAnalysisSignals = tags.has('has_analysis_frame') || tags.has('has_analysis_target');
   const hasComparisonSignals = tags.has('has_comparison_object') || tags.has('has_tradeoff_frame');
+  const hasDecisionDirectiveSignals = tags.has('has_decision_frame') || tags.has('has_decision_target');
   const hasDecisionSignals =
     tags.has('has_decision_frame') || tags.has('has_decision_target') || tags.has('has_decision_criteria');
 
@@ -105,6 +109,9 @@ function determineTaskClass(prompt: string, role: Role, tags: Set<SemanticTag>):
   }
   if (hasContextFirstSignals && !hasFewShotSignals) {
     return 'context_first';
+  }
+  if (hasAnalysisSignals && !hasDecisionDirectiveSignals && !hasComparisonSignals) {
+    return 'analysis';
   }
   if (hasDecisionSignals && !tags.has('has_comparison_object')) {
     return 'decision_support';
@@ -126,6 +133,10 @@ function isSemanticPathInScope(taskClass: TaskClass, tags: Set<SemanticTag>): bo
 
   if (taskClass === 'comparison') {
     return tags.has('has_comparison_object') || tags.has('has_tradeoff_frame');
+  }
+
+  if (taskClass === 'analysis') {
+    return tags.has('has_analysis_frame');
   }
 
   if (taskClass === 'decision_support') {
@@ -379,6 +390,40 @@ export function extractSemanticTags(prompt: string, role: Role): SemanticTagExtr
   if (tradeoffEvidence.length > 0) {
     tags.add('has_tradeoff_frame');
     pushEvidence(evidence, 'has_tradeoff_frame', tradeoffEvidence);
+  }
+
+  const analysisFrameEvidence = collect(
+    [
+      ['analyze', /\banaly[sz]e\b|\banalysis\b/i],
+      ['assess', /\bassess\b|\bassessment\b/i],
+      ['audit', /\baudit\b/i],
+      ['review', /\breview\b/i],
+      ['diagnose', /\bdiagnos(?:e|is)\b/i],
+      ['root cause', /\broot cause\b/i],
+    ],
+    prompt,
+  );
+  if (analysisFrameEvidence.length > 0) {
+    tags.add('has_analysis_frame');
+    pushEvidence(evidence, 'has_analysis_frame', analysisFrameEvidence);
+  }
+
+  const analysisTargetEvidence = collect(
+    [
+      ['bottlenecks', /\bbottleneck(?:s)?\b/i],
+      ['failure modes', /\bfailure mode(?:s)?\b/i],
+      ['root causes', /\broot cause(?:s)?\b/i],
+      ['risks', /\brisks?\b/i],
+      ['gaps', /\bgaps?\b/i],
+      ['breakdowns', /\bbreakdown(?:s)?\b/i],
+      ['why it fails', /\bwhy\b[\s\S]{0,40}\b(fails?|stalls?|breaks?|drifts?)\b/i],
+      ['what is driving', /\bwhat is driving\b|\bwhat drives\b/i],
+    ],
+    prompt,
+  );
+  if (analysisTargetEvidence.length > 0) {
+    tags.add('has_analysis_target');
+    pushEvidence(evidence, 'has_analysis_target', analysisTargetEvidence);
   }
 
   const decisionFrameEvidence = collect(

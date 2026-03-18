@@ -23,6 +23,8 @@ function dedupeIssues(issues: Issue[]): Issue[] {
 
 function familyGapMessage(context: ContextInventory): string {
   switch (context.taskShape.taskClass) {
+    case 'analysis':
+      return 'Add the analysis lens, one concrete scenario, or one grounded boundary so the diagnostic findings stay specific.';
     case 'comparison':
       return 'Add explicit comparison criteria, scenario context, or one concrete case so the trade-off stays grounded.';
     case 'decision_support':
@@ -56,6 +58,8 @@ function familyGapMessage(context: ContextInventory): string {
 function familySummary(context: ContextInventory, decision: DecisionState): string {
   if (decision.semanticState === 'strong') {
     switch (context.taskShape.taskClass) {
+      case 'analysis':
+        return 'Prompt already frames a clear analysis target with enough diagnostic criteria and context to use safely without a rewrite.';
       case 'comparison':
         return 'Prompt already frames the comparison with enough context and trade-off guidance to use safely without a rewrite.';
       case 'decision_support':
@@ -72,6 +76,8 @@ function familySummary(context: ContextInventory, decision: DecisionState): stri
 
   if (decision.semanticState === 'usable') {
     switch (context.taskShape.taskClass) {
+      case 'analysis':
+        return 'Prompt is usable now; the next gain is one sharper analysis lens, scenario, or grounded boundary.';
       case 'comparison':
         return 'Prompt is usable now; the next gain is sharper criteria, scenario context, or one concrete comparison case.';
       case 'decision_support':
@@ -87,6 +93,8 @@ function familySummary(context: ContextInventory, decision: DecisionState): stri
   }
 
   switch (context.taskShape.taskClass) {
+    case 'analysis':
+      return 'Prompt asks for diagnosis, but it still lacks enough analysis criteria, scenario context, or grounded boundaries to keep the findings specific.';
     case 'comparison':
       return 'Prompt names a comparison, but it still lacks enough evaluation frame or scenario context to avoid generic trade-off output.';
     case 'decision_support':
@@ -107,6 +115,22 @@ function buildBestNextMove(context: ContextInventory, decision: DecisionState): 
   }
 
   switch (context.taskShape.taskClass) {
+    case 'analysis':
+      return {
+        id: 'add_decision_criteria',
+        type: 'add_decision_criteria',
+        title: decision.semanticState === 'weak' ? 'Add an analysis lens and one scenario' : 'Sharpen the diagnostic criteria',
+        rationale:
+          'The next gain is to state what the analysis should examine and under which concrete scenario, so the output diagnoses the right causes instead of drifting into generic advice.',
+        expectedImpact: 'high',
+        targetScores: ['contrast', 'constraintQuality', 'genericOutputRisk'],
+        methodFit: {
+          currentPattern: 'stepwise_reasoning',
+          recommendedPattern: 'break_into_steps',
+          confidence: 'medium',
+        },
+        exampleChange: 'Name the failure modes, bottlenecks, or risks to analyze, plus one concrete scenario or boundary.',
+      };
     case 'comparison':
       return {
         id: 'add_decision_criteria',
@@ -281,6 +305,9 @@ export function deriveFindings(analysis: Analysis, context: ContextInventory, de
   }
   if (context.comparisonContext.tradeoffFrame) {
     signals.push('Useful trade-off framing is already present.');
+  }
+  if (context.analysisContext.present) {
+    signals.push('Diagnostic analysis framing is already present.');
   }
   if (context.contextBlock.relevant) {
     signals.push('Relevant situational context is already present.');
