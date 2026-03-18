@@ -7,7 +7,7 @@ import type {
   Rewrite,
   Role,
 } from '@promptfire/shared';
-import type { PatternFit, RewriteLadderState } from '@promptfire/heuristics';
+import type { LadderEvaluation, PatternFit, RewriteLadderState } from '@promptfire/heuristics';
 
 export interface RewriteInput {
   prompt: string;
@@ -19,6 +19,18 @@ export interface RewriteInput {
   improvementSuggestions?: ImprovementSuggestion[];
   patternFit?: PatternFit;
   ladder?: RewriteLadderState;
+}
+
+export interface InternalLadderTrace {
+  current: RewriteLadderState['current'];
+  next: RewriteLadderState['next'];
+  target: RewriteLadderState['target'];
+  maxSafeTarget: RewriteLadderState['maxSafeTarget'];
+  stopReason: RewriteLadderState['stopReason'];
+  pattern: PatternFit['primary'] | null;
+  claimedStep: LadderEvaluation['claimedStep'] | null;
+  ladderAccepted: boolean | null;
+  ladderReason: LadderEvaluation['reason'] | null;
 }
 
 export interface RewriteEngine {

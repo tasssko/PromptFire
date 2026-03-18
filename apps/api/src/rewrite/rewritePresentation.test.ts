@@ -182,6 +182,77 @@ describe('rewrite presentation fallback', () => {
     expect(mode).toBe('suppressed');
   });
 
+  it('D2: downgrades rejected ladder steps to template guidance instead of full rewrite', () => {
+    const mode = selectRewritePresentationMode({
+      rewriteRecommendation: 'rewrite_recommended',
+      rewritePreference: 'auto',
+      evaluation: evaluation('minor_improvement', 1.5),
+      analysis: analysis(),
+      rewrite: rewrite(),
+      scoreBand: 'weak',
+      prompt: 'Write a webhook handler.',
+      semanticPolicy: semanticPolicy(),
+      effectiveAnalysisContext: {
+        role: 'developer',
+        missingContextType: 'execution',
+      },
+      ladderTrace: {
+        current: 'weak',
+        next: 'good',
+        target: 'good',
+        maxSafeTarget: 'strong',
+        stopReason: null,
+        pattern: 'direct_instruction',
+        claimedStep: { from: 'weak', to: 'good' },
+        ladderAccepted: false,
+        ladderReason: 'insufficient_grounded_improvement',
+      },
+    });
+
+    expect(mode).toBe('template_with_example');
+  });
+
+  it('D3: keeps forced strong rewrites suppressed at presentation level when advancement is not earned', () => {
+    const mode = selectRewritePresentationMode({
+      rewriteRecommendation: 'rewrite_optional',
+      rewritePreference: 'force',
+      evaluation: evaluation('already_strong', 0),
+      analysis: analysis({
+        scores: {
+          scope: 8,
+          contrast: 8,
+          clarity: 8,
+          constraintQuality: 8,
+          genericOutputRisk: 2,
+          tokenWasteRisk: 2,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+      }),
+      rewrite: rewrite(),
+      scoreBand: 'strong',
+      prompt: 'Strong prompt',
+      semanticPolicy: semanticPolicy({
+        allowedPresentationModes: ['full_rewrite', 'template_with_example', 'questions_only'],
+        semanticState: 'strong',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
+      ladderTrace: {
+        current: 'strong',
+        next: 'excellent',
+        target: 'excellent',
+        maxSafeTarget: 'excellent',
+        stopReason: 'already_strong',
+        pattern: 'direct_instruction',
+        claimedStep: { from: 'strong', to: 'excellent' },
+        ladderAccepted: false,
+        ladderReason: 'already_strong',
+      },
+    });
+
+    expect(mode).toBe('suppressed');
+  });
+
   it('E: prefers template_with_example for weak/usable no-significant-change cases', () => {
     const mode = selectRewritePresentationMode({
       rewriteRecommendation: 'rewrite_optional',

@@ -12,6 +12,7 @@ import type {
   EvaluationV2,
 } from '@promptfire/shared';
 import type { PrimaryGap, SemanticRewritePolicy } from '@promptfire/heuristics';
+import type { InternalLadderTrace } from './types';
 
 type EffectiveContextLike = {
   role?: 'general' | 'developer' | 'marketer';
@@ -59,6 +60,10 @@ function selectSemanticOwnedPresentationMode(params: {
   rewriteRecommendation: RewriteRecommendation;
   evaluation: EvaluationV2 | null;
   rewrite: Rewrite | null;
+  analysis: Analysis;
+  prompt: string;
+  effectiveAnalysisContext?: EffectiveContextLike;
+  ladderTrace?: InternalLadderTrace | null;
 }): RewritePresentationMode {
   const allow = (mode: RewritePresentationMode): boolean => params.allowedModes.includes(mode);
   const fallbackMode = (): RewritePresentationMode => {
@@ -78,6 +83,25 @@ function selectSemanticOwnedPresentationMode(params: {
   }
   if (!params.evaluation) {
     return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
+  }
+  if (params.ladderTrace?.stopReason === 'already_strong' || params.ladderTrace?.stopReason === 'already_excellent') {
+    return 'suppressed';
+  }
+  if (params.ladderTrace?.ladderAccepted === false) {
+    if (params.ladderTrace.ladderReason === 'already_strong') {
+      return params.rewritePreference === 'force' ? 'suppressed' : fallbackMode();
+    }
+    if (params.ladderTrace.ladderReason === 'intent_drift' || params.ladderTrace.ladderReason === 'rubric_echo_risk') {
+      return allow('template_with_example') ? 'template_with_example' : fallbackMode();
+    }
+    if (
+      isExtremelyUnderspecified(params.prompt, params.analysis) &&
+      !hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+      allow('questions_only')
+    ) {
+      return 'questions_only';
+    }
+    return allow('template_with_example') ? 'template_with_example' : fallbackMode();
   }
   if (params.evaluation.status === 'already_strong') {
     return 'suppressed';
@@ -113,6 +137,7 @@ export function selectRewritePresentationMode(params: {
   prompt: string;
   semanticPolicy?: SemanticRewritePolicy | null;
   effectiveAnalysisContext?: EffectiveContextLike;
+  ladderTrace?: InternalLadderTrace | null;
 }): RewritePresentationMode {
   const semanticOwned = isSemanticOwned(params.semanticPolicy);
   const allowedModes = params.semanticPolicy?.allowedPresentationModes ?? [
@@ -140,6 +165,10 @@ export function selectRewritePresentationMode(params: {
       rewriteRecommendation: params.rewriteRecommendation,
       evaluation: params.evaluation,
       rewrite: params.rewrite,
+      analysis: params.analysis,
+      prompt: params.prompt,
+      effectiveAnalysisContext: params.effectiveAnalysisContext,
+      ladderTrace: params.ladderTrace,
     });
   }
 
@@ -151,6 +180,35 @@ export function selectRewritePresentationMode(params: {
   }
   if (!params.evaluation) {
     return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
+  }
+  if (params.ladderTrace?.stopReason === 'already_strong' || params.ladderTrace?.stopReason === 'already_excellent') {
+    return 'suppressed';
+  }
+  if (params.ladderTrace?.ladderAccepted === false) {
+    if (params.ladderTrace.ladderReason === 'already_strong') {
+      return params.rewritePreference === 'force' ? 'suppressed' : fallbackMode();
+    }
+    if (params.ladderTrace.ladderReason === 'intent_drift' || params.ladderTrace.ladderReason === 'rubric_echo_risk') {
+      if (
+        isExtremelyUnderspecified(params.prompt, params.analysis) &&
+        !hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+        allow('questions_only')
+      ) {
+        return 'questions_only';
+      }
+      return allow('template_with_example') ? 'template_with_example' : fallbackMode();
+    }
+    if (
+      (params.scoreBand === 'poor' || params.scoreBand === 'weak' || params.scoreBand === 'usable') &&
+      hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+      allow('template_with_example')
+    ) {
+      return 'template_with_example';
+    }
+    if (allow('questions_only')) {
+      return 'questions_only';
+    }
+    return fallbackMode();
   }
 
   if (params.evaluation.status === 'already_strong') {
