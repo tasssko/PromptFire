@@ -6,6 +6,7 @@ import {
   classifySemanticPrompt,
   detectPatternFit,
   deriveFindings,
+  deriveRewriteLadderState,
   evaluateRewrite,
   generateBestNextMove,
   generateImprovementSuggestions,
@@ -1145,6 +1146,12 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           effectiveContext: effectiveResolution.effectiveAnalysisContext,
         });
     const bestNextMove: BestNextMove | null = semanticFindings?.bestNextMove ?? generatedBestNextMove;
+    const rewriteLadder = deriveRewriteLadderState({
+      overallScore,
+      rewriteRecommendation,
+      rewritePreference: input.rewritePreference,
+      expectedImprovement: publicExpectedImprovement,
+    });
 
     try {
       let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
@@ -1152,7 +1159,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       let rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'] = 'suppressed';
       let guidedCompletion: AnalyzeAndRewriteV2Response['guidedCompletion'] = null;
 
-      if (!shouldSuppress) {
+      if (!shouldSuppress && rewriteLadder.target !== null) {
         const rewriteEngine = selectRewriteEngine(providerConfig);
         const generatedRewrite = await rewriteEngine.rewrite({
           prompt: input.prompt,
@@ -1163,6 +1170,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           analysis: resolvedAnalysis,
           improvementSuggestions,
           patternFit,
+          ladder: rewriteLadder,
         });
 
         const rewriteAnalysis = withV2Scores(

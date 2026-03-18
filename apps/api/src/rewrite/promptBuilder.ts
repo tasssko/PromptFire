@@ -59,6 +59,18 @@ function patternGuidance(input: RewriteInput): string {
   }
 }
 
+function ladderGuidance(input: RewriteInput): string {
+  if (!input.ladder) {
+    return 'If you rewrite, keep it bounded and add concrete task-grounded detail rather than abstract optimization language.';
+  }
+
+  if (!input.ladder.target) {
+    return `Rewrite ladder: current ${input.ladder.current}, stop here. Do not rewrite past this rung by default.`;
+  }
+
+  return `Rewrite ladder: current ${input.ladder.current}, target ${input.ladder.target}, max safe target ${input.ladder.maxSafeTarget}. Improve only to the next justified rung, preserve the same job, and do not jump to an idealized final prompt.`;
+}
+
 export interface RewriteInstructions {
   system: string;
   user: string;
@@ -85,6 +97,7 @@ export function buildRewriteInstructions(input: RewriteInput): RewriteInstructio
     roleGuidance(input.role),
     modeGuidance(input.mode),
     patternGuidance(input),
+    ladderGuidance(input),
     inferredMissingContext
       ? `Prioritize missing context type: ${inferredMissingContext}.`
       : 'Prioritize the highest-value missing context type, if any.',
@@ -107,6 +120,15 @@ export function buildRewriteInstructions(input: RewriteInput): RewriteInstructio
             primary: input.patternFit.primary,
             confidence: input.patternFit.confidence,
             reasons: input.patternFit.reasons,
+          }
+        : undefined,
+      ladder: input.ladder
+        ? {
+            current: input.ladder.current,
+            next: input.ladder.next,
+            target: input.ladder.target,
+            maxSafeTarget: input.ladder.maxSafeTarget,
+            stopReason: input.ladder.stopReason,
           }
         : undefined,
       outputRequirements: {

@@ -5,6 +5,7 @@ export * from './improvementSuggestions';
 export * from './opportunityEngine';
 export * from './patternFit';
 export * from './missingContext';
+export * from './rewriteLadder';
 export * from './semantic/extractTags';
 export * from './semantic/buildInventory';
 export * from './semantic/buildDecision';

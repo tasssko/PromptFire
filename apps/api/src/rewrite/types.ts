@@ -7,7 +7,7 @@ import type {
   Rewrite,
   Role,
 } from '@promptfire/shared';
-import type { PatternFit } from '@promptfire/heuristics';
+import type { PatternFit, RewriteLadderState } from '@promptfire/heuristics';
 
 export interface RewriteInput {
   prompt: string;
@@ -18,6 +18,7 @@ export interface RewriteInput {
   analysis?: Analysis;
   improvementSuggestions?: ImprovementSuggestion[];
   patternFit?: PatternFit;
+  ladder?: RewriteLadderState;
 }
 
 export interface RewriteEngine {
