@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Analysis, EvaluationV2, Rewrite } from '@promptfire/shared';
+import type { SemanticRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
 import { buildGuidedCompletion, selectRewritePresentationMode } from './rewritePresentation';
 
 function analysis(overrides?: Partial<Analysis>): Analysis {
@@ -46,6 +47,21 @@ function evaluation(status: EvaluationV2['status'], overallDelta = 0): Evaluatio
   };
 }
 
+function semanticPolicy(
+  overrides?: Partial<SemanticRewritePolicy>,
+): SemanticRewritePolicy {
+  return {
+    semanticOwned: true,
+    allowedPresentationModes: ['full_rewrite', 'template_with_example', 'questions_only'],
+    primaryGap: 'execution',
+    family: 'implementation',
+    semanticState: 'weak',
+    rewriteRecommendation: 'rewrite_recommended',
+    rewriteRisk: 'low',
+    ...overrides,
+  };
+}
+
 describe('rewrite presentation fallback', () => {
   it('A: uses guided completion for thin developer prompts with regression-prone rewrite', () => {
     const mode = selectRewritePresentationMode({
@@ -56,6 +72,7 @@ describe('rewrite presentation fallback', () => {
       rewrite: rewrite(),
       scoreBand: 'weak',
       prompt: 'Write a webhook handler.',
+      semanticPolicy: semanticPolicy(),
       effectiveAnalysisContext: {
         role: 'developer',
         canonicalTaskType: 'implementation_code',
@@ -70,6 +87,7 @@ describe('rewrite presentation fallback', () => {
       role: 'developer',
       mode: 'template_with_example',
       analysis: analysis(),
+      semanticPolicy: semanticPolicy(),
       bestNextMove: null,
       improvementSuggestions: [],
       effectiveAnalysisContext: {
@@ -108,6 +126,10 @@ describe('rewrite presentation fallback', () => {
       },
       scoreBand: 'poor',
       prompt: 'Write better copy.',
+      semanticPolicy: semanticPolicy({
+        family: 'analysis',
+        primaryGap: 'criteria',
+      }),
       effectiveAnalysisContext: {
         role: 'general',
         missingContextType: null,
@@ -125,6 +147,7 @@ describe('rewrite presentation fallback', () => {
       rewrite: rewrite(),
       scoreBand: 'weak',
       prompt: 'Write a webhook handler.',
+      semanticPolicy: semanticPolicy(),
     });
     expect(mode).toBe('full_rewrite');
   });
@@ -149,6 +172,11 @@ describe('rewrite presentation fallback', () => {
       rewrite: rewrite(),
       scoreBand: 'strong',
       prompt: 'Strong prompt',
+      semanticPolicy: semanticPolicy({
+        allowedPresentationModes: ['suppressed'],
+        semanticState: 'strong',
+        rewriteRecommendation: 'no_rewrite_needed',
+      }),
     });
     expect(mode).toBe('suppressed');
   });
@@ -162,11 +190,58 @@ describe('rewrite presentation fallback', () => {
       rewrite: rewrite(),
       scoreBand: 'usable',
       prompt: 'Write a webhook handler.',
+      semanticPolicy: semanticPolicy({
+        allowedPresentationModes: ['suppressed', 'template_with_example', 'questions_only'],
+        semanticState: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
       effectiveAnalysisContext: {
         role: 'developer',
         missingContextType: 'execution',
       },
     });
     expect(mode).toBe('template_with_example');
+  });
+
+  it('F: prevents rewrite_optional from escalating to full_rewrite on material improvement', () => {
+    const mode = selectRewritePresentationMode({
+      rewriteRecommendation: 'rewrite_optional',
+      rewritePreference: 'auto',
+      evaluation: evaluation('material_improvement', 8),
+      analysis: analysis(),
+      rewrite: rewrite(),
+      scoreBand: 'usable',
+      prompt: 'Compare two options for our team.',
+      semanticPolicy: semanticPolicy({
+        family: 'comparison',
+        primaryGap: 'criteria',
+        allowedPresentationModes: ['suppressed', 'template_with_example', 'questions_only'],
+        semanticState: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
+    });
+
+    expect(mode).toBe('template_with_example');
+  });
+
+  it('G: uses semantic family and gap for guided completion before role/text heuristics', () => {
+    const guided = buildGuidedCompletion({
+      prompt: 'Given this context, advise whether we should adopt service mesh.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis(),
+      semanticPolicy: semanticPolicy({
+        family: 'context_first',
+        primaryGap: 'context_linkage',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: null,
+      },
+    });
+
+    expect(guided?.questions?.join(' ').toLowerCase()).toMatch(/deliverable|context|criteria/);
   });
 });

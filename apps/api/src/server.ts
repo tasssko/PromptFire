@@ -11,6 +11,7 @@ import {
   projectScores,
 } from '@promptfire/heuristics';
 import type { PromptPattern } from '@promptfire/heuristics';
+import { buildRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
 import {
   AnalyzeAndRewriteV2RequestSchema,
   AnalyzeAndRewriteRequestSchema,
@@ -1127,6 +1128,10 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       hasSemanticDecision && semanticDecision
         ? deriveFindings(resolvedAnalysis, semanticClassification.inventory, semanticDecision)
         : null;
+    const semanticRewritePolicy =
+      hasSemanticDecision && semanticDecision && semanticFindings
+        ? buildRewritePolicy(semanticClassification.inventory, semanticDecision)
+        : null;
     const generatedBestNextMove = semanticFindings
       ? null
       : generateBestNextMove({
@@ -1223,6 +1228,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           rewrite,
           scoreBand,
           prompt: input.prompt,
+          semanticPolicy: semanticRewritePolicy,
           effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
         });
         if (rewritePresentationMode === 'template_with_example' || rewritePresentationMode === 'questions_only') {
@@ -1231,6 +1237,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
             role: input.role,
             mode: rewritePresentationMode,
             analysis: resolvedAnalysis,
+            semanticPolicy: semanticRewritePolicy,
             bestNextMove,
             improvementSuggestions,
             effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,

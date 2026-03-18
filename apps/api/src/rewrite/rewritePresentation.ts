@@ -11,6 +11,7 @@ import type {
   ScoreBand,
   EvaluationV2,
 } from '@promptfire/shared';
+import type { SemanticRewritePolicy } from '@promptfire/heuristics/src/semantic/buildRewritePolicy';
 
 type EffectiveContextLike = {
   role?: 'general' | 'developer' | 'marketer';
@@ -56,44 +57,74 @@ export function selectRewritePresentationMode(params: {
   rewrite: Rewrite | null;
   scoreBand: ScoreBand;
   prompt: string;
+  semanticPolicy?: SemanticRewritePolicy | null;
   effectiveAnalysisContext?: EffectiveContextLike;
 }): RewritePresentationMode {
+  const allowedModes = params.semanticPolicy?.allowedPresentationModes ?? [
+    params.rewriteRecommendation === 'no_rewrite_needed'
+      ? 'suppressed'
+      : params.rewriteRecommendation === 'rewrite_optional'
+        ? 'template_with_example'
+        : 'full_rewrite',
+    'template_with_example',
+    'questions_only',
+    'suppressed',
+  ];
+  const allow = (mode: RewritePresentationMode): boolean => allowedModes.includes(mode);
+  const fallbackMode = (): RewritePresentationMode => {
+    if (allow('template_with_example')) return 'template_with_example';
+    if (allow('questions_only')) return 'questions_only';
+    if (allow('full_rewrite')) return 'full_rewrite';
+    return 'suppressed';
+  };
+
   if (params.rewritePreference === 'suppress' || params.rewriteRecommendation === 'no_rewrite_needed' || !params.rewrite) {
     return 'suppressed';
   }
+  if (allowedModes.length === 1 && allowedModes[0] === 'suppressed') {
+    return 'suppressed';
+  }
   if (!params.evaluation) {
-    return 'full_rewrite';
+    return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
   }
 
   if (params.evaluation.status === 'already_strong') {
     return 'suppressed';
   }
   if (params.evaluation.status === 'material_improvement') {
-    return 'full_rewrite';
+    return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
   }
   if (params.evaluation.status === 'minor_improvement') {
-    return hasConcreteRewriteGains(params.evaluation) ? 'full_rewrite' : 'template_with_example';
+    if (hasConcreteRewriteGains(params.evaluation) && allow('full_rewrite')) {
+      return 'full_rewrite';
+    }
+    return fallbackMode();
   }
   if (params.evaluation.status === 'possible_regression') {
     if (
       isExtremelyUnderspecified(params.prompt, params.analysis) &&
-      !hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext })
+      !hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+      allow('questions_only')
     ) {
       return 'questions_only';
     }
-    return 'template_with_example';
+    return allow('template_with_example') ? 'template_with_example' : fallbackMode();
   }
   if (params.evaluation.status === 'no_significant_change') {
     if (
       (params.scoreBand === 'poor' || params.scoreBand === 'weak' || params.scoreBand === 'usable') &&
-      hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext })
+      hasBoundaryPattern({ analysis: params.analysis, effectiveAnalysisContext: params.effectiveAnalysisContext }) &&
+      allow('template_with_example')
     ) {
       return 'template_with_example';
     }
-    return 'questions_only';
+    if (allow('questions_only')) {
+      return 'questions_only';
+    }
+    return fallbackMode();
   }
 
-  return 'template_with_example';
+  return fallbackMode();
 }
 
 function pushUnique(items: string[], value: string) {
@@ -104,6 +135,7 @@ function pushUnique(items: string[], value: string) {
 
 export function buildGuidedCompletionQuestions(params: {
   role: Role;
+  semanticPolicy?: SemanticRewritePolicy | null;
   bestNextMove: BestNextMove | null;
   improvementSuggestions: ImprovementSuggestion[];
   effectiveAnalysisContext?: EffectiveContextLike;
@@ -113,6 +145,34 @@ export function buildGuidedCompletionQuestions(params: {
   const role = params.effectiveAnalysisContext?.role ?? params.role;
   const bestMoveText = `${params.bestNextMove?.title ?? ''} ${params.bestNextMove?.rationale ?? ''}`.toLowerCase();
   const suggestionsText = params.improvementSuggestions.map((item) => `${item.title} ${item.reason}`.toLowerCase()).join(' ');
+
+  switch (params.semanticPolicy?.family) {
+    case 'comparison':
+    case 'decision_support':
+      pushUnique(questions, 'What criteria or trade-off axes should drive the answer?');
+      pushUnique(questions, 'What concrete scenario, case, or operating context should the answer use?');
+      pushUnique(questions, 'What should the output explicitly optimize for or avoid?');
+      return questions.slice(0, 6);
+    case 'context_first':
+      pushUnique(questions, 'What exact deliverable should the model produce?');
+      pushUnique(questions, 'Which part of the provided context should drive the answer most?');
+      pushUnique(questions, 'What criteria or decision frame should the answer apply to that context?');
+      return questions.slice(0, 6);
+    case 'few_shot':
+      pushUnique(questions, 'What should be preserved from the examples?');
+      pushUnique(questions, 'What should change from the examples in the new output?');
+      pushUnique(questions, 'What output shape or structure should the new result follow?');
+      return questions.slice(0, 6);
+    case 'analysis':
+      pushUnique(questions, 'What analysis lens, standard, or diagnostic criteria should the output use?');
+      pushUnique(questions, 'What evidence, source material, or grounding should the analysis rely on?');
+      pushUnique(questions, 'What scenario or boundary should keep the analysis specific?');
+      return questions.slice(0, 6);
+    case 'implementation':
+      break;
+    default:
+      break;
+  }
 
   if (role === 'developer') {
     pushUnique(questions, 'What runtime or framework should be used?');
@@ -153,9 +213,16 @@ function isDeveloperWebhookPrompt(prompt: string): boolean {
 export function buildGuidedCompletionTemplate(params: {
   prompt: string;
   role: Role;
+  semanticPolicy?: SemanticRewritePolicy | null;
   effectiveAnalysisContext?: EffectiveContextLike;
 }): string | null {
   const role = params.effectiveAnalysisContext?.role ?? params.role;
+  if (params.semanticPolicy?.family === 'context_first') {
+    return 'Using the context below, produce [deliverable]. Base the answer primarily on [specific context points]. Evaluate it using [criteria], and avoid [out-of-scope assumptions].';
+  }
+  if (params.semanticPolicy?.family === 'few_shot') {
+    return 'Use the examples to preserve [tone/structure/pattern]. Change [topic/details]. Produce [target output shape], and avoid [unwanted drift].';
+  }
   if (role === 'developer' && isDeveloperWebhookPrompt(params.prompt)) {
     return 'Write a webhook handler in [runtime/framework] that accepts [input format]. Validate the request against [schema or rule]. On success, return [success response]. On failure, return [error response]. Exclude [out-of-scope behavior].';
   }
@@ -171,9 +238,13 @@ export function buildGuidedCompletionTemplate(params: {
 export function buildGuidedCompletionExample(params: {
   prompt: string;
   role: Role;
+  semanticPolicy?: SemanticRewritePolicy | null;
   effectiveAnalysisContext?: EffectiveContextLike;
 }): string | null {
   const role = params.effectiveAnalysisContext?.role ?? params.role;
+  if (params.semanticPolicy?.family === 'context_first') {
+    return 'Example of a stronger prompt: Given this team context, write a recommendation memo. Base the recommendation on the compliance requirement, limited SRE support, and team size. Use operational overhead and delivery risk as the criteria, and avoid generic platform advice.';
+  }
   if (role === 'developer' && isDeveloperWebhookPrompt(params.prompt)) {
     return 'Example of a stronger prompt: Write a webhook handler in Node.js using Express that accepts JSON payloads. Validate the request body against a predefined JSON schema. On success, return a 200 status code with a JSON success response. On validation failure, return a 400 status code with a descriptive error message. Exclude unsupported HTTP methods and non-JSON requests.';
   }
@@ -188,12 +259,14 @@ export function buildGuidedCompletion(params: {
   role: Role;
   mode: 'template_with_example' | 'questions_only';
   analysis: Analysis;
+  semanticPolicy?: SemanticRewritePolicy | null;
   bestNextMove: BestNextMove | null;
   improvementSuggestions: ImprovementSuggestion[];
   effectiveAnalysisContext?: EffectiveContextLike;
 }): GuidedCompletion | null {
   const questions = buildGuidedCompletionQuestions({
     role: params.role,
+    semanticPolicy: params.semanticPolicy,
     bestNextMove: params.bestNextMove,
     improvementSuggestions: params.improvementSuggestions,
     effectiveAnalysisContext: params.effectiveAnalysisContext,

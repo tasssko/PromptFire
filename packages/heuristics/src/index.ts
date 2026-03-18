@@ -10,3 +10,4 @@ export * from './semantic/buildInventory';
 export * from './semantic/buildDecision';
 export * from './semantic/deriveFindings';
 export * from './semantic/projectScores';
+export * from './semantic/buildRewritePolicy';
