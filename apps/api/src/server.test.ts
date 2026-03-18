@@ -298,6 +298,7 @@ describe('API vertical slice', () => {
       expect(body.guidedCompletion).toBeTruthy();
       const questionText = (body.guidedCompletion?.questions ?? []).join(' ').toLowerCase();
       expect(questionText).toMatch(/deliverable|context|criteria/);
+      expect(questionText).not.toMatch(/who is the exact audience|format or structure should the response follow/);
     });
   });
 

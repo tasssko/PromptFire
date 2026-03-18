@@ -289,4 +289,49 @@ describe('rewrite presentation fallback', () => {
     const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
     expect(joined).toMatch(/runtime|framework|execution surface|environment|integration constraints/);
   });
+
+  it('J: keeps owned prompts on semantic guided completion when evaluation is absent', () => {
+    const mode = selectRewritePresentationMode({
+      rewriteRecommendation: 'rewrite_optional',
+      rewritePreference: 'auto',
+      evaluation: null,
+      analysis: analysis(),
+      rewrite: rewrite(),
+      scoreBand: 'usable',
+      prompt: 'Given this context, recommend whether to adopt service mesh.',
+      semanticPolicy: semanticPolicy({
+        family: 'context_first',
+        primaryGap: 'context_linkage',
+        allowedPresentationModes: ['suppressed', 'template_with_example', 'questions_only'],
+        semanticState: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
+    });
+
+    expect(mode).toBe('template_with_example');
+
+    const guided = buildGuidedCompletion({
+      prompt: 'Given this context, recommend whether to adopt service mesh.',
+      role: 'general',
+      mode: 'template_with_example',
+      analysis: analysis(),
+      semanticPolicy: semanticPolicy({
+        family: 'context_first',
+        primaryGap: 'context_linkage',
+        allowedPresentationModes: ['suppressed', 'template_with_example', 'questions_only'],
+        semanticState: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: null,
+      },
+    });
+
+    const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
+    expect(joined).toMatch(/context|requested outcome|criteria/);
+    expect(joined).not.toMatch(/who is the exact audience|format or structure should the response follow/);
+  });
 });
