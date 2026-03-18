@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
@@ -47,17 +47,70 @@ export const passkeyCredentials = pgTable('passkey_credentials', {
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
 });
 
+export const promptRuns = pgTable(
+  'prompt_runs',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    sessionId: text('session_id').references(() => sessions.id, { onDelete: 'set null' }),
+    requestId: text('request_id'),
+    endpoint: text('endpoint').notNull(),
+    originalPrompt: text('original_prompt').notNull(),
+    normalizedPrompt: text('normalized_prompt'),
+    role: text('role').notNull(),
+    mode: text('mode').notNull(),
+    rewritePreference: text('rewrite_preference'),
+    overallScore: integer('overall_score'),
+    scoreBand: text('score_band'),
+    rewriteRecommendation: text('rewrite_recommendation'),
+    inferenceData: jsonb('inference_data').notNull(),
+    responseData: jsonb('response_data').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    userCreatedAtIdx: index('prompt_runs_user_created_at_idx').on(table.userId, table.createdAt),
+    sessionCreatedAtIdx: index('prompt_runs_session_created_at_idx').on(table.sessionId, table.createdAt),
+    requestIdIdx: index('prompt_runs_request_id_idx').on(table.requestId),
+  }),
+);
+
+export const promptRewrites = pgTable(
+  'prompt_rewrites',
+  {
+    id: text('id').primaryKey(),
+    promptRunId: text('prompt_run_id')
+      .notNull()
+      .references(() => promptRuns.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    position: integer('position').notNull(),
+    role: text('role').notNull(),
+    mode: text('mode').notNull(),
+    rewrittenPrompt: text('rewritten_prompt').notNull(),
+    explanation: text('explanation'),
+    changes: jsonb('changes'),
+    evaluationData: jsonb('evaluation_data'),
+    isPrimary: boolean('is_primary').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    promptRunPositionIdx: index('prompt_rewrites_run_position_idx').on(table.promptRunId, table.position),
+  }),
+);
+
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
   magicLinkTokens: many(magicLinkTokens),
   passkeys: many(passkeyCredentials),
+  promptRuns: many(promptRuns),
 }));
 
-export const sessionsRelations = relations(sessions, ({ one }) => ({
+export const sessionsRelations = relations(sessions, ({ many, one }) => ({
   user: one(users, {
     fields: [sessions.userId],
     references: [users.id],
   }),
+  promptRuns: many(promptRuns),
 }));
 
 export const magicLinkTokensRelations = relations(magicLinkTokens, ({ one }) => ({
@@ -71,5 +124,24 @@ export const passkeyCredentialsRelations = relations(passkeyCredentials, ({ one 
   user: one(users, {
     fields: [passkeyCredentials.userId],
     references: [users.id],
+  }),
+}));
+
+export const promptRunsRelations = relations(promptRuns, ({ many, one }) => ({
+  user: one(users, {
+    fields: [promptRuns.userId],
+    references: [users.id],
+  }),
+  session: one(sessions, {
+    fields: [promptRuns.sessionId],
+    references: [sessions.id],
+  }),
+  rewrites: many(promptRewrites),
+}));
+
+export const promptRewritesRelations = relations(promptRewrites, ({ one }) => ({
+  promptRun: one(promptRuns, {
+    fields: [promptRewrites.promptRunId],
+    references: [promptRuns.id],
   }),
 }));

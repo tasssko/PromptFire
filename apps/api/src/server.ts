@@ -52,6 +52,7 @@ import {
   verifyPasskeyRegistration,
 } from './auth';
 import { getAuthBypassEnabled, getProviderMode, getStaticApiKey } from './lib/env';
+import { persistPromptRun } from './persistence/promptRuns';
 import {
   createMeta,
   createMetaV2,
@@ -120,6 +121,24 @@ function logRequest(params: {
 
 function promptHash(prompt: string): string {
   return createHash('sha256').update(prompt).digest('hex');
+}
+
+async function persistPromptRunSafely(params: Parameters<typeof persistPromptRun>[0]): Promise<void> {
+  try {
+    await persistPromptRun(params);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: 'prompt_run_persistence_failed',
+        endpoint: params.endpoint,
+        requestId: params.requestId,
+        userId: params.userId ?? null,
+        sessionId: params.sessionId ?? null,
+        error: error instanceof Error ? error.message : 'UNKNOWN_PERSISTENCE_ERROR',
+        timestamp: new Date().toISOString(),
+      }),
+    );
+  }
 }
 
 function logInferenceCase(params: {
@@ -825,6 +844,24 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         meta,
       };
 
+      const sessionUser = await getSessionUser(sessionId);
+      await persistPromptRunSafely({
+        endpoint: '/v1/analyze-and-rewrite',
+        requestId,
+        sessionId,
+        userId: sessionUser?.id,
+        input,
+        response: payload,
+        inferenceData: {
+          analysis,
+          patternFit,
+          improvementSuggestions,
+          providerMode,
+          providerModel: providerConfig.model ?? null,
+          responseVersion: meta.version,
+        },
+      });
+
       const response = jsonResponse(200, payload, headers);
       logRequest({
         requestId,
@@ -1380,6 +1417,44 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         resolutionSource,
         meta,
       };
+
+      const sessionUser = await getSessionUser(sessionId);
+      await persistPromptRunSafely({
+        endpoint: '/v2/analyze-and-rewrite',
+        requestId,
+        sessionId,
+        userId: sessionUser?.id,
+        input,
+        response: payload,
+        inferenceData: {
+          resolvedAnalysis,
+          semanticClassification,
+          semanticDecision,
+          semanticFindings,
+          semanticRewritePolicy,
+          patternFit,
+          improvementSuggestions,
+          bestNextMove,
+          inferenceTrigger,
+          inferenceFallbackUsed,
+          validatedInferenceMetadata,
+          inferenceError: inferenceError ?? null,
+          resolutionSource,
+          effectiveResolution: {
+            inferenceMetadataApplied: effectiveResolution.inferenceMetadataApplied,
+            effectiveTaskType: effectiveResolution.effectiveTaskType,
+            effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
+            effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
+            effectivePatternFit: effectiveResolution.effectivePatternFit,
+            effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+            scoringGuardrailsApplied: effectiveResolution.scoringGuardrailsApplied,
+            effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+          },
+          providerMode,
+          providerModel: providerConfig.model ?? null,
+          responseVersion: meta.version,
+        },
+      });
 
       const response = jsonResponse(200, payload, headers);
       logRequest({
