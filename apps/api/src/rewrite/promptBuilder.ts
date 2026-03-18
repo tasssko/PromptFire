@@ -8,13 +8,13 @@ function roleGuidance(role: RewriteInput['role']): string {
       return 'Focus on runtime, language/framework, interface assumptions, input/output shape, validation requirements, failure/retry behavior, and explicit exclusions before audience.';
     case 'marketer':
       return substitutePreferredLanguage(
-        'Focus on audience clarity and concrete positioning detail. Preserve valid audience details when present, keep the same deliverable, and replace abstract phrasing with grounded context and explicit exclusions.',
+        'Focus on audience clarity and specific positioning detail. Preserve valid audience details when present, keep the same deliverable, and replace abstract phrasing with grounded context and explicit exclusions.',
         'specificity',
       );
     case 'general':
     default:
       return substitutePreferredLanguage(
-        'Focus on clarity, concrete scope, and practical constraints without domain assumptions.',
+        'Focus on clarity, specific scope, and practical constraints without domain assumptions.',
         'specificity',
       );
   }
@@ -26,7 +26,7 @@ function modeGuidance(mode: RewriteInput['mode']): string {
       return 'Narrow to one clear deliverable and reduce ambiguity aggressively.';
     case 'high_contrast':
       return substitutePreferredLanguage(
-        'Increase differentiation through grounded context or comparison when supported by the prompt; if not supported, keep the rewrite minimal and concrete.',
+        'Increase differentiation through grounded context or comparison when supported by the prompt; if not supported, keep the rewrite minimal and specific.',
         'specificity',
       );
     case 'low_token_cost':

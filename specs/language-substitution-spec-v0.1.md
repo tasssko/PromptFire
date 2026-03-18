@@ -1,4 +1,4 @@
-Yes. And the repo already points in this direction: the current contrast spec says PromptFire should avoid using **“concrete”** as a standalone quality label and instead name the missing specificity directly, like audience, operating context, lead angle, or exclusion. It also says these explanations should feel sharper and more trustworthy. 
+Yes. And the repo already points in this direction: the current contrast spec says PromptFire should avoid using **“specific”** as a standalone quality label and instead name the missing specificity directly, like audience, operating context, lead angle, or exclusion. It also says these explanations should feel sharper and more trustworthy. 
 
 I’d make it a small standalone spec so it can govern:
 
@@ -36,7 +36,7 @@ It should avoid words that sound polished but do not clearly tell the user what 
 
 PromptFire already defines a score-first interface where the numeric score is primary, rewrite output is optional, and strong prompts should be validated rather than rewritten by default. That means the wording around findings and next moves has to be especially clear and low-friction.  
 
-The current contrast spec already warns against vague uses of **“concrete”** and recommends replacing it with direct wording such as:
+The current contrast spec already warns against vague uses of **“specific”** and recommends replacing it with direct wording such as:
 
 * specific audience
 * specific operating context
@@ -62,7 +62,7 @@ Say:
 
 Do not say:
 
-* that something should become “better,” “stronger,” “more concrete,” unless the UI also tells the user exactly how
+* that something should become “better,” “stronger,” “more specific,” unless the UI also tells the user exactly how
 
 ---
 
@@ -100,8 +100,8 @@ Use:
 
 Examples:
 
-* “add a concrete example” → “add a specific example”
-* “make the audience more concrete” → “name a specific audience”
+* “add a specific example” → “add a specific example”
+* “make the audience more specific” → “name a specific audience”
 
 ### 5.2 When the intended meaning is realism or practicality
 
@@ -113,8 +113,8 @@ Use:
 
 Examples:
 
-* “make this more concrete” → “make this more practical”
-* “use a concrete comparison” → “use a real comparison”
+* “make this more specific” → “make this more practical”
+* “use a specific comparison” → “use a real comparison”
 
 ### 5.3 When the intended meaning is support or proof
 
@@ -129,8 +129,8 @@ Use:
 
 Examples:
 
-* “add a concrete claim” → “add a claim supported by an example”
-* “make the point more concrete” → “show why with one example”
+* “add a specific claim” → “add a claim supported by an example”
+* “make the point more specific” → “show why with one example”
 
 ### 5.4 When the intended meaning is measurement
 
@@ -143,7 +143,7 @@ Use:
 
 Examples:
 
-* “make the benefit more concrete” → “show a measurable outcome”
+* “make the benefit more specific” → “show a measurable outcome”
 
 ---
 
@@ -160,7 +160,7 @@ When a short replacement is needed in UI copy, prefer this list:
 
 Note:
 
-* **real** or **specific** is allowed and preferred over **concrete** when the intended meaning is support or proof
+* **real** or **specific** is allowed and preferred over **specific** when the intended meaning is support or proof
 * **specific** should remain the default replacement in most general UI cases
 
 ---
@@ -193,9 +193,9 @@ Choose the replacement that matches the user-facing meaning.
 
 ### 8.2 Avoid patterns like
 
-* make it more concrete
-* use more concrete language
-* add more concrete details
+* make it more specific
+* use more specific language
+* add more specific details
 
 ### 8.3 Prefer patterns like
 
@@ -213,7 +213,7 @@ Choose the replacement that matches the user-facing meaning.
 
 ### Before
 
-Optional: require one concrete example
+Optional: require one specific example
 
 ### After
 
@@ -223,7 +223,7 @@ Optional: require one specific example
 
 ### Before
 
-Add a concrete comparison
+Add a specific comparison
 
 ### After
 
@@ -233,7 +233,7 @@ Add one clear comparison
 
 ### Before
 
-This prompt would benefit from more concrete support
+This prompt would benefit from more specific support
 
 ### After
 
@@ -264,7 +264,7 @@ Suggested shape:
 ```json
 [
   {
-    "term": "concrete",
+    "term": "specific",
     "status": "discouraged",
     "reason": "Too abstract for default UI copy",
     "replacements": {
@@ -283,7 +283,7 @@ Suggested shape:
 
 This spec is working if:
 
-* “concrete” no longer appears in generic recommendation copy
+* “specific” no longer appears in generic recommendation copy
 * “evidence-based” is only used when the UI truly means proof/support
 * users can understand suggested next moves without translation
 * wording feels aligned with the score-first UI

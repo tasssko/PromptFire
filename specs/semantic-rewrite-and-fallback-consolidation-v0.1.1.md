@@ -429,7 +429,7 @@ Ask for:
 
 * criteria
 * trade-off axes
-* one concrete scenario or case
+* one specific scenario or case
 
 #### `context_first`
 

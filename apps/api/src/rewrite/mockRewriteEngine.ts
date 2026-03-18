@@ -10,7 +10,7 @@ function hasAudience(prompt: string): boolean {
   return explicitAudience.test(prompt) || /\b(audience|target users?)\b/i.test(prompt);
 }
 
-function hasConcreteExclusion(prompt: string): boolean {
+function hasSpecificExclusion(prompt: string): boolean {
   return /\b(avoid|exclude|without|do not|don't)\b/i.test(prompt);
 }
 
@@ -106,7 +106,7 @@ function inferBoundaryClause(input: RewriteInput): string | null {
 }
 
 function inferExclusionClause(input: RewriteInput): string | null {
-  if (hasConcreteExclusion(input.prompt)) {
+  if (hasSpecificExclusion(input.prompt)) {
     return null;
   }
 
@@ -482,7 +482,7 @@ export class MockRewriteEngine implements RewriteEngine {
       explanation:
         finalAdditions.length > 0
           ? substitutePreferredLanguage(
-              `Applied ${pattern} rewrite guidance for a bounded ${input.ladder?.current ?? 'current'} to ${input.ladder?.target ?? 'next'} step with concrete, task-grounded additions.`,
+              `Applied ${pattern} rewrite guidance for a bounded ${input.ladder?.current ?? 'current'} to ${input.ladder?.target ?? 'next'} step with specific, task-grounded additions.`,
               'specificity',
             )
           : substitutePreferredLanguage('Applied a minimal rewrite because concrete improvements were not safely inferable.', 'specificity'),

@@ -569,7 +569,7 @@ export function generateOpportunityCandidates(params: OpportunityParams): Opport
       moveType: requireExamples ? 'require_examples' : 'add_proof_requirement',
       moveTitle: requireExamples ? 'Require specific examples' : 'Require one proof point',
       moveRationale: requireExamples
-        ? 'Concrete examples will improve specificity faster than more wording polish.'
+        ? 'Specific examples will improve specificity faster than more wording polish.'
         : 'A proof requirement will make the output less generic by forcing one supported claim or clear comparison.',
       priority: patternFit.primary === 'few_shot' ? 8 : isStrongPrompt ? 50 : 30,
       tieGroup: 3,

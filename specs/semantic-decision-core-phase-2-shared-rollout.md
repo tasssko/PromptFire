@@ -125,7 +125,7 @@ These should not land in different recommendation states merely because one uses
 * trade-off framing present
 * scenario or org context present
 * decision criteria or evaluation frame present
-* examples or concrete cases present
+* examples or specific cases present
 * exclusions or anti-hype bounds present
 
 ### Boundedness rule
@@ -501,7 +501,7 @@ Examples of findings to suppress when semantics are already present:
 Focus next move on:
 
 * sharpening criteria
-* adding one or two concrete cases
+* adding one or two specific cases
 * clarifying audience or scenario
 * making trade-offs explicit
 

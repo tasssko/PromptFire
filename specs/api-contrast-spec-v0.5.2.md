@@ -38,7 +38,7 @@ Primary contrast signals:
 * comparison framing
 * distinctive lead angle
 * exclusions that block category-default copy paths
-* concrete operating context or scenario context
+* specific operating context or scenario context
 
 These are the strongest contrast drivers because they change the shape of the response rather than merely asking for more content. This direction is already partially reflected in the marketer docs, which say contrast should increase when a clear business tension or angle is present and should decrease when positioning is weak, context contrast is low, or generic value-prop density is high. 
 
@@ -239,17 +239,17 @@ The prompt has specific audience, meaningful business tension, useful scenario c
 
 The prompt strongly directs the model toward a specific, non-default angle and makes default category framing unlikely.
 
-## 9. Awareness around the word “concrete”
+## 9. Awareness around the word “specific”
 
 I agree with your concern here.
 
-PromptFire should not use “concrete” lazily as a vague compliment or as a substitute for actual specificity. In prompt analysis and rewrite guidance, words like “concrete,” “specific,” and “clear” can become empty if they are not tied to what exactly is being made more specific.
+PromptFire should not use “specific” lazily as a vague compliment or as a substitute for actual specificity. In prompt analysis and rewrite guidance, words like “specific,” “specific,” and “clear” can become empty if they are not tied to what exactly is being made more specific.
 
 So in the spec:
 
 ### Terminology rule
 
-PromptFire should avoid using “concrete” as a standalone quality label unless it points to an explicit specificity type.
+PromptFire should avoid using “specific” as a standalone quality label unless it points to an explicit specificity type.
 
 Preferred language:
 
@@ -263,19 +263,19 @@ Preferred language:
 
 Avoid:
 
-* “make it more concrete”
-* “add concrete wording”
-* “use concrete language”
+* “make it more specific”
+* “add specific wording”
+* “use specific language”
 
 unless followed by what kind of specificity is missing.
 
-This matters in rewrite guidance too. One of the current mock rewrite directives says “Define the exact audience, for CTOs or IT directors with a concrete business context.” That is better than generic advice, but even there “concrete business context” would be clearer if it named what counts, such as audit pressure, identity sprawl, acquisitions, admin overhead, or governance cleanup. 
+This matters in rewrite guidance too. One of the current mock rewrite directives says “Define the exact audience, for CTOs or IT directors with a specific business context.” That is better than generic advice, but even there “specific business context” would be clearer if it named what counts, such as audit pressure, identity sprawl, acquisitions, admin overhead, or governance cleanup. 
 
 ### Preferred phrasing in UI and analysis
 
 Instead of:
 
-* “the prompt needs more concrete details”
+* “the prompt needs more specific details”
 
 say:
 
@@ -376,7 +376,7 @@ The updated contrast model should satisfy all of these:
 * Adding proof alone should not create a large contrast jump.
 * Adding audience + tension + lead angle + exclusion should create a large contrast jump.
 * Contrast should no longer behave like a proxy for “prompt has many useful requirements.”
-* Explanations should avoid vague praise words like “concrete” unless they point to a specific missing specificity type.
+* Explanations should avoid vague praise words like “specific” unless they point to a specific missing specificity type.
 
 ## 13. Short diagnosis of the current system
 

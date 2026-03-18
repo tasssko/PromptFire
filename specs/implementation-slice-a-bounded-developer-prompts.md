@@ -25,7 +25,7 @@ This slice should be small enough to implement without redesigning PromptFire al
 This domain is a good first slice because:
 
 * it is already causing visible trust problems
-* the prompts are concrete and easier to normalize semantically
+* the prompts are specific and easier to normalize semantically
 * there are already regression examples in the repo direction
 * it exercises the full pipeline: classification, context extraction, recommendation, findings, and score projection
 * it lets us prove the architecture with a bounded problem before expanding to general and marketer modes
@@ -456,7 +456,7 @@ Findings must be generated from the Slice A context inventory and decision state
 * Clear scope and deliverable.
 * Useful constraints improve precision.
 * The prompt defines runtime and response behavior but does not define the request contract.
-* The prompt defines validation behavior but not the concrete schema details.
+* The prompt defines validation behavior but not the specific schema details.
 * The prompt is already bounded enough to use safely without a rewrite.
 
 #### Forbidden stale findings for bounded prompts
@@ -504,7 +504,7 @@ Should be high when deliverable and success/failure behavior are explicit.
 
 #### Contrast
 
-Should be non-zero when the prompt includes meaningful exclusions, validation behavior, and concrete implementation boundaries.
+Should be non-zero when the prompt includes meaningful exclusions, validation behavior, and specific implementation boundaries.
 
 #### Clarity
 

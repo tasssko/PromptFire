@@ -5,7 +5,7 @@ It is designed to fit the current PromptFire shape:
 * v2 already returns `overallScore`, `scoreBand`, `rewriteRecommendation`, `analysis`, `improvementSuggestions`, `gating`, and optional `rewrite` / `evaluation` payloads. 
 * improvement suggestions are already generated from analysis and rewrite recommendation, then surfaced in the API and UI. 
 * the current heuristics layer already uses theme inference, issue codes, low-score prioritization, and bounded suggestion counts by score band. 
-* PromptFire’s existing direction is score-first, deterministic, and cautious about rewarding rubric echo rather than concrete improvement.  
+* PromptFire’s existing direction is score-first, deterministic, and cautious about rewarding rubric echo rather than specific improvement.  
 
 ---
 
@@ -115,7 +115,7 @@ Examples:
 * specify output structure
 * change from broad guide framing to comparison framing
 * change from role-based framing to decision-frame prompting
-* add concrete examples
+* add specific examples
 * add decision criteria
 * add a framing boundary
 
@@ -606,7 +606,7 @@ Expected behavior:
   * “This prompt is clear, but it tries to do too many jobs at once, which increases generic-output risk and token waste.”
 * it should **not** default to a wording-only suggestion
 
-This aligns with current Kubernetes fixtures, which already protect against rubric-heavy fake gains and treat broad-guide rewrites cautiously unless concrete task shaping is added. 
+This aligns with current Kubernetes fixtures, which already protect against rubric-heavy fake gains and treat broad-guide rewrites cautiously unless specific task shaping is added. 
 
 ## 15.2 Strong microservices prompt
 

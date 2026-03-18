@@ -1254,7 +1254,7 @@ PeakPrompt copy should feel:
 * short verdict-style headings
 * direct explanation sentences
 * explicit action labels
-* concrete findings and recommendation language
+* specific findings and recommendation language
 
 ### Avoid
 
@@ -1497,6 +1497,6 @@ Turn this draft into:
 
 1. a page-level component map
 2. a wireframe for strong / usable / weak states
-3. a concrete implementation brief for `apps/web/src/App.tsx`
+3. a specific implementation brief for `apps/web/src/App.tsx`
 
 That would make the next coding pass much easier.

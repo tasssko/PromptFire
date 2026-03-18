@@ -9,7 +9,7 @@ export interface LanguageSubstitutionRule {
 
 export const languageSubstitutionRegistry: LanguageSubstitutionRule[] = [
   {
-    term: 'concrete',
+    term: 'specific',
     status: 'discouraged',
     reason: 'Too abstract for default UI copy.',
     replacements: {
@@ -20,7 +20,7 @@ export const languageSubstitutionRegistry: LanguageSubstitutionRule[] = [
     },
   },
   {
-    term: 'concretely',
+    term: 'specifically',
     status: 'discouraged',
     reason: 'Too abstract for default UI copy.',
     replacements: {
@@ -39,30 +39,30 @@ type PhraseReplacement = {
 
 const phraseReplacementsByIntent: Record<LanguageSubstitutionIntent, PhraseReplacement[]> = {
   specificity: [
-    { pattern: /\bminimal and concrete\b/gi, replacement: 'minimal and specific' },
-    { pattern: /\bconcrete,\s+task-grounded\b/gi, replacement: 'specific, task-grounded' },
-    { pattern: /\bconcrete example(s)?\b/gi, replacement: 'specific example$1' },
-    { pattern: /\bconcrete audience\b/gi, replacement: 'specific audience' },
-    { pattern: /\bconcrete positioning detail\b/gi, replacement: 'specific positioning detail' },
-    { pattern: /\bconcrete scope\b/gi, replacement: 'clear scope' },
-    { pattern: /\bconcrete detail(s)?\b/gi, replacement: 'specific detail$1' },
-    { pattern: /\bconcrete exclusion\b/gi, replacement: 'clear exclusion' },
-    { pattern: /\bconcrete requirement(s)?\b/gi, replacement: 'specific requirement$1' },
-    { pattern: /\bconcrete improvements\b/gi, replacement: 'specific improvements' },
+    { pattern: /\bminimal and specific\b/gi, replacement: 'minimal and specific' },
+    { pattern: /\bspecific,\s+task-grounded\b/gi, replacement: 'specific, task-grounded' },
+    { pattern: /\bspecific example(s)?\b/gi, replacement: 'specific example$1' },
+    { pattern: /\bspecific audience\b/gi, replacement: 'specific audience' },
+    { pattern: /\bspecific positioning detail\b/gi, replacement: 'specific positioning detail' },
+    { pattern: /\bspecific scope\b/gi, replacement: 'clear scope' },
+    { pattern: /\bspecific detail(s)?\b/gi, replacement: 'specific detail$1' },
+    { pattern: /\bspecific exclusion\b/gi, replacement: 'clear exclusion' },
+    { pattern: /\bspecific requirement(s)?\b/gi, replacement: 'specific requirement$1' },
+    { pattern: /\bspecific improvements\b/gi, replacement: 'specific improvements' },
   ],
   realism: [
-    { pattern: /\bconcrete comparison\b/gi, replacement: 'real comparison' },
-    { pattern: /\bconcrete scenario\b/gi, replacement: 'real scenario' },
+    { pattern: /\bspecific comparison\b/gi, replacement: 'real comparison' },
+    { pattern: /\bspecific scenario\b/gi, replacement: 'real scenario' },
   ],
   support: [
-    { pattern: /\bconcrete proof artifact\b/gi, replacement: 'evidence-backed proof point' },
-    { pattern: /\bconcrete proof\b/gi, replacement: 'evidence-based proof' },
-    { pattern: /\bconcrete claim\b/gi, replacement: 'claim supported by an example' },
-    { pattern: /\bconcrete support\b/gi, replacement: 'support backed by an example' },
+    { pattern: /\bspecific proof artifact\b/gi, replacement: 'evidence-backed proof point' },
+    { pattern: /\bspecific proof\b/gi, replacement: 'evidence-based proof' },
+    { pattern: /\bspecific claim\b/gi, replacement: 'claim supported by an example' },
+    { pattern: /\bspecific support\b/gi, replacement: 'support backed by an example' },
   ],
   measurement: [
-    { pattern: /\bconcrete outcome\b/gi, replacement: 'measurable outcome' },
-    { pattern: /\bconcrete result\b/gi, replacement: 'specific result' },
+    { pattern: /\bspecific outcome\b/gi, replacement: 'measurable outcome' },
+    { pattern: /\bspecific result\b/gi, replacement: 'specific result' },
   ],
 };
 

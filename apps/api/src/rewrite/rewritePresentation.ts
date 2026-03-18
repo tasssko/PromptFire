@@ -25,7 +25,7 @@ function isSemanticOwned(policy?: SemanticRewritePolicy | null): policy is Seman
   return policy?.semanticOwned === true;
 }
 
-function hasConcreteRewriteGains(evaluation: EvaluationV2): boolean {
+function hasSpecificRewriteGains(evaluation: EvaluationV2): boolean {
   const scoreGainCount =
     Number(evaluation.scoreComparison.rewrite.scope > evaluation.scoreComparison.original.scope) +
     Number(evaluation.scoreComparison.rewrite.contrast > evaluation.scoreComparison.original.contrast) +
@@ -110,7 +110,7 @@ function selectSemanticOwnedPresentationMode(params: {
     return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
   }
   if (params.evaluation.status === 'minor_improvement') {
-    if (hasConcreteRewriteGains(params.evaluation) && allow('full_rewrite')) {
+    if (hasSpecificRewriteGains(params.evaluation) && allow('full_rewrite')) {
       return 'full_rewrite';
     }
     return fallbackMode();
@@ -218,7 +218,7 @@ export function selectRewritePresentationMode(params: {
     return allow('full_rewrite') ? 'full_rewrite' : fallbackMode();
   }
   if (params.evaluation.status === 'minor_improvement') {
-    if (hasConcreteRewriteGains(params.evaluation) && allow('full_rewrite')) {
+    if (hasSpecificRewriteGains(params.evaluation) && allow('full_rewrite')) {
       return 'full_rewrite';
     }
     return fallbackMode();
@@ -411,7 +411,7 @@ export function buildGuidedCompletionQuestions(params: {
   }
 
   // Generic fallback for non-owned prompts when semantic family/gap data is absent.
-  pushUnique(questions, 'What concrete outcome should the output drive?');
+  pushUnique(questions, 'What specific outcome should the output drive?');
   pushUnique(questions, 'What must be included versus explicitly excluded?');
   pushUnique(questions, 'What format or structure should the response follow?');
   pushUnique(questions, 'What level of detail is required to avoid generic output?');
@@ -502,7 +502,7 @@ export function buildGuidedCompletion(params: {
           : 'Add the missing details below to keep the rewrite aligned with the prompt intent.'
         : params.mode === 'questions_only'
           ? 'This prompt is too underspecified for a safe rewrite. Answer these questions first, then resubmit.'
-          : 'This prompt is too broad for a safe rewrite, but adding concrete boundaries will make it much stronger.',
+          : 'This prompt is too broad for a safe rewrite, but adding specific boundaries will make it much stronger.',
     questions: questions.length > 0 ? questions : undefined,
     template: template ?? undefined,
     example: example ?? undefined,
@@ -513,6 +513,6 @@ export function buildGuidedCompletion(params: {
           : 'The semantic path identified specific gaps, so a bounded template is safer than expanding the request.'
         : params.mode === 'questions_only'
           ? 'Questions are safer than a full rewrite because key assumptions are still missing.'
-          : 'A template is safer here than a full rewrite because the original prompt is missing concrete boundaries.',
+          : 'A template is safer here than a full rewrite because the original prompt is missing specific boundaries.',
   };
 }

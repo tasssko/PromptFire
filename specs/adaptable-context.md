@@ -6,7 +6,7 @@ It is designed to fit the current PromptFire shape:
 * public rewrite modes remain separate from roles 
 * role guidance already differs by domain, with developer emphasizing implementation boundaries/runtime/failure handling and marketer emphasizing audience/positioning/proof 
 * scope already uses **audience/context specificity**, not just audience alone 
-* rewrite generation already prioritizes preserving the job, tightening boundedness, adding concrete constraints, and only then adding audience or structure if clearly missing 
+* rewrite generation already prioritizes preserving the job, tightening boundedness, adding specific constraints, and only then adding audience or structure if clearly missing 
 
 ---
 
@@ -49,7 +49,7 @@ PromptFire’s current foundations already support:
 * scope scoring that includes audience/context specificity 
 * rewrite generation that adds boundedness, constraints, and only then audience or structure if clearly missing 
 
-However, some current rewrite and suggestion behavior still leans too heavily on **audience-first filling**, especially in balanced mode, which currently says to improve boundedness with concrete audience, structure, and exclusions. 
+However, some current rewrite and suggestion behavior still leans too heavily on **audience-first filling**, especially in balanced mode, which currently says to improve boundedness with specific audience, structure, and exclusions. 
 
 That can produce the wrong next step for developer prompts, especially code-generation prompts, where the better fix is often:
 
@@ -289,7 +289,7 @@ Audience is allowed in developer mode, but should usually be secondary unless th
 
 ### `marketer`
 
-Marketer role should continue to treat audience as primary more often, because marketer-specific rewrite behavior is explicitly built around audience clarity, positioning, proof, and concrete buyer context. 
+Marketer role should continue to treat audience as primary more often, because marketer-specific rewrite behavior is explicitly built around audience clarity, positioning, proof, and specific buyer context. 
 
 Preferred context order in marketer role:
 
@@ -477,7 +477,7 @@ Current rewrite generation order already says:
 
 1. preserve original job
 2. tighten boundedness
-3. add missing concrete constraints
+3. add missing specific constraints
 4. add audience or structure if clearly missing
 5. only then apply stylistic sharpening 
 
@@ -489,7 +489,7 @@ Rewrite generation should prioritize:
 
 1. preserve original job
 2. tighten boundedness
-3. add missing concrete constraints
+3. add missing specific constraints
 4. add the most relevant missing context or structure
 5. only then apply stylistic sharpening
 

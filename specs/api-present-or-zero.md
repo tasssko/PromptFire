@@ -447,7 +447,7 @@ PromptFire should avoid vague praise words in scoring explanations.
 
 In particular, the system should be careful with words like:
 
-* concrete
+* specific
 * specific
 * clear
 
@@ -457,7 +457,7 @@ These words can become empty unless tied to what exactly is missing or present.
 
 Instead of:
 
-* “the prompt needs more concrete details”
+* “the prompt needs more specific details”
 
 Prefer:
 
@@ -466,16 +466,16 @@ Prefer:
 * “the prompt needs a more specific operating context”
 * “the prompt needs exclusions that block default category framing”
 
-### Rule for “concrete”
+### Rule for “specific”
 
-Do not use “concrete” as a standalone positive label.
+Do not use “specific” as a standalone positive label.
 
 If used at all, it should refer to a specific type of specificity, such as:
 
-* concrete audience
-* concrete scenario context
-* concrete proof requirement
-* concrete comparison frame
+* specific audience
+* specific scenario context
+* specific proof requirement
+* specific comparison frame
 
 ---
 

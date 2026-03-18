@@ -128,7 +128,7 @@ Goal:
 
 `narrow` [rewritePresentation.ts](/home/tasssko/Clients/Servana/PromptFire/apps/api/src/rewrite/rewritePresentation.ts#L98)
 
-- `minor_improvement` plus `hasConcreteRewriteGains(...)`
+- `minor_improvement` plus `hasSpecificRewriteGains(...)`
 - Reason: eval-driven posture choice. Safe only within policy.
 - PR 1 action: keep under ownership guard; candidate for later simplification.
 

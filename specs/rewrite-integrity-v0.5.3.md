@@ -24,7 +24,7 @@ PromptFire currently supports:
 
 That capability is useful, but it creates a known failure mode:
 
-**the rewrite engine can gain credit by adding scorer-facing language instead of adding concrete task-grounded specificity.**
+**the rewrite engine can gain credit by adding scorer-facing language instead of adding specific task-grounded specificity.**
 
 Examples of problematic rewrite behavior include adding phrases such as:
 
@@ -37,13 +37,13 @@ Examples of problematic rewrite behavior include adding phrases such as:
 - measurable outcome
 - differentiated positioning
 
-These may be useful internal concepts, but they must not be treated as strong evidence of actual prompt improvement unless the rewrite also adds concrete task detail.
+These may be useful internal concepts, but they must not be treated as strong evidence of actual prompt improvement unless the rewrite also adds specific task detail.
 
 ---
 
 ## 3. Core Principle
 
-**A rewrite may only claim material improvement when it adds concrete, task-grounded specificity, not when it merely adds abstract optimization language.**
+**A rewrite may only claim material improvement when it adds specific, task-grounded specificity, not when it merely adds abstract optimization language.**
 
 Corollary:
 
@@ -67,15 +67,15 @@ This is a deterministic behavior correction inside the current architecture.
 
 ## 5. Definitions
 
-### 5.1 Concrete task-grounded improvement
+### 5.1 specific task-grounded improvement
 
-A rewrite adds concrete task-grounded improvement when it introduces usable detail that directly narrows or clarifies the job.
+A rewrite adds specific task-grounded improvement when it introduces usable detail that directly narrows or clarifies the job.
 
 Examples:
 
 - specific audience added
 - explicit output structure added
-- concrete example count or example type added
+- specific example count or example type added
 - real comparison frame added
 - explicit exclusion added
 - trade-off boundary added
@@ -104,7 +104,7 @@ These phrases are not forbidden, but they do **not** count as strong evidence of
 
 ### 5.3 Rubric echo
 
-Rubric echo occurs when a rewrite introduces abstract scorer-shaped constructs rather than concrete task detail.
+Rubric echo occurs when a rewrite introduces abstract scorer-shaped constructs rather than specific task detail.
 
 ### 5.4 Intent preservation
 
@@ -133,7 +133,7 @@ Possible values:
 
 ### 6.2 `groundedImprovementCount`
 
-Count of concrete task-grounded improvements introduced by the rewrite.
+Count of specific task-grounded improvements introduced by the rewrite.
 
 ### 6.3 `abstractInstructionCount`
 
@@ -155,7 +155,7 @@ These values are internal. They do not need to be exposed publicly unless later 
 
 ### 7.1 Detection goal
 
-PromptFire must detect when a rewrite adds abstract scorer-facing scaffolding without adding equivalent concrete detail.
+PromptFire must detect when a rewrite adds abstract scorer-facing scaffolding without adding equivalent specific detail.
 
 ### 7.2 Example abstract constructs
 
@@ -178,14 +178,14 @@ The detector may treat phrases or equivalent formulations such as the following 
 Set `rubricEchoRisk = high` when both are true:
 
 1. the rewrite adds two or more abstract optimization constructs
-2. the rewrite does **not** add sufficient concrete task-grounded detail
+2. the rewrite does **not** add sufficient specific task-grounded detail
 
-Examples of sufficient concrete detail include:
+Examples of sufficient specific detail include:
 
 - named audience
 - explicit section structure
 - named example shape
-- concrete exclusion tied to the task
+- specific exclusion tied to the task
 - actual comparison boundary
 - actual business or technical condition
 - actual trade-off framing
@@ -195,14 +195,14 @@ Examples of sufficient concrete detail include:
 Set `rubricEchoRisk = medium` when:
 
 - the rewrite adds some abstract optimization language
-- and some concrete detail
+- and some specific detail
 - but the abstract layer appears to dominate
 
 ### 7.5 Low-risk rule
 
 Set `rubricEchoRisk = low` when:
 
-- the rewrite is primarily concrete
+- the rewrite is primarily specific
 - or abstract guidance is minimal and clearly subordinate to real task shaping
 
 ---
@@ -300,14 +300,14 @@ Expected improvement must not be driven primarily by abstract scorer-friendly ma
 
 ### 10.1 High expected improvement
 
-Use `expectedImprovement = high` only when the likely rewrite gain comes from at least two concrete dimensions such as:
+Use `expectedImprovement = high` only when the likely rewrite gain comes from at least two specific dimensions such as:
 
 - audience specificity
 - output structure
 - scope boundedness
 - task decomposition
-- concrete exclusions
-- concrete examples or comparisons
+- specific exclusions
+- specific examples or comparisons
 
 ### 10.2 Low expected improvement
 
@@ -315,7 +315,7 @@ Low expected improvement should remain available for strong, already-bounded pro
 
 ### 10.3 Rubric echo interaction
 
-If `rubricEchoRisk = high`, expected improvement should be reduced or capped unless there is strong evidence of concrete task-grounded improvement.
+If `rubricEchoRisk = high`, expected improvement should be reduced or capped unless there is strong evidence of specific task-grounded improvement.
 
 ---
 
@@ -327,19 +327,19 @@ Rewrite generation should prioritize:
 
 1. preserve original job
 2. tighten boundedness
-3. add missing concrete constraints
+3. add missing specific constraints
 4. add audience or structure if clearly missing
 5. only then apply stylistic sharpening
 
 ### 11.2 Preferred additions
 
-Prefer concrete additions such as:
+Prefer specific additions such as:
 
 - specify audience
 - specify output shape
 - specify example type or count
 - specify comparison frame
-- add one concrete exclusion
+- add one specific exclusion
 - add real operational or business context
 - clarify when the task should emphasize trade-offs
 
@@ -354,7 +354,7 @@ Avoid rewrites that mainly append directions such as:
 - add tension
 - sharpen differentiation
 
-unless those directives are accompanied by the actual concrete content.
+unless those directives are accompanied by the actual specific content.
 
 ### 11.4 New positioning-frame rule
 
@@ -374,7 +374,7 @@ General mode must not earn rewrite credit for abstract meta-instructions like:
 - add constraints
 - include exclusions
 
-unless the rewrite also adds actual concrete task detail.
+unless the rewrite also adds actual specific task detail.
 
 ### 12.2 Marketer mode
 
@@ -444,7 +444,7 @@ For strong prompts with real natural-language constraints:
 - forced rewrites should remain mild
 - evaluation must not inflate minor rewrites into material improvement
 
-### 14.3 Concrete rewrite can still win
+### 14.3 specific rewrite can still win
 
 A clearly weak prompt whose rewrite adds real:
 
@@ -461,9 +461,9 @@ may still be classified as `material_improvement`.
 
 Add or update tests for:
 
-1. rubric-heavy marketer rewrite does not get `material_improvement` without concrete detail
-2. rubric-heavy general rewrite does not get `material_improvement` without concrete detail
-3. concrete weak-prompt rewrite can still get `material_improvement`
+1. rubric-heavy marketer rewrite does not get `material_improvement` without specific detail
+2. rubric-heavy general rewrite does not get `material_improvement` without specific detail
+3. specific weak-prompt rewrite can still get `material_improvement`
 4. strong prompt remains `no_rewrite_needed` by default
 5. forced rewrite of strong prompt does not get inflated by meta-instruction scaffolding
 6. Kubernetes regression fixture blocks scorer-language-only improvement

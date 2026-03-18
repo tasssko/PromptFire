@@ -274,7 +274,7 @@ Primary signals:
 * comparison framing
 * distinctive lead angle
 * exclusions that block default category framing
-* concrete operating context
+* specific operating context
 
 Secondary support signals:
 
@@ -1277,7 +1277,7 @@ PromptFire should recognize that this prompt already contains:
 
 * one clear deliverable
 * a specific audience
-* a concrete tension
+* a specific tension
 * two specific example requirements
 * explicit exclusion guidance
 * a tone boundary

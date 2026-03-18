@@ -353,7 +353,7 @@ Allowed when:
 Allowed only when:
 
 * semantic policy allows full rewrite
-* evaluation is `material_improvement`, or equivalent evidence of concrete gains exists
+* evaluation is `material_improvement`, or equivalent evidence of specific gains exists
 * no strong semantic rewrite-risk rule blocks it
 
 #### `template_with_example`

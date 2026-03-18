@@ -201,7 +201,7 @@ Primary emphasis:
 * failure modes
 * trade-offs
 * exclusions
-* concrete deliverables
+* specific deliverables
 
 This is already the direction used in the rewrite behavior requirements for developer prompts. 
 
@@ -491,11 +491,11 @@ Pattern-fit should influence rewrite generation order.
 2. detect role
 3. infer pattern-fit
 4. apply mode emphasis
-5. add missing concrete specificity
+5. add missing specific specificity
 6. avoid meta-instruction stuffing
 7. keep rewrite proportional to expected improvement
 
-This is consistent with the existing rewrite rules that prioritize preserving intent, tightening boundedness, adding concrete constraints, and avoiding scorer-vocabulary stuffing.
+This is consistent with the existing rewrite rules that prioritize preserving intent, tightening boundedness, adding specific constraints, and avoiding scorer-vocabulary stuffing.
 
 ### Example
 
@@ -512,7 +512,7 @@ PromptFire should then prefer:
 * error handling
 * exclusions
 * architecture assumptions
-* concrete deliverable shape
+* specific deliverable shape
 
 rather than marketer-style differentiation language.
 

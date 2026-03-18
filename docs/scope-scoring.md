@@ -1,4 +1,4 @@
-Here’s a concrete rubric for **scope: 0–10** that fits PromptFire.
+Here’s a specific rubric for **scope: 0–10** that fits PromptFire.
 
 ## Definition
 
@@ -70,7 +70,7 @@ Example:
 
 ### 2 points
 
-Specific audience and/or concrete operating context.
+Specific audience and/or specific operating context.
 
 Example:
 “Write landing page copy for a CTO at a mid-sized enterprise dealing with identity sprawl and audit pressure.”

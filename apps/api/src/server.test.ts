@@ -825,7 +825,7 @@ describe('API vertical slice', () => {
 
   it('keeps the AI-agents uncertainty framing prompt at semantic score 78 for marketer role', async () => {
     const body = await analyzeV2(
-      'Write a technical blog post for DevOps engineers explaining why AI agents are not infallible, using determinism versus probabilistic behavior as the core frame. Show how infrastructure, automation, guardrails, and operational processes are designed to manage that uncertainty in real systems. Keep the tone practical rather than philosophical. Include one concrete delivery example and avoid generic hype about autonomous agents.',
+      'Write a technical blog post for DevOps engineers explaining why AI agents are not infallible, using determinism versus probabilistic behavior as the core frame. Show how infrastructure, automation, guardrails, and operational processes are designed to manage that uncertainty in real systems. Keep the tone practical rather than philosophical. Include one specific delivery example and avoid generic hype about autonomous agents.',
       'marketer',
     );
 

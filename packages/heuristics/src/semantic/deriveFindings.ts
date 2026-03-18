@@ -24,11 +24,11 @@ function dedupeIssues(issues: Issue[]): Issue[] {
 function familyGapMessage(context: ContextInventory): string {
   switch (context.taskShape.taskClass) {
     case 'analysis':
-      return 'Add the analysis lens, one concrete scenario, or one grounded boundary so the diagnostic findings stay specific.';
+      return 'Add the analysis lens, one specific scenario, or one grounded boundary so the diagnostic findings stay specific.';
     case 'comparison':
-      return 'Add explicit comparison criteria, scenario context, or one concrete case so the trade-off stays grounded.';
+      return 'Add explicit comparison criteria, scenario context, or one specific case so the trade-off stays grounded.';
     case 'decision_support':
-      return 'Add decision criteria, one concrete scenario, or one grounded example so the recommendation is less generic.';
+      return 'Add decision criteria, one specific scenario, or one grounded example so the recommendation is less generic.';
     case 'context_first':
       return 'Clarify the requested deliverable and tie the supplied context to the decision criteria the output should use.';
     case 'few_shot':
@@ -79,7 +79,7 @@ function familySummary(context: ContextInventory, decision: DecisionState): stri
       case 'analysis':
         return 'Prompt is usable now; the next gain is one sharper analysis lens, scenario, or grounded boundary.';
       case 'comparison':
-        return 'Prompt is usable now; the next gain is sharper criteria, scenario context, or one concrete comparison case.';
+        return 'Prompt is usable now; the next gain is sharper criteria, scenario context, or one specific comparison case.';
       case 'decision_support':
         return 'Prompt is usable now; the next gain is one stronger criterion, example, or grounded boundary.';
       case 'context_first':
@@ -121,7 +121,7 @@ function buildBestNextMove(context: ContextInventory, decision: DecisionState): 
         type: 'add_analysis_criteria',
         title: decision.semanticState === 'weak' ? 'Add an analysis lens and one scenario' : 'Sharpen the diagnostic criteria',
         rationale:
-          'The next gain is to state what the analysis should examine and under which concrete scenario, so the output diagnoses the right causes instead of drifting into generic advice.',
+          'The next gain is to state what the analysis should examine and under which specific scenario, so the output diagnoses the right causes instead of drifting into generic advice.',
         expectedImpact: 'high',
         targetScores: ['contrast', 'constraintQuality', 'genericOutputRisk'],
         methodFit: {
@@ -129,7 +129,7 @@ function buildBestNextMove(context: ContextInventory, decision: DecisionState): 
           recommendedPattern: 'break_into_steps',
           confidence: 'medium',
         },
-        exampleChange: 'Name the failure modes, bottlenecks, or risks to analyze, plus one concrete scenario or boundary.',
+        exampleChange: 'Name the failure modes, bottlenecks, or risks to analyze, plus one specific scenario or boundary.',
       };
     case 'comparison':
       return {
@@ -153,7 +153,7 @@ function buildBestNextMove(context: ContextInventory, decision: DecisionState): 
         type: 'add_decision_criteria',
         title: decision.semanticState === 'weak' ? 'Add decision criteria and one scenario' : 'Add one stronger decision criterion',
         rationale:
-          'The next gain is to tell the model what should drive the judgment, ideally with one concrete scenario or case so the recommendation stays grounded.',
+          'The next gain is to tell the model what should drive the judgment, ideally with one specific scenario or case so the recommendation stays grounded.',
         expectedImpact: 'high',
         targetScores: ['contrast', 'constraintQuality', 'genericOutputRisk'],
         methodFit: {

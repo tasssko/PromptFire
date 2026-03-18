@@ -232,11 +232,11 @@ function audienceOrContextSpecificityV2(prompt: string, context?: Record<string,
 
   const broadAudience = /\b(it decision-makers?|decision-makers?|enterprise buyers?|audience|users?)\b/i.test(prompt);
   const specificAudience = /\b(cto|vp|director|architect|administrator|manager|engineering managers?)\b/i.test(prompt);
-  const concreteContext = /\b(mid-sized|enterprise|regulated|audit|sprawl|acquisition|overhead|governance|saas)\b/i.test(
+  const specificContext = /\b(mid-sized|enterprise|regulated|audit|sprawl|acquisition|overhead|governance|saas)\b/i.test(
     prompt,
   );
 
-  if (specificAudience || concreteContext) {
+  if (specificAudience || specificContext) {
     return 3;
   }
   if (broadAudience) {

@@ -279,7 +279,7 @@ Use when all are true:
 Use when:
 
 * the prompt is usable
-* one or two concrete improvements would help
+* one or two specific improvements would help
 * rewrite may help but is not clearly necessary
 
 #### `rewrite_recommended`
