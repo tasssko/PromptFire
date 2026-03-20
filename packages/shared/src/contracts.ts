@@ -300,6 +300,72 @@ export const RewriteRecommendationSchema = z.enum([
 ]);
 export type RewriteRecommendation = z.infer<typeof RewriteRecommendationSchema>;
 
+export const PromptRunListItemSchema = z.object({
+  id: z.string().startsWith('prn_'),
+  createdAt: z.string().datetime(),
+  originalPrompt: z.string().min(1),
+  role: RoleSchema,
+  mode: ModeSchema,
+  overallScore: z.number().int().min(0).max(100).nullable(),
+  scoreBand: ScoreBandSchema.nullable(),
+  rewriteRecommendation: RewriteRecommendationSchema.nullable(),
+  hasRewrite: z.boolean(),
+});
+export type PromptRunListItem = z.infer<typeof PromptRunListItemSchema>;
+
+export const PromptRunRewriteSchema = z.object({
+  id: z.string().startsWith('prw_'),
+  kind: z.string().min(1),
+  position: z.number().int().nonnegative(),
+  role: RoleSchema,
+  mode: ModeSchema,
+  rewrittenPrompt: z.string().min(1),
+  explanation: z.string().nullable(),
+  changes: z.array(z.string()).nullable(),
+  evaluationData: z.unknown().nullable(),
+  isPrimary: z.boolean(),
+  createdAt: z.string().datetime(),
+});
+export type PromptRunRewrite = z.infer<typeof PromptRunRewriteSchema>;
+
+export const PromptRunDetailSchema = z.object({
+  id: z.string().startsWith('prn_'),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  endpoint: z.string().min(1),
+  requestId: z.string().nullable(),
+  originalPrompt: z.string().min(1),
+  role: RoleSchema,
+  mode: ModeSchema,
+  rewritePreference: RewritePreferenceSchema.nullable(),
+  overallScore: z.number().int().min(0).max(100).nullable(),
+  scoreBand: ScoreBandSchema.nullable(),
+  rewriteRecommendation: RewriteRecommendationSchema.nullable(),
+  inferenceData: z.unknown(),
+  responseData: z.unknown(),
+  rewrites: z.array(PromptRunRewriteSchema),
+});
+export type PromptRunDetail = z.infer<typeof PromptRunDetailSchema>;
+
+export const AccountHomeResponseSchema = z.object({
+  ok: z.literal(true),
+  user: AuthUserSchema,
+  recentRuns: z.array(PromptRunListItemSchema),
+});
+export type AccountHomeResponse = z.infer<typeof AccountHomeResponseSchema>;
+
+export const PromptRunsListResponseSchema = z.object({
+  ok: z.literal(true),
+  runs: z.array(PromptRunListItemSchema),
+});
+export type PromptRunsListResponse = z.infer<typeof PromptRunsListResponseSchema>;
+
+export const PromptRunDetailResponseSchema = z.object({
+  ok: z.literal(true),
+  run: PromptRunDetailSchema,
+});
+export type PromptRunDetailResponse = z.infer<typeof PromptRunDetailResponseSchema>;
+
 export const ExpectedImprovementLevelSchema = z.enum(['low', 'high']);
 export type ExpectedImprovementLevel = z.infer<typeof ExpectedImprovementLevelSchema>;
 

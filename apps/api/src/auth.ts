@@ -183,33 +183,59 @@ export async function createMagicLink(email: string): Promise<{ token: string }>
   return { token };
 }
 
-export async function verifyMagicLink(token: string): Promise<{ sessionId: string; user: UserRecord } | null> {
+export type MagicLinkVerifyFailureReason = 'invalid' | 'expired' | 'already_used';
+
+export async function verifyMagicLink(
+  token: string,
+): Promise<
+  | { ok: true; sessionId: string; user: UserRecord }
+  | { ok: false; reason: MagicLinkVerifyFailureReason }
+> {
   if (!hasDatabaseUrl()) {
     const record = magicTokens.get(token);
-    if (!record || record.usedAt || record.expiresAt <= nowMs()) {
-      return null;
+    if (!record) {
+      return { ok: false, reason: 'invalid' };
+    }
+    if (record.usedAt) {
+      return { ok: false, reason: 'already_used' };
+    }
+    if (record.expiresAt <= nowMs()) {
+      return { ok: false, reason: 'expired' };
     }
 
     const user = usersById.get(record.userId);
     if (!user) {
-      return null;
+      return { ok: false, reason: 'invalid' };
     }
 
     record.usedAt = nowMs();
     magicTokens.set(token, record);
 
     const session = await createSession(user.id);
-    return { sessionId: session.id, user };
+    return { ok: true, sessionId: session.id, user };
   }
 
   const db = getDb();
   const tokenHash = hashToken(token);
+  const anyRecord = await db.query.magicLinkTokens.findFirst({
+    where: eq(magicLinkTokens.tokenHash, tokenHash),
+  });
+  if (!anyRecord) {
+    return { ok: false, reason: 'invalid' };
+  }
+  if (anyRecord.usedAt) {
+    return { ok: false, reason: 'already_used' };
+  }
+  if (anyRecord.expiresAt <= nowDate()) {
+    return { ok: false, reason: 'expired' };
+  }
+
   const record = await db.query.magicLinkTokens.findFirst({
-    where: and(eq(magicLinkTokens.tokenHash, tokenHash), isNull(magicLinkTokens.usedAt), gt(magicLinkTokens.expiresAt, nowDate())),
+    where: and(eq(magicLinkTokens.id, anyRecord.id), isNull(magicLinkTokens.usedAt), gt(magicLinkTokens.expiresAt, nowDate())),
   });
 
   if (!record) {
-    return null;
+    return { ok: false, reason: 'already_used' };
   }
 
   const user = await db.query.users.findFirst({
@@ -217,7 +243,7 @@ export async function verifyMagicLink(token: string): Promise<{ sessionId: strin
   });
 
   if (!user) {
-    return null;
+    return { ok: false, reason: 'invalid' };
   }
 
   const updated = await db
@@ -227,12 +253,13 @@ export async function verifyMagicLink(token: string): Promise<{ sessionId: strin
     .returning({ id: magicLinkTokens.id });
 
   if (updated.length === 0) {
-    return null;
+    return { ok: false, reason: 'already_used' };
   }
 
   const session = await createSession(user.id);
 
   return {
+    ok: true,
     sessionId: session.id,
     user: {
       id: user.id,

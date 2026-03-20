@@ -357,6 +357,63 @@ describe('API vertical slice', () => {
     expect(postLogoutSessionBody.authenticated).toBe(false);
   });
 
+  it('returns detailed reason for invalid magic-link callback verification', async () => {
+    const verifyResponse = await handleHttpRequest({
+      method: 'GET',
+      path: '/v1/auth/magic-link/verify?token=mlt_invalid',
+    });
+    const verifyBody = JSON.parse(verifyResponse.body);
+
+    expect(verifyResponse.statusCode).toBe(400);
+    expect(verifyBody.error.code).toBe('INVALID_REQUEST');
+    expect(verifyBody.error.details.reason).toBe('invalid');
+  });
+
+  it('serves authenticated account home and history list surfaces', async () => {
+    process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
+
+    const requestResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/magic-link/request',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'home-user@example.com' }),
+    });
+    const requestBody = JSON.parse(requestResponse.body);
+
+    const verifyResponse = await handleHttpRequest({
+      method: 'GET',
+      path: `/v1/auth/magic-link/verify?token=${encodeURIComponent(requestBody.debugToken)}`,
+    });
+    const cookie = verifyResponse.headers['set-cookie'];
+
+    const homeResponse = await handleHttpRequest({
+      method: 'GET',
+      path: '/v1/account/home',
+      headers: { cookie },
+    });
+    const homeBody = JSON.parse(homeResponse.body);
+    expect(homeResponse.statusCode).toBe(200);
+    expect(homeBody.ok).toBe(true);
+    expect(homeBody.user.email).toBe('home-user@example.com');
+    expect(Array.isArray(homeBody.recentRuns)).toBe(true);
+
+    const runsResponse = await handleHttpRequest({
+      method: 'GET',
+      path: '/v1/prompt-runs?limit=10',
+      headers: { cookie },
+    });
+    const runsBody = JSON.parse(runsResponse.body);
+    expect(runsResponse.statusCode).toBe(200);
+    expect(runsBody.ok).toBe(true);
+    expect(Array.isArray(runsBody.runs)).toBe(true);
+
+    const unauthorizedRuns = await handleHttpRequest({
+      method: 'GET',
+      path: '/v1/prompt-runs',
+    });
+    expect(unauthorizedRuns.statusCode).toBe(401);
+  });
+
   it('supports passkey registration and passkey authentication', async () => {
     process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
 

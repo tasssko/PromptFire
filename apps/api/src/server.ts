@@ -53,6 +53,7 @@ import {
 } from './auth';
 import { getAuthBypassEnabled, getProviderMode, getStaticApiKey } from './lib/env';
 import { persistPromptRun } from './persistence/promptRuns';
+import { getPromptRunDetailForUser, listPromptRunsForUser } from './persistence/promptRunsRead';
 import {
   createMeta,
   createMetaV2,
@@ -98,6 +99,18 @@ function parseJsonBody(request: HttpRequest): { ok: true; value: unknown } | { o
   } catch {
     return { ok: false };
   }
+}
+
+function parsePositiveInt(input: string | null | undefined, fallback: number): number {
+  if (!input) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(input, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
 }
 
 function logRequest(params: {
@@ -558,9 +571,16 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
   if (request.method === 'GET' && pathname === '/v1/auth/magic-link/verify') {
     const token = requestUrl.searchParams.get('token') ?? '';
     const result = await verifyMagicLink(token);
-    if (!result) {
+    if (!result.ok) {
       const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
-      return errorResponse(400, 'INVALID_REQUEST', 'Invalid or expired magic-link token.', meta, headers);
+      const messageByReason = {
+        invalid: 'Invalid magic-link token.',
+        expired: 'Magic-link token expired.',
+        already_used: 'Magic-link token has already been used.',
+      } as const;
+      return errorResponse(400, 'INVALID_REQUEST', messageByReason[result.reason], meta, headers, {
+        reason: result.reason,
+      });
     }
 
     const response = jsonResponse(
@@ -589,6 +609,57 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     const response = jsonResponse(200, { ok: true }, headers);
     response.headers['set-cookie'] = clearSessionCookie();
     return response;
+  }
+
+  if (request.method === 'GET' && pathname === '/v1/account/home') {
+    const user = await getSessionUser(sessionId);
+    if (!user) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
+    }
+
+    const recentRuns = await listPromptRunsForUser(user.id, parsePositiveInt(requestUrl.searchParams.get('limit'), 6));
+    return jsonResponse(
+      200,
+      {
+        ok: true,
+        user: await getUserSummary(user),
+        recentRuns,
+      },
+      headers,
+    );
+  }
+
+  if (request.method === 'GET' && pathname === '/v1/prompt-runs') {
+    const user = await getSessionUser(sessionId);
+    if (!user) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
+    }
+
+    const runs = await listPromptRunsForUser(user.id, Math.min(parsePositiveInt(requestUrl.searchParams.get('limit'), 20), 100));
+    return jsonResponse(200, { ok: true, runs }, headers);
+  }
+
+  if (request.method === 'GET' && pathname.startsWith('/v1/prompt-runs/')) {
+    const user = await getSessionUser(sessionId);
+    if (!user) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(401, 'UNAUTHORIZED', 'Unauthorized.', meta, headers);
+    }
+
+    const runId = pathname.slice('/v1/prompt-runs/'.length).trim();
+    if (!runId) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(400, 'INVALID_REQUEST', 'Invalid run id.', meta, headers);
+    }
+
+    const run = await getPromptRunDetailForUser(user.id, runId);
+    if (!run) {
+      const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);
+      return errorResponse(404, 'INVALID_REQUEST', 'Run not found.', meta, headers);
+    }
+    return jsonResponse(200, { ok: true, run }, headers);
   }
 
   if (request.method === 'POST' && pathname === '/v1/auth/passkey/register/options') {
