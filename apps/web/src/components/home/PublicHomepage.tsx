@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
+import type { ThemeMode } from '../../theme';
 import { LoadingCard, ResultsCard, TopShell } from '../results';
 import {
   exampleGalleryContent,
+  footerContent,
   howItWorksContent,
   scoreDimensionsContent,
   sponsorStripContent,
@@ -9,6 +11,7 @@ import {
   trustRowContent,
 } from './content';
 import { ExampleGallerySection } from './ExampleGallerySection';
+import { Footer } from './Footer';
 import { HowItWorksSection } from './HowItWorksSection';
 import { resolveHomepageExample, type HomepageExampleId } from './examples';
 import { ScoreDimensionsSection } from './ScoreDimensionsSection';
@@ -23,29 +26,32 @@ export function HomepageContent({
   resultsCard,
   onLoadExample,
   loading,
+  theme,
 }: {
   topShell: ReactNode;
   loadingCard?: ReactNode;
   resultsCard?: ReactNode;
   onLoadExample: (id: HomepageExampleId) => void;
   loading: boolean;
+  theme?: ThemeMode;
 }) {
   return (
     <main className="mx-auto grid max-w-[980px] gap-6 px-6 py-5 text-pf-text-primary max-sm:gap-5 max-sm:px-3 max-sm:py-3">
       {topShell}
-      <SponsorStrip content={sponsorStripContent} />
+      {loadingCard}
+      {resultsCard}
+      <SponsorStrip content={sponsorStripContent} theme={theme ?? 'light'} />
       <HowItWorksSection content={howItWorksContent} />
       <ExampleGallerySection content={exampleGalleryContent} onLoadExample={onLoadExample} loading={loading} />
       <ScoreDimensionsSection content={scoreDimensionsContent} />
       <StrongPromptPromiseStrip content={strongPromptPromiseContent} />
       <TrustRow content={trustRowContent} />
-      {loadingCard}
-      {resultsCard}
+      <Footer {...footerContent} />
     </main>
   );
 }
 
-export function PublicHomepage() {
+export function PublicHomepage({ theme }: { theme: ThemeMode }) {
   const analyzer = usePromptAnalyzer();
 
   function handleLoadExample(id: HomepageExampleId) {
@@ -75,6 +81,7 @@ export function PublicHomepage() {
 
   return (
     <HomepageContent
+      theme={theme}
       topShell={
         <TopShell
           prompt={analyzer.prompt}

@@ -92,3 +92,12 @@ export const trustRowContent = {
     { title: 'Actionable', body: 'Concrete next steps when a prompt needs improvement.' },
   ],
 } as const;
+
+export const footerContent = {
+  disclaimer:
+    'PeakPrompt provides guidance to help improve prompt quality. Results and rewrites should be reviewed before use.',
+  privacyLabel: 'Privacy Policy',
+  privacyHref: '/privacy',
+  termsLabel: 'Terms',
+  termsHref: '/terms',
+} as const;

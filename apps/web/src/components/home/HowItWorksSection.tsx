@@ -10,7 +10,7 @@ export function HowItWorksSection({ content }: { content: typeof import('./conte
             tone="default"
             className="gap-3 border-pf-border-subtle bg-transparent p-4 shadow-none"
           >
-            <span className="w-fit rounded-full border border-pf-border-subtle bg-pf-bg-card px-2 py-1 text-[0.7rem] font-semibold tracking-[0.12em] text-pf-text-muted">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-pf-border-subtle bg-pf-bg-card text-[0.7rem] font-semibold tracking-[0.12em] text-pf-text-muted">
               {step.step}
             </span>
             <div className="grid gap-1">

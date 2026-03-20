@@ -1090,7 +1090,7 @@ export function App() {
   return (
     <div>
       <PrimaryNav pathname={route.pathname} theme={theme} onNavigate={navigate} onThemeChange={setTheme} />
-      <PublicHomepage />
+      <PublicHomepage theme={theme} />
     </div>
   );
 }

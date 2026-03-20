@@ -94,6 +94,25 @@ describe('HomepageContent', () => {
     expect(markup.indexOf('Start with an example')).toBeLessThan(markup.indexOf('What PeakPrompt scores'));
     expect(markup.indexOf('What PeakPrompt scores')).toBeLessThan(markup.indexOf('Strong prompts stay intact'));
     expect(markup.indexOf('Strong prompts stay intact')).toBeLessThan(markup.indexOf('Score-first'));
+    expect(markup.indexOf('Score-first')).toBeLessThan(markup.indexOf('Privacy Policy'));
+    expect(markup.indexOf('Privacy Policy')).toBeLessThan(markup.indexOf('Terms'));
+    expect(markup).toContain(
+      'PeakPrompt provides guidance to help improve prompt quality. Results and rewrites should be reviewed before use.',
+    );
+  });
+
+  it('renders results directly below the analyzer shell when provided', () => {
+    const markup = renderToStaticMarkup(
+      <HomepageContent
+        topShell={<div>TopShell</div>}
+        onLoadExample={vi.fn()}
+        loading={false}
+        resultsCard={<div>ResultsCard</div>}
+      />,
+    );
+
+    expect(markup.indexOf('TopShell')).toBeLessThan(markup.indexOf('ResultsCard'));
+    expect(markup.indexOf('ResultsCard')).toBeLessThan(markup.indexOf('Project sponsor'));
   });
 
   it('omits results by default and renders them when provided', () => {
