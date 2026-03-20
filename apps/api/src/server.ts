@@ -560,7 +560,22 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       return errorResponse(400, 'INVALID_REQUEST', 'Invalid request.', meta, headers, { issues: parsed.error.issues });
     }
 
+    const normalizedEmail = parsed.data.email.trim().toLowerCase();
     const { token } = await createMagicLink(parsed.data.email);
+    const isLocalDev = (process.env.NODE_ENV ?? '').toLowerCase() !== 'production';
+    if (isLocalDev) {
+      const callbackBaseUrl = process.env.AUTH_MAGIC_LINK_CALLBACK_URL ?? 'http://localhost:5173/app/auth/callback';
+      const callbackUrl = new URL(callbackBaseUrl);
+      callbackUrl.searchParams.set('token', token);
+      console.info(
+        JSON.stringify({
+          event: 'auth_magic_link_generated',
+          email: normalizedEmail,
+          magicLinkUrl: callbackUrl.toString(),
+        }),
+      );
+    }
+
     const includeDebugToken = process.env.AUTH_INCLUDE_DEBUG_TOKEN === 'true';
     const payload = includeDebugToken
       ? { ok: true, message: 'If the email is valid, a sign-in link has been sent.', debugToken: token }

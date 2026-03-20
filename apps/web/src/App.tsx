@@ -275,6 +275,12 @@ function AppTopBar(props: {
         </button>
         <nav className="flex items-center gap-2 text-sm">
           <button
+            className={`rounded-md px-3 py-2 ${pathname === '/app/analyze' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
+            onClick={() => onNavigate('/app/analyze')}
+          >
+            Analyze
+          </button>
+          <button
             className={`rounded-md px-3 py-2 ${pathname === '/app/' || pathname === '/app' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
             onClick={() => onNavigate('/app/')}
           >
@@ -411,7 +417,7 @@ function HomePage(props: {
           Reopen recent runs, keep momentum on score improvements, and start a new analysis when you are ready.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900" onClick={() => (window.location.href = '/')}>
+          <button className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900" onClick={() => onNavigate('/app/analyze')}>
             Analyze a new prompt
           </button>
           <button className="rounded-md border border-white/30 px-4 py-2 text-sm font-semibold text-white" onClick={() => onNavigate('/app/history')}>
@@ -453,7 +459,7 @@ function HomePage(props: {
           runs={runs}
           onOpenRun={(runId) => onNavigate(`/app/history/${runId}`)}
           emptyCtaLabel="Analyze your first prompt"
-          onEmptyCtaClick={() => (window.location.href = '/')}
+          onEmptyCtaClick={() => onNavigate('/app/analyze')}
         />
       )}
     </div>
@@ -507,7 +513,7 @@ function HistoryPage(props: { onNavigate: (to: string) => void }) {
           runs={runs}
           onOpenRun={(runId) => onNavigate(`/app/history/${runId}`)}
           emptyCtaLabel="Analyze your first prompt"
-          onEmptyCtaClick={() => (window.location.href = '/')}
+          onEmptyCtaClick={() => onNavigate('/app/analyze')}
         />
       )}
     </div>
@@ -877,6 +883,20 @@ function AuthCallbackPage(props: { onNavigate: (to: string, replace?: boolean) =
       }
 
       try {
+        async function redirectIfSessionAlreadyAuthenticated(): Promise<boolean> {
+          try {
+            const session = await apiFetch<SessionResponse>('/v1/auth/session');
+            if (session.authenticated) {
+              setState('redirecting');
+              window.setTimeout(() => onNavigate('/app/', true), 150);
+              return true;
+            }
+          } catch {
+            // Ignore and fall back to explicit callback error state.
+          }
+          return false;
+        }
+
         const verifyUrl = new URL(`${API_BASE_URL}/v1/auth/magic-link/verify`);
         verifyUrl.searchParams.set('token', token);
         if (stateToken) {
@@ -894,7 +914,9 @@ function AuthCallbackPage(props: { onNavigate: (to: string, replace?: boolean) =
           if (reason === 'expired') {
             setState('expired');
           } else if (reason === 'already_used') {
-            setState('already_used');
+            if (!(await redirectIfSessionAlreadyAuthenticated())) {
+              setState('already_used');
+            }
           } else if (reason === 'invalid') {
             setState('invalid');
           } else {
@@ -1014,6 +1036,7 @@ function AuthenticatedApp(props: {
       {(route.pathname === '/app/' || route.pathname === '/app') && (
         <HomePage user={session.user} onNavigate={(to) => onNavigate(to)} onSessionRefresh={onSessionRefresh} />
       )}
+      {route.pathname === '/app/analyze' && <AnalyzerWorkspace />}
       {route.pathname === '/app/history' && <HistoryPage onNavigate={(to) => onNavigate(to)} />}
       {runDetailMatch && <RunDetailPage runId={decodeURIComponent(runDetailMatch[1] ?? '')} onNavigate={(to) => onNavigate(to)} />}
       {route.pathname === '/app/settings/security' && (
@@ -1022,6 +1045,7 @@ function AuthenticatedApp(props: {
       {!runDetailMatch &&
         route.pathname !== '/app/' &&
         route.pathname !== '/app' &&
+        route.pathname !== '/app/analyze' &&
         route.pathname !== '/app/history' &&
         route.pathname !== '/app/settings/security' && (
           <main className="mx-auto max-w-3xl px-4 py-10">
