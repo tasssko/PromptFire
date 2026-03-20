@@ -8,7 +8,7 @@ import {
   ScoreBreakdown,
   TechnicalDetailsDrawer,
 } from './ResultSections';
-import { getRewritePresentationMode, hasGuidedCompletionForm, type ResultsPresentation } from './helpers';
+import { getRewritePresentationMode, getVisibleRewritePrompt, hasGuidedCompletionForm, type ResultsPresentation } from './helpers';
 
 type ResultsCardProps = {
   prompt: string;
@@ -37,6 +37,7 @@ export function ResultsCard({
 }: ResultsCardProps) {
   const rewritePresentationMode = getRewritePresentationMode(result);
   const showGuidedForm = hasGuidedCompletionForm(result);
+  const visibleRewritePrompt = getVisibleRewritePrompt(result);
   const questionsText = (result.guidedCompletion?.questions ?? []).map((question, index) => `${index + 1}. ${question}`).join('\n');
   const guidedPrimaryValue =
     result.guidedCompletion?.template ?? result.guidedCompletion?.example ?? (questionsText.length > 0 ? questionsText : prompt);
@@ -46,8 +47,8 @@ export function ResultsCard({
       return;
     }
 
-    if (presentation.primarySurface === 'full-rewrite' && result.rewrite) {
-      onCopyPrompt(result.rewrite.rewrittenPrompt);
+    if (presentation.primarySurface === 'full-rewrite' && visibleRewritePrompt) {
+      onCopyPrompt(visibleRewritePrompt);
       return;
     }
 
@@ -114,8 +115,8 @@ export function ResultsCard({
         </>
       )}
 
-      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'full-rewrite' && result.rewrite && result.evaluation && (
-        <FullRewriteCard result={result} view={presentation.rewritePanel} onCopyRewrite={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)} />
+      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'full-rewrite' && visibleRewritePrompt && (
+        <FullRewriteCard result={result} view={presentation.rewritePanel} onCopyRewrite={() => onCopyPrompt(visibleRewritePrompt)} />
       )}
 
       {visibleSections.has('technical_details') && (

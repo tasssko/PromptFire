@@ -34,6 +34,7 @@ import {
   type Issue,
   type RequestSource,
   type Role,
+  type Rewrite,
   type RewriteRecommendation,
   type RewritePreference,
   type ScoreBand,
@@ -279,7 +280,25 @@ function asJoinedValue(value: string | string[] | undefined): string | null {
   return Array.isArray(value) ? value.join(', ') : value;
 }
 
-function synthesizeGuidedPrompt(originalPrompt: string, guidedAnswers: GuidedAnswers): string {
+function normalizePromptSentence(value: string): string {
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (normalized.length === 0) {
+    return '';
+  }
+
+  return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
+}
+
+function isGuidedSynthesisScaffold(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes('original request:') ||
+    normalized.includes('additional constraints:') ||
+    normalized.includes('create a stronger, more specific version')
+  );
+}
+
+function buildInternalGuidedSynthesisPrompt(originalPrompt: string, guidedAnswers: GuidedAnswers): string {
   const goal = asJoinedValue(guidedAnswers.goal);
   const audience = asJoinedValue(guidedAnswers.audience);
   const includes = asJoinedValue(guidedAnswers.includes);
@@ -310,6 +329,32 @@ function synthesizeGuidedPrompt(originalPrompt: string, guidedAnswers: GuidedAns
   return lines.join('\n');
 }
 
+function buildUserFacingGuidedPrompt(originalPrompt: string, guidedAnswers: GuidedAnswers): string {
+  const goal = asJoinedValue(guidedAnswers.goal);
+  const audience = asJoinedValue(guidedAnswers.audience);
+  const includes = asJoinedValue(guidedAnswers.includes);
+  const excludes = asJoinedValue(guidedAnswers.excludes);
+  const format = asJoinedValue(guidedAnswers.format);
+  const tone = asJoinedValue(guidedAnswers.tone);
+  const detail = asJoinedValue(guidedAnswers.detail);
+  const proof = asJoinedValue(guidedAnswers.proof);
+  const context = asJoinedValue(guidedAnswers.context);
+
+  const sentences = [
+    normalizePromptSentence(originalPrompt),
+    goal ? normalizePromptSentence(`Make the primary goal ${goal}`) : null,
+    audience ? normalizePromptSentence(`Target ${audience}`) : null,
+    format ? normalizePromptSentence(`Format the output as ${format}`) : null,
+    includes ? normalizePromptSentence(`Include ${includes}`) : null,
+    proof ? normalizePromptSentence(`Use ${proof}`) : null,
+    tone || detail ? normalizePromptSentence(`Tone and detail notes: ${[tone, detail].filter(Boolean).join('; ')}`) : null,
+    context ? normalizePromptSentence(`Context: ${context}`) : null,
+    excludes ? normalizePromptSentence(`Avoid ${excludes}`) : null,
+  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+  return sentences.join(' ');
+}
+
 type RunAnalyzeAndRewriteV2Params = {
   requestId: string;
   startedAtMs: number;
@@ -322,6 +367,10 @@ type RunAnalyzeAndRewriteV2Params = {
   input: AnalyzeAndRewriteV2Request;
   persistInput?: AnalyzeAndRewriteV2Request;
   extraInferenceData?: Record<string, unknown>;
+  guidedRewriteArtifacts?: {
+    internalSynthesisPrompt: string;
+    finalGuidedPrompt: string;
+  };
   requestSource?: RequestSource;
 };
 
@@ -329,6 +378,60 @@ type RewritePresentationShape = Pick<
   AnalyzeAndRewriteV2Response,
   'rewrite' | 'rewritePresentationMode' | 'guidedCompletion' | 'guidedCompletionForm'
 >;
+
+function buildGuidedSubmitFallbackRewrite(params: {
+  requestSource: RequestSource;
+  rewrite: AnalyzeAndRewriteV2Response['rewrite'];
+  finalGuidedPrompt?: string;
+  role: Role;
+  mode: AnalyzeAndRewriteV2Request['mode'];
+}): Rewrite | null {
+  if (params.requestSource !== 'guided_submit' || params.rewrite) {
+    return params.rewrite;
+  }
+
+  const rewrittenPrompt = params.finalGuidedPrompt?.trim() ?? '';
+  if (rewrittenPrompt.length === 0) {
+    return null;
+  }
+
+  return {
+    role: params.role,
+    mode: params.mode,
+    rewrittenPrompt,
+    explanation: 'Built from guided answers.',
+    changes: ['guided_completion'],
+  };
+}
+
+function finalizeGuidedSubmitRewrite(params: {
+  requestSource: RequestSource;
+  rewrite: Rewrite;
+  finalGuidedPrompt?: string;
+  role: Role;
+  mode: AnalyzeAndRewriteV2Request['mode'];
+}): Rewrite {
+  if (params.requestSource !== 'guided_submit') {
+    return params.rewrite;
+  }
+
+  const fallbackPrompt = params.finalGuidedPrompt?.trim() ?? '';
+  const candidate = params.rewrite.rewrittenPrompt.trim();
+  if (fallbackPrompt.length > 0 && (candidate.length === 0 || isGuidedSynthesisScaffold(candidate))) {
+    return {
+      role: params.role,
+      mode: params.mode,
+      rewrittenPrompt: fallbackPrompt,
+      explanation: 'Built from guided answers.',
+      changes: ['guided_completion'],
+    };
+  }
+
+  return {
+    ...params.rewrite,
+    rewrittenPrompt: candidate,
+  };
+}
 
 function logGuidedSubmitDiagnostic(params: {
   stage: 'presentation_shaping' | 'persistence_boundary';
@@ -399,6 +502,7 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
   const input = params.input;
   const persistInput = params.persistInput ?? input;
   const requestSource = params.requestSource ?? 'analyze';
+  const guidedRewriteArtifacts = params.guidedRewriteArtifacts;
   const preferences = normalizePreferences(input.preferences);
 
   let resolvedContext = input.context;
@@ -637,27 +741,34 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
         patternFit,
         ladder: rewriteLadder,
       });
+      const finalizedGeneratedRewrite = finalizeGuidedSubmitRewrite({
+        requestSource,
+        rewrite: generatedRewrite,
+        finalGuidedPrompt: guidedRewriteArtifacts?.finalGuidedPrompt,
+        role: input.role,
+        mode: input.mode,
+      });
 
       const rewriteAnalysis = withV2Scores(
         analyzePrompt({
-          prompt: generatedRewrite.rewrittenPrompt,
+          prompt: finalizedGeneratedRewrite.rewrittenPrompt,
           role: input.role,
           mode: input.mode,
           context: effectiveContext,
           preferences,
         }),
-        generatedRewrite.rewrittenPrompt,
+        finalizedGeneratedRewrite.rewrittenPrompt,
         effectiveContext,
       );
       const rewritePatternFit = detectPatternFit({
-        prompt: generatedRewrite.rewrittenPrompt,
+        prompt: finalizedGeneratedRewrite.rewrittenPrompt,
         role: input.role,
         mode: input.mode,
         analysis: rewriteAnalysis,
         context: effectiveContext,
       });
       const effectiveRewrite = buildEffectiveResolution({
-        prompt: generatedRewrite.rewrittenPrompt,
+        prompt: finalizedGeneratedRewrite.rewrittenPrompt,
         role: input.role,
         mode: input.mode,
         context: effectiveContext,
@@ -668,7 +779,7 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
       const calibratedRewriteAnalysis = effectiveRewrite.analysis;
       const rewriteEvaluation = evaluateRewrite({
         originalPrompt: input.prompt,
-        rewrittenPrompt: generatedRewrite.rewrittenPrompt,
+        rewrittenPrompt: finalizedGeneratedRewrite.rewrittenPrompt,
         originalAnalysis: resolvedAnalysis,
         rewriteAnalysis: calibratedRewriteAnalysis,
         context: effectiveContext,
@@ -699,7 +810,7 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
         evaluationSignals.push(`LADDER_${ladderEvaluation.reason.toUpperCase()}`);
       }
 
-      rewrite = generatedRewrite;
+      rewrite = finalizedGeneratedRewrite;
       evaluation = {
         status: evaluationStatus,
         overallDelta: rewriteEvaluation.improvement.overallDelta,
@@ -755,6 +866,14 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
     } else {
       rewritePresentationMode = 'suppressed';
     }
+
+    rewrite = buildGuidedSubmitFallbackRewrite({
+      requestSource,
+      rewrite,
+      finalGuidedPrompt: guidedRewriteArtifacts?.finalGuidedPrompt,
+      role: input.role,
+      mode: input.mode,
+    });
 
     const shapedPresentation = shapeRewritePresentation({
       requestId,
@@ -1918,7 +2037,8 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     }
 
     const normalizedGuidedAnswers = normalizeGuidedAnswers(parsed.data.guidedAnswers);
-    const mergedPrompt = synthesizeGuidedPrompt(parsed.data.prompt, normalizedGuidedAnswers);
+    const internalSynthesisPrompt = buildInternalGuidedSynthesisPrompt(parsed.data.prompt, normalizedGuidedAnswers);
+    const finalGuidedPrompt = buildUserFacingGuidedPrompt(parsed.data.prompt, normalizedGuidedAnswers);
 
     return runAnalyzeAndRewriteV2({
       requestId,
@@ -1930,7 +2050,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       requestMethod: request.method,
       sessionId,
       input: {
-        prompt: mergedPrompt,
+        prompt: internalSynthesisPrompt,
         role: parsed.data.role,
         mode: parsed.data.mode,
         rewritePreference: parsed.data.rewritePreference,
@@ -1945,9 +2065,14 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         guidedRewrite: {
           kind: 'guided_completion',
           originalPrompt: parsed.data.prompt,
-          mergedPrompt,
+          internalSynthesisPrompt,
+          finalGuidedPrompt,
           guidedAnswers: normalizedGuidedAnswers,
         },
+      },
+      guidedRewriteArtifacts: {
+        internalSynthesisPrompt,
+        finalGuidedPrompt,
       },
       requestSource: 'guided_submit',
     });

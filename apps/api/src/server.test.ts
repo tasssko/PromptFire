@@ -377,6 +377,41 @@ describe('API vertical slice', () => {
     expect(guided.guidedCompletionForm).toBeNull();
   });
 
+  it('returns a clean final stronger prompt for guided submit even when post-merge analysis says no further rewrite is needed', async () => {
+    const originalPrompt =
+      'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.';
+    const guided = await rewriteFromGuidedAnswers({
+      prompt: originalPrompt,
+      role: 'general',
+      guidedAnswers: {
+        goal: 'persuade',
+        audience: 'CTOs at mid-market companies',
+        includes: ['evidence or proof', 'specific recommendations'],
+        excludes: ['hype', 'jargon'],
+        format: 'landing page',
+      },
+    });
+
+    expect(guided.requestSource).toBe('guided_submit');
+    expect(guided.rewriteRecommendation).toBe('no_rewrite_needed');
+    expect(guided.gating.expectedImprovement).toBe('low');
+    expect(guided.rewritePresentationMode).toBe('full_rewrite');
+    expect(guided.rewrite).toEqual({
+      role: 'general',
+      mode: 'balanced',
+      rewrittenPrompt:
+        'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses. Make the primary goal persuade. Target CTOs at mid-market companies. Format the output as landing page. Include evidence or proof, specific recommendations. Avoid hype, jargon.',
+      explanation: 'Built from guided answers.',
+      changes: ['guided_completion'],
+    });
+    expect(guided.rewrite?.rewrittenPrompt).not.toContain('Original request:');
+    expect(guided.rewrite?.rewrittenPrompt).not.toContain('Additional constraints:');
+    expect(guided.rewrite?.rewrittenPrompt).not.toContain('Create a stronger, more specific version');
+    expect(guided.evaluation).toBeNull();
+    expect(guided.guidedCompletion).toBeNull();
+    expect(guided.guidedCompletionForm).toBeNull();
+  });
+
   it('supports magic-link login, session lookup, and logout', async () => {
     process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'true';
 

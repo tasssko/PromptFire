@@ -3,6 +3,7 @@ import { MetricTile, Section, SurfaceCard, TechnicalMetric, sectionTitleClass } 
 import {
   bandLabel,
   formatSuggestionTitle,
+  getVisibleRewritePrompt,
   scoreDimensionLabel,
   type ActionCardView,
   type HeroView,
@@ -105,7 +106,9 @@ type FullRewriteCardProps = {
 };
 
 export function FullRewriteCard({ result, view, onCopyRewrite }: FullRewriteCardProps) {
-  if (!result.rewrite || !result.evaluation) {
+  const visibleRewritePrompt = getVisibleRewritePrompt(result);
+
+  if (!result.rewrite || !visibleRewritePrompt) {
     return null;
   }
 
@@ -114,7 +117,7 @@ export function FullRewriteCard({ result, view, onCopyRewrite }: FullRewriteCard
       <h2 className={sectionTitleClass}>{view.title}</h2>
       <p className="font-semibold text-pf-text-primary">{view.verdictLabel}</p>
       <p>{view.verdictRecommendation}</p>
-      <pre>{result.rewrite.rewrittenPrompt}</pre>
+      <pre>{visibleRewritePrompt}</pre>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="pf-button-primary" onClick={onCopyRewrite}>
           {view.primaryActionLabel}

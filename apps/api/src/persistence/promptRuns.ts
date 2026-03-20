@@ -25,7 +25,7 @@ interface PersistPromptRunParams {
 interface PersistedRewriteRecord {
   rewrite: Rewrite;
   evaluation: Evaluation | AnalyzeAndRewriteV2Response['evaluation'] | null;
-  kind: 'primary' | 'alternative';
+  kind: 'primary' | 'alternative' | 'guided_completion';
   position: number;
   isPrimary: boolean;
 }
@@ -34,16 +34,31 @@ function isV2Response(response: PersistableResponse): response is AnalyzeAndRewr
   return response.meta.version === '2';
 }
 
+function isRewriteScaffoldLeak(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes('original request:') &&
+    normalized.includes('additional constraints:') &&
+    normalized.includes('create a stronger, more specific version')
+  );
+}
+
 export function buildRewriteRecords(response: PersistableResponse): PersistedRewriteRecord[] {
   if (!response.rewrite) {
     return [];
   }
 
+  if (isV2Response(response) && response.requestSource === 'guided_submit' && isRewriteScaffoldLeak(response.rewrite.rewrittenPrompt)) {
+    return [];
+  }
+
+  const kind = isV2Response(response) && response.requestSource === 'guided_submit' ? 'guided_completion' : 'primary';
+
   return [
     {
       rewrite: response.rewrite,
       evaluation: response.evaluation,
-      kind: 'primary',
+      kind,
       position: 0,
       isPrimary: true,
     },

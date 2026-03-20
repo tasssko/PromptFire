@@ -352,7 +352,7 @@ describe('persistPromptRun', () => {
 
     expect(rewrites).toHaveLength(1);
     expect(rewrites[0]).toMatchObject({
-      kind: 'primary',
+      kind: 'guided_completion',
       position: 0,
       isPrimary: true,
       rewrite: expect.objectContaining({
@@ -432,7 +432,8 @@ describe('persistPromptRun', () => {
         guidedRewrite: {
           kind: 'guided_completion',
           originalPrompt: 'Write better copy.',
-          mergedPrompt: 'Original request:\nWrite better copy.',
+          internalSynthesisPrompt: 'Original request:\nWrite better copy.',
+          finalGuidedPrompt: 'Write better copy. Make the primary goal persuade.',
           guidedAnswers: {
             goal: 'persuade',
           },
@@ -448,6 +449,8 @@ describe('persistPromptRun', () => {
         inferenceData: expect.objectContaining({
           guidedRewrite: expect.objectContaining({
             kind: 'guided_completion',
+            internalSynthesisPrompt: 'Original request:\nWrite better copy.',
+            finalGuidedPrompt: 'Write better copy. Make the primary goal persuade.',
           }),
         }),
       }),
@@ -456,10 +459,69 @@ describe('persistPromptRun', () => {
       table: mocks.promptRewrites,
       values: [
         expect.objectContaining({
+          kind: 'guided_completion',
           rewrittenPrompt:
             'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
         }),
       ],
     });
+    expect(mocks.insertCalls[1]?.values?.[0]?.rewrittenPrompt).not.toContain('Original request:');
+    expect(mocks.insertCalls[1]?.values?.[0]?.rewrittenPrompt).not.toContain('Additional constraints:');
+  });
+
+  it('does not build persistence records for guided scaffold leakage', () => {
+    const rewrites = buildRewriteRecords({
+      id: 'par_guided_scaffold',
+      overallScore: 68,
+      scoreBand: 'usable',
+      rewriteRecommendation: 'no_rewrite_needed',
+      analysis: {
+        scores: {
+          scope: 7,
+          contrast: 6,
+          clarity: 7,
+          constraintQuality: 6,
+          genericOutputRisk: 4,
+          tokenWasteRisk: 3,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Improved prompt.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+        majorBlockingIssues: false,
+      },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: `Original request:
+Write better copy.
+
+Additional constraints:
+- Primary goal: persuade
+
+Create a stronger, more specific version of the prompt that preserves the user’s intent while adding these boundaries.`,
+      },
+      evaluation: null,
+      rewritePresentationMode: 'full_rewrite',
+      requestSource: 'guided_submit',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+      inferenceFallbackUsed: false,
+      resolutionSource: 'local',
+      meta: {
+        version: '2',
+        requestId: 'req_guided_scaffold',
+        latencyMs: 8,
+        providerMode: 'mock',
+      },
+    });
+
+    expect(rewrites).toEqual([]);
   });
 });

@@ -111,6 +111,24 @@ export function isGuidedSubmitRewriteResult(result: AnalyzeAndRewriteV2Response)
   return result.requestSource === 'guided_submit' && Boolean(result.rewrite);
 }
 
+export function isRewriteScaffoldLeak(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes('original request:') &&
+    normalized.includes('additional constraints:') &&
+    normalized.includes('create a stronger, more specific version')
+  );
+}
+
+export function getVisibleRewritePrompt(result: AnalyzeAndRewriteV2Response): string | null {
+  const prompt = result.rewrite?.rewrittenPrompt?.trim() ?? '';
+  if (prompt.length === 0 || isRewriteScaffoldLeak(prompt)) {
+    return null;
+  }
+
+  return prompt;
+}
+
 export function hasGuidedCompletionForm(result: AnalyzeAndRewriteV2Response): boolean {
   return Boolean(result.guidedCompletionForm?.enabled && result.guidedCompletionForm.blocks.length > 0);
 }

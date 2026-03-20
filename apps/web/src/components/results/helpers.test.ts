@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalyzeAndRewriteV2Response } from '@promptfire/shared';
 import {
+  getVisibleRewritePrompt,
   resolveActionModule,
   resolveFindingIds,
   resolvePrimarySurface,
@@ -354,6 +355,26 @@ describe('results presentation resolvers', () => {
     expect(presentation.visibleSectionIds).toContain('rewrite_panel');
     expect(presentation.rewritePanel.title).toBe('Stronger prompt');
     expect(presentation.rewritePanel.verdictLabel).toBe('Built from your answers');
+  });
+
+  it('suppresses scaffold-shaped rewrites from the visible prompt helper', () => {
+    const result = buildResult({
+      requestSource: 'guided_submit',
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: `Original request:
+Write better copy.
+
+Additional constraints:
+- Primary goal: persuade
+
+Create a stronger, more specific version of the prompt that preserves the user’s intent while adding these boundaries.`,
+      },
+      rewritePresentationMode: 'full_rewrite',
+    });
+
+    expect(getVisibleRewritePrompt(result)).toBeNull();
   });
 
   it('prefers the guided completion form over legacy guided completion text', () => {

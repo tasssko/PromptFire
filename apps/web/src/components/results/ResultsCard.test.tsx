@@ -142,17 +142,17 @@ describe('ResultsCard', () => {
     expect(markup).not.toContain('Recommended rewrite');
   });
 
-  it('renders a stronger prompt card for guided-submit results with a returned rewrite', () => {
+  it('renders a stronger prompt card for guided-submit results even when evaluation is absent', () => {
     const result: AnalyzeAndRewriteV2Response = {
       id: 'par_guided_submit_result',
-      overallScore: 71,
-      scoreBand: 'usable',
-      rewriteRecommendation: 'rewrite_optional',
+      overallScore: 74,
+      scoreBand: 'strong',
+      rewriteRecommendation: 'no_rewrite_needed',
       analysis: {
         scores: {
-          scope: 7,
-          contrast: 7,
-          clarity: 7,
+          scope: 8,
+          contrast: 8,
+          clarity: 8,
           constraintQuality: 6,
           genericOutputRisk: 3,
           tokenWasteRisk: 3,
@@ -166,7 +166,7 @@ describe('ResultsCard', () => {
       bestNextMove: null,
       gating: {
         rewritePreference: 'auto',
-        expectedImprovement: 'high',
+        expectedImprovement: 'low',
         majorBlockingIssues: false,
       },
       rewrite: {
@@ -175,15 +175,7 @@ describe('ResultsCard', () => {
         rewrittenPrompt:
           'Write a short landing page hero for ecommerce founders doing $1M-$10M ARR. Lead with one proof point, end with a demo CTA, and avoid generic marketing buzzwords.',
       },
-      evaluation: {
-        status: 'no_significant_change',
-        overallDelta: 1,
-        signals: [],
-        scoreComparison: {
-          original: { scope: 7, contrast: 6, clarity: 7 },
-          rewrite: { scope: 7, contrast: 7, clarity: 7 },
-        },
-      },
+      evaluation: null,
       rewritePresentationMode: 'full_rewrite',
       requestSource: 'guided_submit',
       guidedCompletion: null,
@@ -216,5 +208,77 @@ describe('ResultsCard', () => {
     expect(markup).toContain('Write a short landing page hero for ecommerce founders doing $1M-$10M ARR.');
     expect(markup).not.toContain('Build stronger prompt');
     expect(markup).not.toContain('Skip and rewrite anyway');
+  });
+
+  it('does not render scaffold text in the stronger prompt card if the backend regresses', () => {
+    const result: AnalyzeAndRewriteV2Response = {
+      id: 'par_guided_submit_scaffold',
+      overallScore: 74,
+      scoreBand: 'strong',
+      rewriteRecommendation: 'no_rewrite_needed',
+      analysis: {
+        scores: {
+          scope: 8,
+          contrast: 8,
+          clarity: 8,
+          constraintQuality: 6,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 3,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Prompt is now bounded enough to use.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+        majorBlockingIssues: false,
+      },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: `Original request:
+Write better copy.
+
+Additional constraints:
+- Primary goal: persuade
+
+Create a stronger, more specific version of the prompt that preserves the user’s intent while adding these boundaries.`,
+      },
+      evaluation: null,
+      rewritePresentationMode: 'full_rewrite',
+      requestSource: 'guided_submit',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+      meta: {
+        version: '2',
+        requestId: 'req_guided_submit_scaffold',
+        latencyMs: 8,
+        providerMode: 'mock',
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <ResultsCard
+        prompt="Write better copy."
+        result={result}
+        presentation={resolveResultsPresentation(result, 'general')}
+        topSuggestions={result.improvementSuggestions}
+        showOptionalRewrite={false}
+        onToggleOptionalRewrite={vi.fn()}
+        onForceRewrite={vi.fn(async () => undefined)}
+        onSubmitGuidedRewrite={vi.fn(async () => undefined)}
+        guidedSubmitLoading={false}
+        onCopyPrompt={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('Stronger prompt');
+    expect(markup).not.toContain('Original request:');
+    expect(markup).not.toContain('Additional constraints:');
+    expect(markup).not.toContain('Create a stronger, more specific version');
   });
 });
