@@ -19,7 +19,7 @@ import {
 export type { ProductState } from '../../config/resultsUiConfig';
 import type { ProductState } from '../../config/resultsUiConfig';
 
-export type PrimarySurfaceKind = 'full-rewrite' | 'guided-completion' | 'no-rewrite-needed';
+export type PrimarySurfaceKind = 'full-rewrite' | 'guided-completion-form' | 'guided-completion-legacy' | 'no-rewrite-needed';
 
 export type HeroView = {
   headline: string;
@@ -32,6 +32,7 @@ export type ActionCardView = {
   title: string;
   lead: string;
   reasons: string[];
+  eyebrow?: string;
   questionTitle?: string;
   questions?: string[];
   templateLabel?: string;
@@ -39,6 +40,8 @@ export type ActionCardView = {
   exampleLabel?: string;
   example?: string;
   primaryActionLabel: string;
+  formSubmitLabel?: string;
+  formSkipLabel?: string;
   secondaryActionLabel?: string;
   secondaryActionExpandedLabel?: string;
   forceRewriteLabel: string;
@@ -104,6 +107,10 @@ export function hasMaterialRewrite(result: AnalyzeAndRewriteV2Response): boolean
   );
 }
 
+export function hasGuidedCompletionForm(result: AnalyzeAndRewriteV2Response): boolean {
+  return Boolean(result.guidedCompletionForm?.enabled && result.guidedCompletionForm.blocks.length > 0);
+}
+
 export function resolvePrimarySurface(result: AnalyzeAndRewriteV2Response): PrimarySurfaceKind {
   if (result.rewriteRecommendation === 'no_rewrite_needed') {
     return 'no-rewrite-needed';
@@ -113,7 +120,11 @@ export function resolvePrimarySurface(result: AnalyzeAndRewriteV2Response): Prim
     return 'full-rewrite';
   }
 
-  return 'guided-completion';
+  if (hasGuidedCompletionForm(result)) {
+    return 'guided-completion-form';
+  }
+
+  return 'guided-completion-legacy';
 }
 
 export function resolveVerdictId(result: AnalyzeAndRewriteV2Response): ResultVerdictId {
@@ -189,6 +200,10 @@ export function resolvePrimaryActionId(result: AnalyzeAndRewriteV2Response): Res
     return 'copy_rewritten_prompt';
   }
 
+  if (primarySurface === 'guided-completion-form') {
+    return 'copy_original_prompt';
+  }
+
   if (result.guidedCompletion?.template) {
     return 'copy_template';
   }
@@ -238,8 +253,18 @@ function resolveGuidedCopy(result: AnalyzeAndRewriteV2Response, role: Role): Gui
 export function resolveHeroView(result: AnalyzeAndRewriteV2Response, role: Role): HeroView {
   const verdict = resultsUiConfig.verdicts[resolveVerdictId(result)];
   const hero = resolveRoleVariant(verdict.hero, role);
-  const primaryAction = resolveActionLabel(resolvePrimaryActionId(result), role);
   const primarySurface = resolvePrimarySurface(result);
+
+  if (primarySurface === 'guided-completion-form') {
+    return {
+      headline: 'Prompt is too open-ended',
+      supporting: 'The prompt needs stronger boundaries before a rewrite can add much value.',
+      primaryAction: 'Complete missing details',
+      secondaryAction: 'Rewrite anyway',
+    };
+  }
+
+  const primaryAction = resolveActionLabel(resolvePrimaryActionId(result), role);
 
   let secondaryAction: string | undefined;
   if (primarySurface !== 'full-rewrite') {
@@ -345,6 +370,7 @@ function positiveReasonForResult(result: AnalyzeAndRewriteV2Response): string[] 
 
 export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: Role): ActionCardView {
   const guidedCompletion = result.guidedCompletion ?? null;
+  const guidedCompletionForm = result.guidedCompletionForm ?? null;
   const guidedCopy = resolveGuidedCopy(result, role);
   const sectionTitles = resolveSectionTitles(result, role);
   const primarySurface = resolvePrimarySurface(result);
@@ -364,10 +390,11 @@ export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: R
 
   return {
     title: sectionTitles.action_card,
+    eyebrow: guidedCompletionForm ? 'Before rewriting' : undefined,
     lead:
       primarySurface === 'no-rewrite-needed'
         ? result.bestNextMove?.title ?? 'Keep the original prompt'
-        : result.bestNextMove?.title ?? guidedCompletion?.title ?? guidedCopy.fallbackLead,
+        : guidedCompletionForm?.title ?? result.bestNextMove?.title ?? guidedCompletion?.title ?? guidedCopy.fallbackLead,
     reasons: fallbackReasons,
     questionTitle: questions?.length ? guidedCopy.questionTitle : undefined,
     questions,
@@ -375,7 +402,9 @@ export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: R
     template: guidedCompletion?.template,
     exampleLabel: !guidedCompletion?.template && guidedCompletion?.example ? guidedCopy.exampleLabel : undefined,
     example: !guidedCompletion?.template ? guidedCompletion?.example : undefined,
-    primaryActionLabel: resolveActionLabel(resolvePrimaryActionId(result), role),
+    primaryActionLabel: guidedCompletionForm?.submitLabel ?? resolveActionLabel(resolvePrimaryActionId(result), role),
+    formSubmitLabel: guidedCompletionForm?.submitLabel,
+    formSkipLabel: guidedCompletionForm?.skipLabel,
     secondaryActionLabel:
       primarySurface === 'full-rewrite'
         ? undefined

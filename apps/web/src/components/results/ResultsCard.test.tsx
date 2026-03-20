@@ -74,6 +74,39 @@ describe('ResultsCard', () => {
         example:
           'Example of a stronger prompt: Write a webhook handler in Node.js using Express that accepts JSON payloads. Validate the request body against a predefined JSON schema. On success, return a 200 status code with a JSON success response. On validation failure, return a 400 status code with a descriptive error message. Exclude unsupported HTTP methods and non-JSON requests.',
       },
+      guidedCompletionForm: {
+        enabled: true,
+        title: 'Complete the missing details',
+        summary: 'This prompt is too open-ended for a strong rewrite. Answer the missing details below and PeakPrompt will build a better version.',
+        submitLabel: 'Build stronger prompt',
+        skipLabel: 'Skip and rewrite anyway',
+        blocks: [
+          {
+            id: 'runtime',
+            kind: 'radio',
+            label: 'What runtime or framework should this target?',
+            required: true,
+            mapsTo: 'context',
+            options: [{ id: 'node_express', label: 'Node.js / Express', value: 'Node.js / Express' }],
+          },
+          {
+            id: 'behaviors',
+            kind: 'checkbox',
+            label: 'Which behaviors must be included?',
+            required: true,
+            mapsTo: 'includes',
+            options: [{ id: 'validation', label: 'Validation', value: 'validation' }],
+          },
+          {
+            id: 'successFailure',
+            kind: 'radio',
+            label: 'How should success and failure be handled?',
+            required: true,
+            mapsTo: 'detail',
+            options: [{ id: 'http_responses', label: 'Explicit HTTP responses', value: 'explicit HTTP responses' }],
+          },
+        ],
+      },
       meta: {
         version: '2',
         requestId: 'req_guided_completion',
@@ -91,6 +124,8 @@ describe('ResultsCard', () => {
         showOptionalRewrite={false}
         onToggleOptionalRewrite={vi.fn()}
         onForceRewrite={vi.fn(async () => undefined)}
+        onSubmitGuidedRewrite={vi.fn(async () => undefined)}
+        guidedSubmitLoading={false}
         onCopyPrompt={vi.fn()}
       />,
     );
@@ -99,9 +134,10 @@ describe('ResultsCard', () => {
     expect(markup).toContain('Score breakdown');
     expect(markup).toContain('Main issues');
     expect(markup).toContain('Best structural fix');
-    expect(markup).toContain('Define input and output shape');
-    expect(markup).toContain('Template');
-    expect(markup).toContain('Copy template');
+    expect(markup).toContain('Complete the missing details');
+    expect(markup).toContain('Before rewriting');
+    expect(markup).toContain('Build stronger prompt');
+    expect(markup).toContain('Skip and rewrite anyway');
     expect(markup).not.toContain('Guided completion');
     expect(markup).not.toContain('Recommended rewrite');
   });

@@ -44,6 +44,7 @@ function buildResult(overrides: Partial<AnalyzeAndRewriteV2Response> = {}): Anal
       summary: 'Add boundaries first.',
       template: 'Write [deliverable].',
     },
+    guidedCompletionForm: null,
     meta: {
       version: '2',
       requestId: 'req_1',
@@ -255,8 +256,8 @@ describe('results presentation resolvers', () => {
     });
 
     const developerPresentation = resolveResultsPresentation(result, 'developer');
-    expect(developerPresentation.hero.supporting).toContain('runtime');
-    expect(resolvePrimarySurface(result)).toBe('guided-completion');
+    expect(developerPresentation.hero.supporting).toContain('boundaries');
+    expect(resolvePrimarySurface(result)).toBe('guided-completion-legacy');
   });
 
   it('keeps guided-completion actions aligned with the available payload', () => {
@@ -296,7 +297,7 @@ describe('results presentation resolvers', () => {
       }),
     );
 
-    expect(surface).toBe('guided-completion');
+    expect(surface).toBe('guided-completion-legacy');
   });
 
   it('keeps a full rewrite as the primary surface only when it is materially better', () => {
@@ -322,5 +323,35 @@ describe('results presentation resolvers', () => {
     );
 
     expect(surface).toBe('full-rewrite');
+  });
+
+  it('prefers the guided completion form over legacy guided completion text', () => {
+    const result = buildResult({
+      rewriteRecommendation: 'rewrite_recommended',
+      guidedCompletionForm: {
+        enabled: true,
+        title: 'Complete the missing details',
+        summary: 'PeakPrompt will build a better version once the prompt has stronger boundaries.',
+        submitLabel: 'Build stronger prompt',
+        skipLabel: 'Skip and rewrite anyway',
+        blocks: [
+          {
+            id: 'goal',
+            kind: 'radio',
+            label: 'What should the output mainly do?',
+            required: true,
+            mapsTo: 'goal',
+            options: [{ id: 'explain', label: 'Explain', value: 'explain' }],
+          },
+        ],
+      },
+    });
+
+    const presentation = resolveResultsPresentation(result, 'general');
+    expect(resolvePrimarySurface(result)).toBe('guided-completion-form');
+    expect(presentation.hero.primaryAction).toBe('Complete missing details');
+    expect(presentation.hero.secondaryAction).toBe('Rewrite anyway');
+    expect(presentation.actionCard.formSubmitLabel).toBe('Build stronger prompt');
+    expect(presentation.actionCard.formSkipLabel).toBe('Skip and rewrite anyway');
   });
 });

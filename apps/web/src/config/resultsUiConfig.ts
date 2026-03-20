@@ -146,7 +146,7 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
     weak: {
       actionCardTitle: {
-        default: { title: 'Best next move' },
+        default: { title: 'Best structural fix' },
         developer: { title: 'Best structural fix' },
       },
       rewritePanelTitle: {
@@ -273,18 +273,18 @@ export const resultsUiConfig: ResultsUiConfig = {
       visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
-          headline: 'This prompt needs tighter boundaries',
-          supporting: 'Define the missing constraints first, then decide whether a rewrite is worth using.',
+          headline: 'Prompt is too open-ended',
+          supporting: 'The prompt needs stronger boundaries before a rewrite can add much value.',
         },
         developer: {
-          supporting: 'Define runtime, payload, validation, and failure boundaries first, then decide whether a rewrite is worth using.',
+          supporting: 'The prompt needs stronger boundaries before a rewrite can add much value.',
         },
       },
       primaryAction: 'copy_template',
       secondaryAction: 'show_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Best next move',
+          title: 'Best structural fix',
           fallbackLead: 'Complete the missing details first',
           fallbackSummary: 'Tighten the missing boundaries before spending time on a rewrite.',
           questionTitle: 'Ask first',
@@ -305,17 +305,17 @@ export const resultsUiConfig: ResultsUiConfig = {
       hero: {
         default: {
           headline: 'Prompt is too open-ended',
-          supporting: 'The prompt needs stronger constraints before a rewrite can add much value.',
+          supporting: 'The prompt needs stronger boundaries before a rewrite can add much value.',
         },
         developer: {
-          supporting: 'The prompt needs explicit runtime, payload, validation, and failure constraints before a rewrite can add much value.',
+          supporting: 'The prompt needs stronger boundaries before a rewrite can add much value.',
         },
       },
       primaryAction: 'copy_template',
       secondaryAction: 'generate_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Best next move',
+          title: 'Best structural fix',
           fallbackLead: 'Complete the missing details first',
           fallbackSummary: 'Tighten the missing boundaries before spending time on a rewrite.',
           questionTitle: 'Ask first',
@@ -416,13 +416,13 @@ export const resultsUiConfig: ResultsUiConfig = {
     copy_questions: { text: { default: { label: 'Copy questions' } } },
     show_rewrite_anyway: { text: { default: { label: 'Show rewrite anyway' } } },
     hide_rewrite_anyway: { text: { default: { label: 'Hide rewrite anyway' } } },
-    generate_rewrite_anyway: { text: { default: { label: 'Generate rewrite anyway' } } },
+    generate_rewrite_anyway: { text: { default: { label: 'Rewrite anyway' } } },
     copy_rewrite_anyway: { text: { default: { label: 'Copy rewrite anyway' } } },
   },
   sections: {
     findings: { title: { default: { value: 'Main issues' } } },
     subscores: { title: { default: { value: 'Score breakdown' } } },
-    action_card: { title: { default: { value: 'Best next move' } } },
+    action_card: { title: { default: { value: 'Best structural fix' } } },
     rewrite_panel: { title: { default: { value: 'Recommended rewrite' } } },
     technical_details: { title: { default: { value: 'Show full analysis' } } },
   },

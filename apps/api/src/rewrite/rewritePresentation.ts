@@ -2,6 +2,8 @@ import type {
   Analysis,
   BestNextMove,
   GuidedCompletion,
+  GuidedCompletionForm,
+  GuidedQuestionBlock,
   ImprovementSuggestion,
   Rewrite,
   RewritePreference,
@@ -464,6 +466,411 @@ export function buildGuidedCompletionExample(params: {
     return null;
   }
   return null;
+}
+
+function promptHasAudience(prompt: string): boolean {
+  return /\b(for|to|aimed at|target(?:ing|ed at)?|tailored for)\s+(?:an?\s+|the\s+)?(?:[a-z-]+\s+){0,6}(?:cto|ctos|developers?|engineers?|marketers?|admins?|leaders?|buyers?|decision-makers?|directors?|teams?|founders?|managers?|operators?|customers?|prospects?|audience|users?)\b/i.test(
+    prompt,
+  );
+}
+
+function option(id: string, label: string, value = label, hint?: string): NonNullable<GuidedQuestionBlock['options']>[number] {
+  return {
+    id,
+    label,
+    value,
+    hint,
+  };
+}
+
+function block(config: GuidedQuestionBlock): GuidedQuestionBlock {
+  return config;
+}
+
+function pushBlock(blocks: GuidedQuestionBlock[], next: GuidedQuestionBlock): void {
+  if (!blocks.some((block) => block.id === next.id)) {
+    blocks.push(next);
+  }
+}
+
+function trimBlocks(blocks: GuidedQuestionBlock[], max = 5): GuidedQuestionBlock[] {
+  return blocks.slice(0, max);
+}
+
+function buildGeneralBlocks(params: {
+  prompt: string;
+  analysis: Analysis;
+  missing: EffectiveContextLike['missingContextType'];
+  bestMoveText: string;
+  suggestionsText: string;
+}): GuidedQuestionBlock[] {
+  const blocks: GuidedQuestionBlock[] = [];
+  pushBlock(
+    blocks,
+    block({
+      id: 'goal',
+      kind: 'radio',
+      label: 'What should the output mainly do?',
+      required: true,
+      mapsTo: 'goal',
+      options: [
+        option('persuade', 'Persuade', 'persuade'),
+        option('explain', 'Explain', 'explain'),
+        option('compare', 'Compare trade-offs', 'compare trade-offs'),
+        option('instruct', 'Instruct step by step', 'instruct step by step'),
+        option('summarize', 'Summarize', 'summarize'),
+        option('brainstorm', 'Brainstorm', 'brainstorm'),
+      ],
+    }),
+  );
+  if (params.missing === 'audience' || params.analysis.detectedIssueCodes.includes('AUDIENCE_MISSING') || !promptHasAudience(params.prompt)) {
+    pushBlock(
+      blocks,
+      block({
+        id: 'audience',
+        kind: 'text',
+        label: 'Who is this for?',
+        help: 'Name the audience or decision-maker.',
+        mapsTo: 'audience',
+        placeholder: 'For example: CTOs at mid-sized SaaS companies',
+      }),
+    );
+  }
+  pushBlock(
+    blocks,
+    block({
+      id: 'includes',
+      kind: 'checkbox',
+      label: 'What should the output include?',
+      required: true,
+      mapsTo: 'includes',
+      options: [
+        option('examples', 'Examples', 'examples'),
+        option('tradeoffs', 'Trade-offs', 'trade-offs'),
+        option('recommendations', 'Specific recommendations', 'specific recommendations'),
+        option('steps', 'Step-by-step structure', 'step-by-step structure'),
+        option('proof', 'Evidence or proof', 'evidence or proof'),
+        option('objections', 'Objections or limitations', 'objections or limitations'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'excludes',
+      kind: 'checkbox',
+      label: 'What should it avoid?',
+      mapsTo: 'excludes',
+      options: [
+        option('hype', 'Hype', 'hype'),
+        option('generic_filler', 'Generic filler', 'generic filler'),
+        option('jargon', 'Jargon', 'jargon'),
+        option('background', 'Broad background explanation', 'broad background explanation'),
+        option('unsupported_claims', 'Unsupported claims', 'unsupported claims'),
+        option('repetition', 'Repetition', 'repetition'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'format',
+      kind: 'radio',
+      label: 'What format should it use?',
+      required: true,
+      mapsTo: 'format',
+      options: [
+        option('bullets', 'Bullets', 'bullets'),
+        option('sections', 'Sections with headings', 'sections with headings'),
+        option('memo', 'Short memo', 'short memo'),
+        option('blog_post', 'Blog post', 'blog post'),
+        option('landing_page', 'Landing page', 'landing page'),
+        option('checklist', 'Checklist', 'checklist'),
+      ],
+    }),
+  );
+  if (
+    params.missing === 'comparison' ||
+    params.missing === 'source' ||
+    /trade-off|criteria|proof|evidence|source|ground/i.test(params.bestMoveText + params.suggestionsText)
+  ) {
+    pushBlock(
+      blocks,
+      block({
+        id: 'nuance',
+        kind: 'text',
+        label: params.missing === 'source' ? 'What proof or grounding should it use?' : 'What nuance should shape the answer?',
+        mapsTo: params.missing === 'source' ? 'proof' : 'detail',
+        placeholder:
+          params.missing === 'source'
+            ? 'For example: use customer evidence, internal docs, or cited trade-offs'
+            : 'For example: compare speed vs control, or optimize for practical recommendations',
+      }),
+    );
+  }
+  return trimBlocks(blocks);
+}
+
+function buildDeveloperBlocks(params: {
+  missing: EffectiveContextLike['missingContextType'];
+  bestMoveText: string;
+  suggestionsText: string;
+}): GuidedQuestionBlock[] {
+  const blocks: GuidedQuestionBlock[] = [];
+  pushBlock(
+    blocks,
+    block({
+      id: 'runtime',
+      kind: 'radio',
+      label: 'What runtime or framework should this target?',
+      required: true,
+      mapsTo: 'context',
+      options: [
+        option('node_express', 'Node.js / Express', 'Node.js / Express'),
+        option('node_fastify', 'Node.js / Fastify', 'Node.js / Fastify'),
+        option('python_fastapi', 'Python / FastAPI', 'Python / FastAPI'),
+        option('python_flask', 'Python / Flask', 'Python / Flask'),
+        option('typescript', 'TypeScript', 'TypeScript'),
+        option('other', 'Other', 'Other'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'inputFormat',
+      kind: 'radio',
+      label: 'What input format should it handle?',
+      required: true,
+      mapsTo: 'context',
+      options: [
+        option('json', 'JSON', 'JSON'),
+        option('form_data', 'Form data', 'form data'),
+        option('query_params', 'Query params', 'query params'),
+        option('webhook_payload', 'Webhook payload', 'webhook payload'),
+        option('file_input', 'File input', 'file input'),
+        option('other', 'Other', 'Other'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'behaviors',
+      kind: 'checkbox',
+      label: 'Which behaviors must be included?',
+      required: true,
+      mapsTo: 'includes',
+      options: [
+        option('validation', 'Validation', 'validation'),
+        option('retries', 'Retries', 'retries'),
+        option('idempotency', 'Idempotency', 'idempotency'),
+        option('auth_signature', 'Auth/signature verification', 'auth/signature verification'),
+        option('structured_errors', 'Structured errors', 'structured errors'),
+        option('logging', 'Logging', 'logging'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'successFailure',
+      kind: 'radio',
+      label: 'How should success and failure be handled?',
+      required: true,
+      mapsTo: 'detail',
+      options: [
+        option('http_responses', 'Explicit HTTP responses', 'explicit HTTP responses'),
+        option('return_object', 'Return object only', 'return object only'),
+        option('typed_errors', 'Throw typed errors', 'throw typed errors'),
+        option('framework_default', 'Framework default handling', 'framework default handling'),
+      ],
+    }),
+  );
+  if (params.missing === 'boundary' || /auth|signature|middleware|env|setup|routing|test|schema/i.test(params.bestMoveText + params.suggestionsText)) {
+    pushBlock(
+      blocks,
+      block({
+        id: 'setupBoundaries',
+        kind: 'checkbox',
+        label: 'Which setup boundaries should be explicit?',
+        mapsTo: 'context',
+        options: [
+          option('env_config', 'Env config', 'env config'),
+          option('middleware', 'Middleware', 'middleware'),
+          option('routing', 'Routing', 'routing'),
+          option('tests', 'Tests', 'tests'),
+          option('schema_definition', 'Schema definition', 'schema definition'),
+        ],
+      }),
+    );
+  }
+  if (blocks.length < 5 && /exclude|avoid|out of scope/i.test(params.bestMoveText + params.suggestionsText)) {
+    pushBlock(
+      blocks,
+      block({
+        id: 'exclusions',
+        kind: 'text',
+        label: 'What should stay out of scope?',
+        mapsTo: 'excludes',
+        placeholder: 'For example: skip persistence, background jobs, or unsupported methods',
+      }),
+    );
+  }
+  return trimBlocks(blocks);
+}
+
+function buildMarketerBlocks(params: {
+  prompt: string;
+  missing: EffectiveContextLike['missingContextType'];
+}): GuidedQuestionBlock[] {
+  const blocks: GuidedQuestionBlock[] = [];
+  pushBlock(
+    blocks,
+    block({
+      id: 'job',
+      kind: 'radio',
+      label: 'What job should the copy do?',
+      required: true,
+      mapsTo: 'goal',
+      options: [
+        option('demo_bookings', 'Drive demo bookings', 'drive demo bookings'),
+        option('signups', 'Drive signups', 'drive signups'),
+        option('value', 'Explain product value', 'explain product value'),
+        option('objections', 'Handle objections', 'handle objections'),
+        option('compare', 'Compare against alternatives', 'compare against alternatives'),
+      ],
+    }),
+  );
+  if (params.missing === 'audience' || !promptHasAudience(params.prompt)) {
+    pushBlock(
+      blocks,
+      block({
+        id: 'audience',
+        kind: 'text',
+        label: 'Who is the audience?',
+        required: true,
+        mapsTo: 'audience',
+        placeholder: 'For example: IT directors at regulated mid-market companies',
+      }),
+    );
+  }
+  pushBlock(
+    blocks,
+    block({
+      id: 'includes',
+      kind: 'checkbox',
+      label: 'What should the copy include?',
+      required: true,
+      mapsTo: 'includes',
+      options: [
+        option('pain_points', 'Pain points', 'pain points'),
+        option('proof_points', 'Proof points', 'proof points'),
+        option('differentiation', 'Differentiation', 'differentiation'),
+        option('compliance', 'Compliance/security', 'compliance/security'),
+        option('onboarding', 'Onboarding/offboarding', 'onboarding/offboarding'),
+        option('integrations', 'Integration ease', 'integration ease'),
+        option('cta', 'CTA', 'CTA'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'excludes',
+      kind: 'checkbox',
+      label: 'What should it avoid?',
+      mapsTo: 'excludes',
+      options: [
+        option('hype', 'Hype', 'hype'),
+        option('cliches', 'Cliches', 'cliches'),
+        option('vague_transform', 'Vague transformation language', 'vague transformation language'),
+        option('unsupported_superiority', 'Unsupported superiority claims', 'unsupported superiority claims'),
+        option('banned_topics', 'Banned topics', 'banned topics'),
+      ],
+    }),
+  );
+  pushBlock(
+    blocks,
+    block({
+      id: 'format',
+      kind: 'radio',
+      label: 'What format should it use?',
+      required: true,
+      mapsTo: 'format',
+      options: [
+        option('hero_sections', 'Hero + sections', 'hero + sections'),
+        option('landing_page', 'Landing page', 'landing page'),
+        option('email', 'Email', 'email'),
+        option('ad_copy', 'Ad copy', 'ad copy'),
+        option('comparison_page', 'Comparison page', 'comparison page'),
+      ],
+    }),
+  );
+  if (blocks.length < 5) {
+    pushBlock(
+      blocks,
+      block({
+        id: 'differentiator',
+        kind: 'text',
+        label: 'What proof point or differentiator matters most?',
+        mapsTo: 'proof',
+        placeholder: 'For example: audit readiness, faster onboarding, or smoother integrations',
+      }),
+    );
+  }
+  return trimBlocks(blocks);
+}
+
+export function buildGuidedCompletionForm(params: {
+  prompt: string;
+  role: Role;
+  mode: 'template_with_example' | 'questions_only';
+  analysis: Analysis;
+  semanticPolicy?: SemanticRewritePolicy | null;
+  bestNextMove: BestNextMove | null;
+  improvementSuggestions: ImprovementSuggestion[];
+  effectiveAnalysisContext?: EffectiveContextLike;
+}): GuidedCompletionForm | null {
+  if (params.mode !== 'template_with_example' && params.mode !== 'questions_only') {
+    return null;
+  }
+
+  const role = params.effectiveAnalysisContext?.role ?? params.role;
+  const missing = params.effectiveAnalysisContext?.missingContextType ?? null;
+  const bestMoveText = `${params.bestNextMove?.title ?? ''} ${params.bestNextMove?.rationale ?? ''}`.toLowerCase();
+  const suggestionsText = params.improvementSuggestions.map((item) => `${item.title} ${item.reason}`.toLowerCase()).join(' ');
+
+  const blocks =
+    role === 'developer'
+      ? buildDeveloperBlocks({ missing, bestMoveText, suggestionsText })
+      : role === 'marketer'
+        ? buildMarketerBlocks({ prompt: params.prompt, missing })
+        : buildGeneralBlocks({
+            prompt: params.prompt,
+            analysis: params.analysis,
+            missing,
+            bestMoveText,
+            suggestionsText,
+          });
+
+  if (blocks.length === 0) {
+    return null;
+  }
+
+  return {
+    enabled: true,
+    title: 'Complete the missing details',
+    summary:
+      'This prompt is too open-ended for a strong rewrite. Answer the missing details below and PeakPrompt will build a better version.',
+    rationale:
+      params.mode === 'questions_only'
+        ? 'A direct rewrite is likely to guess at missing intent, so guided boundaries are safer first.'
+        : 'A stronger rewrite needs clearer boundaries before it can improve the prompt materially.',
+    submitLabel: 'Build stronger prompt',
+    skipLabel: 'Skip and rewrite anyway',
+    blocks,
+  };
 }
 
 export function buildGuidedCompletion(params: {

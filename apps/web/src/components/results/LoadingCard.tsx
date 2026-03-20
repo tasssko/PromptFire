@@ -3,9 +3,10 @@ import { loadingCopy, loadingStepLabels } from './loadingState';
 
 type LoadingCardProps = {
   state: 'loading-local' | 'loading-inference';
+  supportingOverride?: string;
 };
 
-export function LoadingCard({ state }: LoadingCardProps) {
+export function LoadingCard({ state, supportingOverride }: LoadingCardProps) {
   const copy = loadingCopy(state);
   const [step1, step2, step3] = loadingStepLabels(state);
 
@@ -13,7 +14,7 @@ export function LoadingCard({ state }: LoadingCardProps) {
     <section className="grid gap-4 rounded-xl border border-pf-border-default bg-pf-bg-card p-6 shadow-md max-sm:p-4">
       <SurfaceCard tone="default">
         <h2 className="text-[1.2rem] font-semibold text-pf-text-primary">{copy.headline}</h2>
-        <p>{copy.supporting}</p>
+        <p>{supportingOverride ?? copy.supporting}</p>
 
         <ol className="mt-1 grid gap-2">
           <li className="rounded-md border border-pf-border-subtle bg-pf-bg-cardSubtle px-3 py-2 text-sm">

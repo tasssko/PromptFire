@@ -1,4 +1,5 @@
 import type { AnalyzeAndRewriteV2Response, ImprovementSuggestion } from '@promptfire/shared';
+import { GuidedCompletionFormCard } from './GuidedCompletionFormCard';
 import {
   FindingsList,
   FullRewriteCard,
@@ -7,7 +8,7 @@ import {
   ScoreBreakdown,
   TechnicalDetailsDrawer,
 } from './ResultSections';
-import { getRewritePresentationMode, type ResultsPresentation } from './helpers';
+import { getRewritePresentationMode, hasGuidedCompletionForm, type ResultsPresentation } from './helpers';
 
 type ResultsCardProps = {
   prompt: string;
@@ -17,6 +18,8 @@ type ResultsCardProps = {
   showOptionalRewrite: boolean;
   onToggleOptionalRewrite: () => void;
   onForceRewrite: () => Promise<void>;
+  onSubmitGuidedRewrite: (answers: Record<string, string | string[]>) => Promise<void>;
+  guidedSubmitLoading: boolean;
   onCopyPrompt: (value: string) => void;
 };
 
@@ -28,9 +31,12 @@ export function ResultsCard({
   showOptionalRewrite,
   onToggleOptionalRewrite,
   onForceRewrite,
+  onSubmitGuidedRewrite,
+  guidedSubmitLoading,
   onCopyPrompt,
 }: ResultsCardProps) {
   const rewritePresentationMode = getRewritePresentationMode(result);
+  const showGuidedForm = hasGuidedCompletionForm(result);
   const questionsText = (result.guidedCompletion?.questions ?? []).map((question, index) => `${index + 1}. ${question}`).join('\n');
   const guidedPrimaryValue =
     result.guidedCompletion?.template ?? result.guidedCompletion?.example ?? (questionsText.length > 0 ? questionsText : prompt);
@@ -45,11 +51,20 @@ export function ResultsCard({
       return;
     }
 
+    if (presentation.primarySurface === 'guided-completion-form') {
+      globalThis.document?.getElementById('guided-completion-form-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
     onCopyPrompt(guidedPrimaryValue);
   };
   const heroSecondaryAction =
     presentation.primarySurface === 'full-rewrite'
       ? undefined
+      : presentation.primarySurface === 'guided-completion-form'
+        ? () => {
+            void onForceRewrite();
+          }
       : result.rewrite || rewritePresentationMode === 'suppressed'
         ? () => {
             if (result.rewrite) {
@@ -71,16 +86,32 @@ export function ResultsCard({
       {visibleSections.has('findings') && <FindingsList findings={presentation.findings} title={presentation.sectionTitles.findings} />}
 
       {visibleSections.has('action_card') && (
-        <GuidedCompletionCard
-          prompt={prompt}
-          result={result}
-          topSuggestions={topSuggestions}
-          view={presentation.actionCard}
-          showOptionalRewrite={showOptionalRewrite}
-          onCopyPrompt={onCopyPrompt}
-          onToggleOptionalRewrite={onToggleOptionalRewrite}
-          onForceRewrite={onForceRewrite}
-        />
+        <>
+          {showGuidedForm && result.guidedCompletionForm ? (
+            <div id="guided-completion-form-card">
+              <GuidedCompletionFormCard
+                prompt={prompt}
+                view={presentation.actionCard}
+                form={result.guidedCompletionForm}
+                submitting={guidedSubmitLoading}
+                onSubmitGuidedRewrite={onSubmitGuidedRewrite}
+                onForceRewrite={onForceRewrite}
+                onCopyPrompt={onCopyPrompt}
+              />
+            </div>
+          ) : (
+            <GuidedCompletionCard
+              prompt={prompt}
+              result={result}
+              topSuggestions={topSuggestions}
+              view={presentation.actionCard}
+              showOptionalRewrite={showOptionalRewrite}
+              onCopyPrompt={onCopyPrompt}
+              onToggleOptionalRewrite={onToggleOptionalRewrite}
+              onForceRewrite={onForceRewrite}
+            />
+          )}
+        </>
       )}
 
       {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'full-rewrite' && result.rewrite && result.evaluation && (

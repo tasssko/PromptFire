@@ -51,6 +51,28 @@ describe('API vertical slice', () => {
     return JSON.parse(response.body);
   }
 
+  async function rewriteFromGuidedAnswers(input: {
+    prompt: string;
+    role: 'general' | 'developer' | 'marketer';
+    guidedAnswers: Record<string, string | string[]>;
+  }): Promise<AnalyzeAndRewriteV2Response> {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/rewrite-from-guided-answers',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        ...input,
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    return JSON.parse(response.body);
+  }
+
   function expectTextToAvoidSnippets(text: string, forbidden: string[]): void {
     const lowered = text.toLowerCase();
     for (const snippet of forbidden) {
@@ -265,6 +287,7 @@ describe('API vertical slice', () => {
       expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
       expect(body.rewritePresentationMode).toBe('suppressed');
       expect(body.guidedCompletion).toBeNull();
+      expect(body.guidedCompletionForm).toBeNull();
     });
 
     it('uses semantic family gaps for guided completion on owned prompts', async () => {
@@ -276,6 +299,7 @@ describe('API vertical slice', () => {
       expect(['rewrite_recommended', 'rewrite_optional']).toContain(body.rewriteRecommendation);
       expect(['template_with_example', 'questions_only']).toContain(body.rewritePresentationMode ?? 'suppressed');
       expect(body.guidedCompletion).toBeTruthy();
+      expect(body.guidedCompletionForm?.blocks.length).toBeGreaterThanOrEqual(3);
       const questionText = (body.guidedCompletion?.questions ?? []).join(' ').toLowerCase();
       expect(questionText).toMatch(/deliverable|context|criteria/);
       expect(questionText).not.toMatch(/who is the exact audience|format or structure should the response follow/);
@@ -303,7 +327,25 @@ describe('API vertical slice', () => {
       expect(body.rewriteRecommendation).toBe('no_rewrite_needed');
       expect(body.rewritePresentationMode).toBe('suppressed');
       expect(body.guidedCompletion).toBeNull();
+      expect(body.guidedCompletionForm).toBeNull();
     });
+  });
+
+  it('returns a standard analyzed response for guided rewrite submissions', async () => {
+    const body = await rewriteFromGuidedAnswers({
+      prompt: 'Write a webhook handler.',
+      role: 'developer',
+      guidedAnswers: {
+        runtime: 'Node.js / Express',
+        inputFormat: 'webhook payload',
+        behaviors: ['validation', 'auth/signature verification', 'structured errors'],
+        successFailure: 'explicit HTTP responses',
+      },
+    });
+
+    expect(body.id.startsWith('par_')).toBe(true);
+    expect(body.analysis.summary.length).toBeGreaterThan(0);
+    expect(body.meta.version).toBe('2');
   });
 
   it('supports magic-link login, session lookup, and logout', async () => {

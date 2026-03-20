@@ -294,4 +294,84 @@ describe('persistPromptRun', () => {
       ],
     });
   });
+
+  it('accepts guided rewrite endpoint persistence with guided metadata in inference data', async () => {
+    mocks.hasDatabaseUrl.mockReturnValue(true);
+
+    await persistPromptRun({
+      endpoint: '/v2/rewrite-from-guided-answers',
+      requestId: 'req_guided',
+      userId: 'usr_guided',
+      sessionId: 'ses_guided',
+      input: {
+        prompt: 'Write better copy.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      },
+      response: {
+        id: 'par_guided',
+        overallScore: 68,
+        scoreBand: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+        analysis: {
+          scores: {
+            scope: 7,
+            contrast: 6,
+            clarity: 7,
+            constraintQuality: 6,
+            genericOutputRisk: 4,
+            tokenWasteRisk: 3,
+          },
+          issues: [],
+          detectedIssueCodes: [],
+          signals: [],
+          summary: 'Improved prompt.',
+        },
+        improvementSuggestions: [],
+        bestNextMove: null,
+        gating: {
+          rewritePreference: 'auto',
+          expectedImprovement: 'high',
+          majorBlockingIssues: false,
+        },
+        rewrite: null,
+        evaluation: null,
+        rewritePresentationMode: 'suppressed',
+        guidedCompletion: null,
+        guidedCompletionForm: null,
+        inferenceFallbackUsed: false,
+        resolutionSource: 'local',
+        meta: {
+          version: '2',
+          requestId: 'req_guided',
+          latencyMs: 8,
+          providerMode: 'mock',
+        },
+      },
+      inferenceData: {
+        guidedRewrite: {
+          kind: 'guided_completion',
+          originalPrompt: 'Write better copy.',
+          mergedPrompt: 'Original request:\nWrite better copy.',
+          guidedAnswers: {
+            goal: 'persuade',
+          },
+        },
+      },
+    });
+
+    expect(mocks.insertCalls[0]).toMatchObject({
+      table: mocks.promptRuns,
+      values: expect.objectContaining({
+        endpoint: '/v2/rewrite-from-guided-answers',
+        originalPrompt: 'Write better copy.',
+        inferenceData: expect.objectContaining({
+          guidedRewrite: expect.objectContaining({
+            kind: 'guided_completion',
+          }),
+        }),
+      }),
+    });
+  });
 });

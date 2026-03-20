@@ -3,6 +3,7 @@ import {
   API_VERSION,
   AnalyzeAndRewriteRequestSchema,
   AnalyzeAndRewriteResponseSchema,
+  GuidedRewriteRequestSchema,
   AnalyzeAndRewriteV2RequestSchema,
   AnalyzeAndRewriteV2ResponseSchema,
   V2_API_VERSION,
@@ -211,11 +212,49 @@ describe('shared contracts', () => {
         template: 'Write [deliverable] for [audience].',
         example: 'Example of a stronger prompt: Write...',
       },
+      guidedCompletionForm: {
+        enabled: true,
+        title: 'Complete the missing details',
+        summary: 'PeakPrompt can build a stronger prompt once the missing boundaries are filled in.',
+        submitLabel: 'Build stronger prompt',
+        skipLabel: 'Skip and rewrite anyway',
+        blocks: [
+          {
+            id: 'goal',
+            kind: 'radio',
+            label: 'What should this prompt do?',
+            required: true,
+            mapsTo: 'goal',
+            options: [
+              {
+                id: 'explain',
+                label: 'Explain',
+                value: 'explain',
+              },
+            ],
+          },
+        ],
+      },
       meta: {
         version: V2_API_VERSION,
         requestId: 'req_v2_gc',
         latencyMs: 0,
         providerMode: 'mock',
+      },
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it('validates guided rewrite submit requests', () => {
+    const parsed = GuidedRewriteRequestSchema.safeParse({
+      prompt: 'Write better copy.',
+      role: 'general',
+      mode: 'balanced',
+      rewritePreference: 'auto',
+      guidedAnswers: {
+        goal: 'persuade',
+        includes: ['examples', 'specific recommendations'],
       },
     });
 

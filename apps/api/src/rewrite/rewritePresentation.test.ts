@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Analysis, EvaluationV2, Rewrite } from '@promptfire/shared';
 import type { SemanticRewritePolicy } from '@promptfire/heuristics';
-import { buildGuidedCompletion, selectRewritePresentationMode } from './rewritePresentation';
+import { buildGuidedCompletion, buildGuidedCompletionForm, selectRewritePresentationMode } from './rewritePresentation';
 
 function analysis(overrides?: Partial<Analysis>): Analysis {
   return {
@@ -474,5 +474,85 @@ describe('rewrite presentation fallback', () => {
     const joined = guided?.questions?.join(' ').toLowerCase() ?? '';
     expect(joined).toMatch(/who is the exact audience|format or structure should the response follow/);
     expect(guided?.summary.toLowerCase()).toContain('too underspecified');
+  });
+
+  it('builds compact general guided forms for thin prompts', () => {
+    const form = buildGuidedCompletionForm({
+      prompt: 'Write better copy.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis({
+        issues: [],
+        detectedIssueCodes: [],
+      }),
+      semanticPolicy: semanticPolicy({
+        semanticOwned: false,
+        family: 'analysis',
+        primaryGap: 'criteria',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: 'audience',
+      },
+    });
+
+    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['goal', 'audience', 'includes', 'excludes', 'format']));
+    expect(form?.blocks).toHaveLength(5);
+  });
+
+  it('builds developer guided forms with runtime, input, and execution details', () => {
+    const form = buildGuidedCompletionForm({
+      prompt: 'Write a webhook handler.',
+      role: 'developer',
+      mode: 'template_with_example',
+      analysis: analysis(),
+      semanticPolicy: semanticPolicy(),
+      bestNextMove: {
+        id: 'define_runtime',
+        type: 'clarify_output_structure',
+        title: 'Define auth and retries',
+        rationale: 'The request is missing auth, retry, and setup expectations.',
+        expectedImpact: 'high',
+        targetScores: ['constraintQuality'],
+      },
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'developer',
+        missingContextType: 'boundary',
+      },
+    });
+
+    expect(form?.blocks.map((block) => block.id)).toEqual(
+      expect.arrayContaining(['runtime', 'inputFormat', 'behaviors', 'successFailure', 'setupBoundaries']),
+    );
+    expect(form?.blocks.find((block) => block.id === 'runtime')?.kind).toBe('radio');
+    expect(form?.blocks.find((block) => block.id === 'behaviors')?.kind).toBe('checkbox');
+  });
+
+  it('builds marketer guided forms without re-asking audience when it is already explicit', () => {
+    const form = buildGuidedCompletionForm({
+      prompt: 'Write landing page copy for IT directors at regulated mid-market companies about our IAM platform.',
+      role: 'marketer',
+      mode: 'template_with_example',
+      analysis: analysis({
+        detectedIssueCodes: ['CONSTRAINTS_MISSING'],
+      }),
+      semanticPolicy: semanticPolicy({
+        semanticOwned: false,
+        family: 'analysis',
+        primaryGap: 'boundary',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'marketer',
+        missingContextType: 'boundary',
+      },
+    });
+
+    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['job', 'includes', 'excludes', 'format']));
+    expect(form?.blocks.map((block) => block.id)).not.toContain('audience');
   });
 });

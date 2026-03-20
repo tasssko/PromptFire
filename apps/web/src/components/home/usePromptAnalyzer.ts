@@ -11,6 +11,33 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
 
+type GuidedRewriteRequestBody = {
+  prompt: string;
+  role: Role;
+  mode: Mode;
+  rewritePreference: RewritePreference;
+  guidedAnswers: Record<string, string | string[]>;
+};
+
+export async function submitGuidedRewriteRequest(
+  apiBaseUrl: string,
+  body: GuidedRewriteRequestBody,
+): Promise<{ ok: boolean; payload: AnalyzeAndRewriteV2Response | { error?: { message?: string } } }> {
+  const response = await fetch(`${apiBaseUrl}/v2/rewrite-from-guided-answers`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return {
+    ok: response.ok,
+    payload: await response.json(),
+  };
+}
+
 export function usePromptAnalyzer() {
   const [prompt, setPrompt] = useState(fixtures.general);
   const [role, setRole] = useState<Role>('general');
@@ -21,6 +48,7 @@ export function usePromptAnalyzer() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeAndRewriteV2Response | null>(null);
   const [showOptionalRewrite, setShowOptionalRewrite] = useState(false);
+  const [guidedSubmitLoading, setGuidedSubmitLoading] = useState(false);
 
   const canSubmit = useMemo(() => prompt.trim().length > 0 && !loading, [prompt, loading]);
 
@@ -78,6 +106,46 @@ export function usePromptAnalyzer() {
     await submitAnalysis('force');
   }
 
+  async function submitGuidedRewrite(guidedAnswers: Record<string, string | string[]>) {
+    setLoading(true);
+    setGuidedSubmitLoading(true);
+    setUiState('loading-local');
+    setResult(null);
+    setError(null);
+    const inferenceStageTimer = globalThis.setTimeout(() => {
+      setUiState((value) => (value === 'loading-local' ? 'loading-inference' : value));
+    }, 900);
+
+    try {
+      const { ok, payload } = await submitGuidedRewriteRequest(API_BASE_URL, {
+        prompt,
+        role,
+        mode,
+        rewritePreference,
+        guidedAnswers,
+      });
+
+      if (!ok) {
+        const errorPayload = payload as { error?: { message?: string } };
+        setResult(null);
+        setError(errorPayload.error?.message ?? 'Request failed.');
+        setUiState('error');
+      } else {
+        setResult(payload as AnalyzeAndRewriteV2Response);
+        setShowOptionalRewrite(false);
+        setUiState(resolveSuccessState(payload as AnalyzeAndRewriteV2Response));
+      }
+    } catch {
+      setResult(null);
+      setError('Network error while calling API.');
+      setUiState('error');
+    } finally {
+      clearTimeout(inferenceStageTimer);
+      setLoading(false);
+      setGuidedSubmitLoading(false);
+    }
+  }
+
   function copyText(value: string) {
     void navigator.clipboard.writeText(value);
   }
@@ -100,6 +168,7 @@ export function usePromptAnalyzer() {
     showOptionalRewrite,
     panel,
     uiState,
+    guidedSubmitLoading,
     roles,
     modes,
     setPrompt,
@@ -109,6 +178,7 @@ export function usePromptAnalyzer() {
     setShowOptionalRewrite,
     handleSubmit,
     handleForceRewrite,
+    submitGuidedRewrite,
     copyText,
   };
 }

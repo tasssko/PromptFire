@@ -79,13 +79,18 @@ export function PublicHomepage({
         showOptionalRewrite={analyzer.showOptionalRewrite}
         onToggleOptionalRewrite={() => analyzer.setShowOptionalRewrite((value) => !value)}
         onForceRewrite={analyzer.handleForceRewrite}
+        onSubmitGuidedRewrite={analyzer.submitGuidedRewrite}
+        guidedSubmitLoading={analyzer.guidedSubmitLoading}
         onCopyPrompt={analyzer.copyText}
       />
     ) : undefined;
 
   const loadingCard =
     analyzer.panel === 'loading' ? (
-      <LoadingCard state={analyzer.uiState === 'loading-inference' ? 'loading-inference' : 'loading-local'} />
+      <LoadingCard
+        state={analyzer.uiState === 'loading-inference' ? 'loading-inference' : 'loading-local'}
+        supportingOverride={analyzer.guidedSubmitLoading ? 'Building a stronger prompt from your answers...' : undefined}
+      />
     ) : undefined;
 
   return (

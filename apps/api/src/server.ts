@@ -16,6 +16,7 @@ import {
 import type { PromptPattern } from '@promptfire/heuristics';
 import {
   AnalyzeAndRewriteV2RequestSchema,
+  GuidedRewriteRequestSchema,
   AnalyzeAndRewriteRequestSchema,
   API_VERSION,
   MagicLinkRequestSchema,
@@ -28,6 +29,7 @@ import {
   type AnalyzeAndRewriteV2Response,
   type Analysis,
   type BestNextMove,
+  type GuidedAnswers,
   type ImprovementStatus,
   type Issue,
   type Role,
@@ -68,7 +70,7 @@ import {
 import { ProviderNotConfiguredError, UpstreamRewriteError } from './rewrite/errors';
 import { selectRewriteEngine } from './rewrite/engineSelector';
 import { getProviderConfig } from './rewrite/providerConfig';
-import { buildGuidedCompletion, selectRewritePresentationMode } from './rewrite/rewritePresentation';
+import { buildGuidedCompletion, buildGuidedCompletionForm, selectRewritePresentationMode } from './rewrite/rewritePresentation';
 import type { InternalLadderTrace } from './rewrite/types';
 import { evaluateInferenceTrigger, mergeContextWithInference } from './inference/fallbackResolver';
 import { buildEffectiveResolution } from './inference/effectiveContext';
@@ -192,6 +194,654 @@ function logInferenceCase(params: {
       timestamp: new Date().toISOString(),
     }),
   );
+}
+
+function validationErrorCode(issues: { path: PropertyKey[]; message?: string }[]): 'INVALID_ROLE' | 'INVALID_MODE' | 'PROMPT_TOO_LONG' | 'PROMPT_REQUIRED' | 'INVALID_REQUEST' {
+  const firstIssue = issues[0];
+  return firstIssue?.path.includes('role')
+    ? 'INVALID_ROLE'
+    : firstIssue?.path.includes('mode')
+      ? 'INVALID_MODE'
+      : firstIssue?.message === 'Prompt too long.'
+        ? 'PROMPT_TOO_LONG'
+        : firstIssue?.message === 'Prompt is required.'
+          ? 'PROMPT_REQUIRED'
+          : 'INVALID_REQUEST';
+}
+
+function isGuidedAnswersRecord(value: unknown): value is GuidedAnswers {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every(
+    (entry) =>
+      typeof entry === 'string' ||
+      (Array.isArray(entry) && entry.every((item) => typeof item === 'string')),
+  );
+}
+
+function safeParseGuidedRewriteRequest(parsedBody: unknown):
+  | { success: true; data: { prompt: string; role: Role; mode: AnalyzeAndRewriteV2Request['mode']; rewritePreference: RewritePreference; guidedAnswers: GuidedAnswers } }
+  | { success: false; issues: { path: PropertyKey[]; message: string }[] } {
+  if (GuidedRewriteRequestSchema) {
+    const parsed = GuidedRewriteRequestSchema.safeParse(parsedBody);
+    return parsed.success ? parsed : { success: false, issues: parsed.error.issues };
+  }
+
+  const base = AnalyzeAndRewriteV2RequestSchema.safeParse(parsedBody);
+  if (!base.success) {
+    return { success: false, issues: base.error.issues };
+  }
+
+  const guidedAnswers = (parsedBody as { guidedAnswers?: unknown }).guidedAnswers;
+  if (!isGuidedAnswersRecord(guidedAnswers)) {
+    return {
+      success: false,
+      issues: [
+        {
+          path: ['guidedAnswers'],
+          message: 'Invalid request.',
+        },
+      ],
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      ...base.data,
+      guidedAnswers,
+    },
+  };
+}
+
+function normalizeGuidedAnswers(guidedAnswers: GuidedAnswers): GuidedAnswers {
+  const normalizedEntries = Object.entries(guidedAnswers)
+    .map(([key, value]) => {
+      if (Array.isArray(value)) {
+        const items = [...new Set(value.map((item) => item.trim()).filter(Boolean))];
+        return items.length > 0 ? [key, items] : null;
+      }
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? [key, trimmed] : null;
+    })
+    .filter((entry): entry is [string, string | string[]] => entry !== null);
+
+  return Object.fromEntries(normalizedEntries);
+}
+
+function asJoinedValue(value: string | string[] | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  return Array.isArray(value) ? value.join(', ') : value;
+}
+
+function synthesizeGuidedPrompt(originalPrompt: string, guidedAnswers: GuidedAnswers): string {
+  const goal = asJoinedValue(guidedAnswers.goal);
+  const audience = asJoinedValue(guidedAnswers.audience);
+  const includes = asJoinedValue(guidedAnswers.includes);
+  const excludes = asJoinedValue(guidedAnswers.excludes);
+  const format = asJoinedValue(guidedAnswers.format);
+  const tone = asJoinedValue(guidedAnswers.tone);
+  const detail = asJoinedValue(guidedAnswers.detail);
+  const proof = asJoinedValue(guidedAnswers.proof);
+  const context = asJoinedValue(guidedAnswers.context);
+
+  const lines = [
+    'Original request:',
+    originalPrompt.trim(),
+    '',
+    'Additional constraints:',
+    `- Primary goal: ${goal ?? 'preserve the original goal'}`,
+    `- Audience: ${audience ?? 'use the implied audience from the original request'}`,
+    `- Include: ${includes ?? 'no additional required inclusions provided'}`,
+    `- Avoid: ${excludes ?? 'no additional exclusions provided'}`,
+    `- Format: ${format ?? 'use the format implied by the original request'}`,
+    `- Tone/detail notes: ${[tone, detail].filter(Boolean).join('; ') || 'no extra tone or detail notes provided'}`,
+    `- Proof or differentiation: ${proof ?? 'no additional proof requirement provided'}`,
+    `- Additional context: ${context ?? 'no additional context provided'}`,
+    '',
+    'Create a stronger, more specific version of the prompt that preserves the user’s intent while adding these boundaries.',
+  ];
+
+  return lines.join('\n');
+}
+
+type RunAnalyzeAndRewriteV2Params = {
+  requestId: string;
+  startedAtMs: number;
+  providerMode: 'mock' | 'real';
+  providerConfig: ReturnType<typeof getProviderConfig>;
+  headers: Record<string, string>;
+  pathname: '/v2/analyze-and-rewrite' | '/v2/rewrite-from-guided-answers';
+  requestMethod: string;
+  sessionId?: string;
+  input: AnalyzeAndRewriteV2Request;
+  persistInput?: AnalyzeAndRewriteV2Request;
+  extraInferenceData?: Record<string, unknown>;
+};
+
+async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Promise<HttpResponse> {
+  const { requestId, startedAtMs, providerMode, providerConfig, headers, pathname, requestMethod, sessionId } = params;
+  const input = params.input;
+  const persistInput = params.persistInput ?? input;
+  const preferences = normalizePreferences(input.preferences);
+
+  let resolvedContext = input.context;
+  let resolvedAnalysis = withV2Scores(analyzePrompt({ ...input, preferences }), input.prompt, resolvedContext);
+  let patternFit = detectPatternFit({
+    prompt: input.prompt,
+    role: input.role,
+    mode: input.mode,
+    analysis: resolvedAnalysis,
+    context: resolvedContext,
+  });
+
+  const semanticClassification = classifySemanticPrompt(input.prompt, input.role);
+  const semanticDecision = semanticClassification.extraction.inScope
+    ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
+    : null;
+  const hasSemanticDecision = semanticDecision !== null;
+  const inferenceTrigger = hasSemanticDecision
+    ? {
+        shouldInfer: false,
+        reasons: [],
+      }
+    : evaluateInferenceTrigger({
+        prompt: input.prompt,
+        role: input.role,
+        mode: input.mode,
+        analysis: resolvedAnalysis,
+        context: resolvedContext,
+        patternFit,
+      });
+  const localMatchStatus = inferenceTrigger.shouldInfer ? inferenceTrigger.reasons.join('|') : 'strong_local_match';
+  let inferenceFallbackUsed = false;
+  let resolutionSource: 'local' | 'inference' = 'local';
+  let validatedInferenceMetadata: InferenceMetadata | null = null;
+  let inferenceError: string | undefined;
+
+  if (inferenceTrigger.shouldInfer) {
+    inferenceFallbackUsed = true;
+
+    if (providerMode !== 'real') {
+      inferenceError = 'INFERENCE_UNAVAILABLE_PROVIDER_MODE';
+    } else {
+      try {
+        const inferenceClient = new OpenAIInferenceClient(providerConfig);
+        validatedInferenceMetadata = await inferenceClient.inferMetadata({
+          prompt: input.prompt,
+          role: input.role,
+          mode: input.mode,
+        });
+
+        resolvedContext = mergeContextWithInference(resolvedContext, validatedInferenceMetadata);
+        resolvedAnalysis = withV2Scores(
+          analyzePrompt({
+            prompt: input.prompt,
+            role: input.role,
+            mode: input.mode,
+            context: resolvedContext,
+            preferences,
+          }),
+          input.prompt,
+          resolvedContext,
+        );
+        patternFit = detectPatternFit({
+          prompt: input.prompt,
+          role: input.role,
+          mode: input.mode,
+          analysis: resolvedAnalysis,
+          context: resolvedContext,
+        });
+      } catch (error) {
+        inferenceError = error instanceof Error ? error.message : 'UNKNOWN_INFERENCE_ERROR';
+      }
+    }
+  }
+
+  const effectiveResolution = buildEffectiveResolution({
+    prompt: input.prompt,
+    role: input.role,
+    mode: input.mode,
+    context: resolvedContext,
+    analysis: resolvedAnalysis,
+    patternFit,
+    metadata: validatedInferenceMetadata,
+  });
+  resolvedAnalysis = effectiveResolution.analysis;
+  patternFit = effectiveResolution.patternFit;
+  resolutionSource =
+    validatedInferenceMetadata && effectiveResolution.effectiveAnalysisContext.source === 'inference' ? 'inference' : 'local';
+  const effectiveContext = {
+    ...(resolvedContext ?? {}),
+    effectiveRole: effectiveResolution.effectiveAnalysisContext.role,
+    effectiveTaskType: effectiveResolution.effectiveTaskType,
+    effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
+    effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
+    effectivePatternFit: effectiveResolution.effectivePatternFit,
+    effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+  };
+  const effectiveInput: AnalyzeAndRewriteV2Request = {
+    ...input,
+    context: effectiveContext,
+  };
+
+  if (inferenceTrigger.shouldInfer) {
+    logInferenceCase({
+      prompt: input.prompt,
+      role: input.role,
+      mode: input.mode,
+      localMatchStatus,
+      inferenceUsed: inferenceFallbackUsed,
+      validatedInferenceMetadata,
+      inferenceError,
+      finalResolutionSource: resolutionSource,
+      inferenceMetadataApplied: effectiveResolution.inferenceMetadataApplied,
+      effectiveTaskType: effectiveResolution.effectiveTaskType,
+      effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
+      effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
+      effectivePatternFit: effectiveResolution.effectivePatternFit,
+      effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+      scoringGuardrailsApplied: effectiveResolution.scoringGuardrailsApplied,
+    });
+  }
+
+  if (hasSemanticDecision && semanticDecision) {
+    resolvedAnalysis = {
+      ...resolvedAnalysis,
+      scores: projectScores(resolvedAnalysis.scores, semanticClassification.inventory, semanticDecision),
+    };
+  }
+
+  const overallScore = computeOverallScore(resolvedAnalysis.scores);
+  const scoreBand = scoreBandFromOverallScore(overallScore);
+  const expectedImprovement = semanticDecision
+    ? semanticDecision.expectedImprovement
+    : hasLowExpectedImprovementV2(resolvedAnalysis.scores, input.prompt, resolvedContext)
+      ? 'low'
+      : 'high';
+  const publicExpectedImprovement = expectedImprovement === 'low' ? 'low' : 'high';
+  const majorBlockingIssues = semanticDecision ? semanticDecision.majorBlockingIssues : hasMajorBlockingIssues(resolvedAnalysis.issues);
+  const cleanStrongPrompt = expectedImprovement === 'low' && resolvedAnalysis.issues.length === 0;
+  const shouldSuppressByStrength =
+    (overallScore >= 75 || cleanStrongPrompt) &&
+    !majorBlockingIssues &&
+    expectedImprovement === 'low' &&
+    input.rewritePreference !== 'force';
+  const shouldSuppress = input.rewritePreference === 'suppress' || shouldSuppressByStrength;
+  let rewriteRecommendation = semanticDecision?.rewriteRecommendation ?? recommendationFromState({
+    overallScore,
+    rewritePreference: input.rewritePreference,
+    shouldSuppress,
+    expectedImprovementLow: expectedImprovement === 'low',
+  });
+  if (!semanticDecision) {
+    if (
+      rewriteRecommendation === 'rewrite_recommended' &&
+      shouldFloorDeveloperRecommendation({
+        role: input.role,
+        prompt: input.prompt,
+        context: resolvedContext,
+        analysis: resolvedAnalysis,
+        majorBlockingIssues,
+      })
+    ) {
+      rewriteRecommendation = 'rewrite_optional';
+    }
+  }
+  const improvementSuggestions = generateImprovementSuggestions({
+    input: effectiveInput,
+    analysis: resolvedAnalysis,
+    overallScore,
+    scoreBand,
+    rewriteRecommendation,
+    patternFit,
+    effectiveContext: effectiveResolution.effectiveAnalysisContext,
+  });
+  const semanticFindings =
+    hasSemanticDecision && semanticDecision
+      ? deriveFindings(resolvedAnalysis, semanticClassification.inventory, semanticDecision)
+      : null;
+  const semanticRewritePolicy =
+    hasSemanticDecision && semanticDecision && semanticFindings
+      ? buildRewritePolicy(semanticClassification.inventory, semanticDecision)
+      : null;
+  const semanticOwned = semanticRewritePolicy?.semanticOwned === true;
+  const generatedBestNextMove = semanticFindings
+    ? null
+    : generateBestNextMove({
+        input: effectiveInput,
+        analysis: resolvedAnalysis,
+        overallScore,
+        scoreBand,
+        rewriteRecommendation,
+        patternFit,
+        effectiveContext: effectiveResolution.effectiveAnalysisContext,
+      });
+  const bestNextMove: BestNextMove | null = semanticFindings?.bestNextMove ?? generatedBestNextMove;
+  const rewriteLadder = deriveRewriteLadderState({
+    overallScore,
+    rewriteRecommendation,
+    rewritePreference: input.rewritePreference,
+    expectedImprovement: publicExpectedImprovement,
+  });
+  let ladderTrace: InternalLadderTrace | null = {
+    current: rewriteLadder.current,
+    next: rewriteLadder.next,
+    target: rewriteLadder.target,
+    maxSafeTarget: rewriteLadder.maxSafeTarget,
+    stopReason: rewriteLadder.stopReason,
+    pattern: patternFit.primary,
+    claimedStep: rewriteLadder.target
+      ? {
+          from: rewriteLadder.current,
+          to: rewriteLadder.target,
+        }
+      : null,
+    ladderAccepted: null,
+    ladderReason: null,
+  };
+
+  try {
+    let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
+    let evaluation: AnalyzeAndRewriteV2Response['evaluation'] = null;
+    let rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'] = 'suppressed';
+    let guidedCompletion: AnalyzeAndRewriteV2Response['guidedCompletion'] = null;
+    let guidedCompletionForm: AnalyzeAndRewriteV2Response['guidedCompletionForm'] = null;
+
+    if (!shouldSuppress && rewriteLadder.target !== null) {
+      const rewriteEngine = selectRewriteEngine(providerConfig);
+      const generatedRewrite = await rewriteEngine.rewrite({
+        prompt: input.prompt,
+        role: input.role,
+        mode: input.mode,
+        context: effectiveContext,
+        preferences,
+        analysis: resolvedAnalysis,
+        improvementSuggestions,
+        patternFit,
+        ladder: rewriteLadder,
+      });
+
+      const rewriteAnalysis = withV2Scores(
+        analyzePrompt({
+          prompt: generatedRewrite.rewrittenPrompt,
+          role: input.role,
+          mode: input.mode,
+          context: effectiveContext,
+          preferences,
+        }),
+        generatedRewrite.rewrittenPrompt,
+        effectiveContext,
+      );
+      const rewritePatternFit = detectPatternFit({
+        prompt: generatedRewrite.rewrittenPrompt,
+        role: input.role,
+        mode: input.mode,
+        analysis: rewriteAnalysis,
+        context: effectiveContext,
+      });
+      const effectiveRewrite = buildEffectiveResolution({
+        prompt: generatedRewrite.rewrittenPrompt,
+        role: input.role,
+        mode: input.mode,
+        context: effectiveContext,
+        analysis: rewriteAnalysis,
+        patternFit: rewritePatternFit,
+        metadata: validatedInferenceMetadata,
+      });
+      const calibratedRewriteAnalysis = effectiveRewrite.analysis;
+      const rewriteEvaluation = evaluateRewrite({
+        originalPrompt: input.prompt,
+        rewrittenPrompt: generatedRewrite.rewrittenPrompt,
+        originalAnalysis: resolvedAnalysis,
+        rewriteAnalysis: calibratedRewriteAnalysis,
+        context: effectiveContext,
+        role: input.role,
+      });
+      const ladderEvaluation =
+        rewriteLadder.target !== null
+          ? validateLadderStep({
+              from: rewriteLadder.current,
+              to: rewriteLadder.target,
+              evaluationStatus: rewriteEvaluation.improvement.status,
+              diagnostics: rewriteEvaluation.diagnostics,
+            })
+          : null;
+      const evaluationStatus = reconcileLadderStatus({
+        currentStatus: rewriteEvaluation.improvement.status,
+        overallDelta: rewriteEvaluation.improvement.overallDelta,
+        ladderEvaluation,
+      });
+      ladderTrace = {
+        ...ladderTrace,
+        claimedStep: ladderEvaluation?.claimedStep ?? ladderTrace?.claimedStep ?? null,
+        ladderAccepted: ladderEvaluation?.accepted ?? null,
+        ladderReason: ladderEvaluation?.reason ?? null,
+      };
+      const evaluationSignals = [...rewriteEvaluation.signals];
+      if (ladderEvaluation) {
+        evaluationSignals.push(`LADDER_${ladderEvaluation.reason.toUpperCase()}`);
+      }
+
+      rewrite = generatedRewrite;
+      evaluation = {
+        status: evaluationStatus,
+        overallDelta: rewriteEvaluation.improvement.overallDelta,
+        signals: [...new Set(evaluationSignals)].slice(0, 12),
+        scoreComparison: {
+          original: {
+            scope: resolvedAnalysis.scores.scope,
+            contrast: resolvedAnalysis.scores.contrast,
+            clarity: resolvedAnalysis.scores.clarity,
+          },
+          rewrite: {
+            scope: calibratedRewriteAnalysis.scores.scope,
+            contrast: calibratedRewriteAnalysis.scores.contrast,
+            clarity: calibratedRewriteAnalysis.scores.clarity,
+          },
+        },
+      };
+
+      rewritePresentationMode = selectRewritePresentationMode({
+        rewriteRecommendation,
+        rewritePreference: input.rewritePreference,
+        evaluation,
+        analysis: resolvedAnalysis,
+        rewrite,
+        scoreBand,
+        prompt: input.prompt,
+        semanticPolicy: semanticRewritePolicy,
+        effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+        ladderTrace,
+      });
+      if (rewritePresentationMode === 'template_with_example' || rewritePresentationMode === 'questions_only') {
+        guidedCompletion = buildGuidedCompletion({
+          prompt: input.prompt,
+          role: input.role,
+          mode: rewritePresentationMode,
+          analysis: resolvedAnalysis,
+          semanticPolicy: semanticRewritePolicy,
+          bestNextMove,
+          improvementSuggestions,
+          effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+        });
+        guidedCompletionForm = buildGuidedCompletionForm({
+          prompt: input.prompt,
+          role: input.role,
+          mode: rewritePresentationMode,
+          analysis: resolvedAnalysis,
+          semanticPolicy: semanticRewritePolicy,
+          bestNextMove,
+          improvementSuggestions,
+          effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+        });
+        rewrite = null;
+      }
+    } else {
+      rewritePresentationMode = 'suppressed';
+    }
+
+    const finalIssues = semanticFindings?.issues ?? resolvedAnalysis.issues;
+    const finalSignalsBase = semanticFindings?.signals ?? resolvedAnalysis.signals;
+    const finalSignals = [...finalSignalsBase];
+    if (!semanticOwned && expectedImprovement === 'low' && !finalSignals.includes('Low expected improvement.')) {
+      finalSignals.push('Low expected improvement.');
+    }
+    if (!semanticOwned && !semanticFindings) {
+      finalSignals.push(bestImprovementPath(patternFit.primary));
+    }
+    const analysis: Analysis = {
+      ...resolvedAnalysis,
+      issues: finalIssues,
+      detectedIssueCodes: [...new Set(finalIssues.map((issue) => issue.code))],
+      signals: [...new Set(finalSignals)].slice(0, 12),
+      summary:
+        semanticFindings?.summary ??
+        summaryForV2({
+          recommendation: rewriteRecommendation,
+          rewritePreference: input.rewritePreference,
+          generatedRewrite: rewrite !== null,
+          role: input.role,
+          prompt: input.prompt,
+          context: resolvedContext,
+        }),
+    };
+    const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
+    const payload: AnalyzeAndRewriteV2Response = {
+      id: `par_${requestId}`,
+      overallScore,
+      scoreBand,
+      rewriteRecommendation,
+      analysis,
+      improvementSuggestions,
+      bestNextMove,
+      gating: {
+        rewritePreference: input.rewritePreference,
+        expectedImprovement: publicExpectedImprovement,
+        majorBlockingIssues,
+      },
+      rewrite,
+      evaluation,
+      rewritePresentationMode,
+      guidedCompletion,
+      guidedCompletionForm,
+      inferenceFallbackUsed,
+      resolutionSource,
+      meta,
+    };
+
+    const sessionUser = await getSessionUser(sessionId);
+    await persistPromptRunSafely({
+      endpoint: pathname,
+      requestId,
+      sessionId,
+      userId: sessionUser?.id,
+      input: persistInput,
+      response: payload,
+      inferenceData: {
+        resolvedAnalysis,
+        semanticClassification,
+        semanticDecision,
+        semanticFindings,
+        semanticRewritePolicy,
+        patternFit,
+        improvementSuggestions,
+        bestNextMove,
+        inferenceTrigger,
+        inferenceFallbackUsed,
+        validatedInferenceMetadata,
+        inferenceError: inferenceError ?? null,
+        resolutionSource,
+        effectiveResolution: {
+          inferenceMetadataApplied: effectiveResolution.inferenceMetadataApplied,
+          effectiveTaskType: effectiveResolution.effectiveTaskType,
+          effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
+          effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
+          effectivePatternFit: effectiveResolution.effectivePatternFit,
+          effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
+          scoringGuardrailsApplied: effectiveResolution.scoringGuardrailsApplied,
+          effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
+        },
+        providerMode,
+        providerModel: providerConfig.model ?? null,
+        responseVersion: meta.version,
+        ...params.extraInferenceData,
+      },
+    });
+
+    const response = jsonResponse(200, payload, headers);
+    logRequest({
+      requestId,
+      endpoint: pathname,
+      method: requestMethod,
+      role: input.role,
+      mode: input.mode,
+      statusCode: response.statusCode,
+      latencyMs: meta.latencyMs,
+      providerMode,
+      providerModel: providerConfig.model,
+      evaluationStatus: evaluation?.status,
+      overallDelta: evaluation?.overallDelta,
+      alreadyStrong: rewriteRecommendation === 'no_rewrite_needed',
+      ladderTrace,
+    });
+    return response;
+  } catch (error) {
+    const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
+
+    if (error instanceof ProviderNotConfiguredError) {
+      const response = errorResponse(500, 'PROVIDER_NOT_CONFIGURED', 'Rewrite provider is not configured for real mode.', meta, headers);
+      logRequest({
+        requestId,
+        endpoint: pathname,
+        method: requestMethod,
+        role: input.role,
+        mode: input.mode,
+        statusCode: response.statusCode,
+        latencyMs: meta.latencyMs,
+        providerMode,
+        providerModel: providerConfig.model,
+        errorCode: 'PROVIDER_NOT_CONFIGURED',
+      });
+      return response;
+    }
+
+    if (error instanceof UpstreamRewriteError) {
+      const response = errorResponse(502, 'UPSTREAM_MODEL_ERROR', 'Rewrite provider failed. Please try again.', meta, headers);
+      logRequest({
+        requestId,
+        endpoint: pathname,
+        method: requestMethod,
+        role: input.role,
+        mode: input.mode,
+        statusCode: response.statusCode,
+        latencyMs: meta.latencyMs,
+        providerMode,
+        providerModel: providerConfig.model,
+        errorCode: 'UPSTREAM_MODEL_ERROR',
+      });
+      return response;
+    }
+
+    const response = errorResponse(500, 'INTERNAL_ERROR', 'Internal server error.', meta, headers);
+    logRequest({
+      requestId,
+      endpoint: pathname,
+      method: requestMethod,
+      role: input.role,
+      mode: input.mode,
+      statusCode: response.statusCode,
+      latencyMs: meta.latencyMs,
+      providerMode,
+      providerModel: providerConfig.model,
+      errorCode: 'INTERNAL_ERROR',
+    });
+    return response;
+  }
 }
 
 function hasAudience(prompt: string, context?: Record<string, unknown>): boolean {
@@ -766,7 +1416,9 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
   }
 
   if (
-    (pathname === '/v1/analyze-and-rewrite' || pathname === '/v2/analyze-and-rewrite') &&
+    (pathname === '/v1/analyze-and-rewrite' ||
+      pathname === '/v2/analyze-and-rewrite' ||
+      pathname === '/v2/rewrite-from-guided-answers') &&
     !isAuthorized(headers) &&
     !(await hasValidSession(sessionId))
   ) {
@@ -1103,526 +1755,108 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       return response;
     }
 
-    const input: AnalyzeAndRewriteV2Request = parsed.data;
-    const preferences = normalizePreferences(input.preferences);
-
-    let resolvedContext = input.context;
-    let resolvedAnalysis = withV2Scores(analyzePrompt({ ...input, preferences }), input.prompt, resolvedContext);
-    let patternFit = detectPatternFit({
-      prompt: input.prompt,
-      role: input.role,
-      mode: input.mode,
-      analysis: resolvedAnalysis,
-      context: resolvedContext,
+    return runAnalyzeAndRewriteV2({
+      requestId,
+      startedAtMs,
+      providerMode,
+      providerConfig,
+      headers,
+      pathname,
+      requestMethod: request.method,
+      sessionId,
+      input: parsed.data,
     });
+  }
 
-    const semanticClassification = classifySemanticPrompt(input.prompt, input.role);
-    const semanticDecision = semanticClassification.extraction.inScope
-      ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
-      : null;
-    const hasSemanticDecision = semanticDecision !== null;
-    const inferenceTrigger = hasSemanticDecision
-      ? {
-          shouldInfer: false,
-          reasons: [],
-        }
-      : evaluateInferenceTrigger({
-          prompt: input.prompt,
-          role: input.role,
-          mode: input.mode,
-          analysis: resolvedAnalysis,
-          context: resolvedContext,
-          patternFit,
-        });
-    const localMatchStatus = inferenceTrigger.shouldInfer ? inferenceTrigger.reasons.join('|') : 'strong_local_match';
-    let inferenceFallbackUsed = false;
-    let resolutionSource: 'local' | 'inference' = 'local';
-    let validatedInferenceMetadata: InferenceMetadata | null = null;
-    let inferenceError: string | undefined;
-
-    if (inferenceTrigger.shouldInfer) {
-      inferenceFallbackUsed = true;
-
-      if (providerMode !== 'real') {
-        inferenceError = 'INFERENCE_UNAVAILABLE_PROVIDER_MODE';
-      } else {
-        try {
-          const inferenceClient = new OpenAIInferenceClient(providerConfig);
-          validatedInferenceMetadata = await inferenceClient.inferMetadata({
-            prompt: input.prompt,
-            role: input.role,
-            mode: input.mode,
-          });
-
-          resolvedContext = mergeContextWithInference(resolvedContext, validatedInferenceMetadata);
-          resolvedAnalysis = withV2Scores(
-            analyzePrompt({
-              prompt: input.prompt,
-              role: input.role,
-              mode: input.mode,
-              context: resolvedContext,
-              preferences,
-            }),
-            input.prompt,
-            resolvedContext,
-          );
-          patternFit = detectPatternFit({
-            prompt: input.prompt,
-            role: input.role,
-            mode: input.mode,
-            analysis: resolvedAnalysis,
-            context: resolvedContext,
-          });
-
-        } catch (error) {
-          inferenceError = error instanceof Error ? error.message : 'UNKNOWN_INFERENCE_ERROR';
-        }
-      }
-
-    }
-
-    const effectiveResolution = buildEffectiveResolution({
-      prompt: input.prompt,
-      role: input.role,
-      mode: input.mode,
-      context: resolvedContext,
-      analysis: resolvedAnalysis,
-      patternFit,
-      metadata: validatedInferenceMetadata,
-    });
-    resolvedAnalysis = effectiveResolution.analysis;
-    patternFit = effectiveResolution.patternFit;
-    resolutionSource =
-      validatedInferenceMetadata && effectiveResolution.effectiveAnalysisContext.source === 'inference' ? 'inference' : 'local';
-    const effectiveContext = {
-      ...(resolvedContext ?? {}),
-      effectiveRole: effectiveResolution.effectiveAnalysisContext.role,
-      effectiveTaskType: effectiveResolution.effectiveTaskType,
-      effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
-      effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
-      effectivePatternFit: effectiveResolution.effectivePatternFit,
-      effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
-    };
-    const effectiveInput: AnalyzeAndRewriteV2Request = {
-      ...input,
-      context: effectiveContext,
-    };
-
-    if (inferenceTrigger.shouldInfer) {
-      logInferenceCase({
-        prompt: input.prompt,
-        role: input.role,
-        mode: input.mode,
-        localMatchStatus,
-        inferenceUsed: inferenceFallbackUsed,
-        validatedInferenceMetadata,
-        inferenceError,
-        finalResolutionSource: resolutionSource,
-        inferenceMetadataApplied: effectiveResolution.inferenceMetadataApplied,
-        effectiveTaskType: effectiveResolution.effectiveTaskType,
-        effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
-        effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
-        effectivePatternFit: effectiveResolution.effectivePatternFit,
-        effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
-        scoringGuardrailsApplied: effectiveResolution.scoringGuardrailsApplied,
+  if (request.method === 'POST' && pathname === '/v2/rewrite-from-guided-answers') {
+    if (!contentTypeIsJson(headers)) {
+      const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
+      const response = errorResponse(415, 'UNSUPPORTED_CONTENT_TYPE', 'Content-Type must be application/json.', meta, headers);
+      logRequest({
+        requestId,
+        endpoint: pathname,
+        method: request.method,
+        statusCode: response.statusCode,
+        latencyMs: meta.latencyMs,
+        providerMode,
+        providerModel: providerConfig.model,
+        errorCode: 'UNSUPPORTED_CONTENT_TYPE',
       });
+      return response;
     }
 
-    if (hasSemanticDecision && semanticDecision) {
-      resolvedAnalysis = {
-        ...resolvedAnalysis,
-        scores: projectScores(resolvedAnalysis.scores, semanticClassification.inventory, semanticDecision),
-      };
-    }
-
-    const overallScore = computeOverallScore(resolvedAnalysis.scores);
-    const scoreBand = scoreBandFromOverallScore(overallScore);
-    const expectedImprovement = semanticDecision
-      ? semanticDecision.expectedImprovement
-      : hasLowExpectedImprovementV2(resolvedAnalysis.scores, input.prompt, resolvedContext)
-        ? 'low'
-        : 'high';
-    const publicExpectedImprovement = expectedImprovement === 'low' ? 'low' : 'high';
-    const majorBlockingIssues = semanticDecision ? semanticDecision.majorBlockingIssues : hasMajorBlockingIssues(resolvedAnalysis.issues);
-    const cleanStrongPrompt = expectedImprovement === 'low' && resolvedAnalysis.issues.length === 0;
-    const shouldSuppressByStrength =
-      (overallScore >= 75 || cleanStrongPrompt) &&
-      !majorBlockingIssues &&
-      expectedImprovement === 'low' &&
-      input.rewritePreference !== 'force';
-    const shouldSuppress = input.rewritePreference === 'suppress' || shouldSuppressByStrength;
-    let rewriteRecommendation = semanticDecision?.rewriteRecommendation ?? recommendationFromState({
-      overallScore,
-      rewritePreference: input.rewritePreference,
-      shouldSuppress,
-      expectedImprovementLow: expectedImprovement === 'low',
-    });
-    if (!semanticDecision) {
-      if (
-        rewriteRecommendation === 'rewrite_recommended' &&
-        shouldFloorDeveloperRecommendation({
-          role: input.role,
-          prompt: input.prompt,
-          context: resolvedContext,
-          analysis: resolvedAnalysis,
-          majorBlockingIssues,
-        })
-      ) {
-        rewriteRecommendation = 'rewrite_optional';
-      }
-    }
-    const improvementSuggestions = generateImprovementSuggestions({
-      input: effectiveInput,
-      analysis: resolvedAnalysis,
-      overallScore,
-      scoreBand,
-      rewriteRecommendation,
-      patternFit,
-      effectiveContext: effectiveResolution.effectiveAnalysisContext,
-    });
-    const semanticFindings =
-      hasSemanticDecision && semanticDecision
-        ? deriveFindings(resolvedAnalysis, semanticClassification.inventory, semanticDecision)
-        : null;
-    const semanticRewritePolicy =
-      hasSemanticDecision && semanticDecision && semanticFindings
-        ? buildRewritePolicy(semanticClassification.inventory, semanticDecision)
-        : null;
-    const semanticOwned = semanticRewritePolicy?.semanticOwned === true;
-    const generatedBestNextMove = semanticFindings
-      ? null
-      : generateBestNextMove({
-          input: effectiveInput,
-          analysis: resolvedAnalysis,
-          overallScore,
-          scoreBand,
-          rewriteRecommendation,
-          patternFit,
-          effectiveContext: effectiveResolution.effectiveAnalysisContext,
-        });
-    const bestNextMove: BestNextMove | null = semanticFindings?.bestNextMove ?? generatedBestNextMove;
-    const rewriteLadder = deriveRewriteLadderState({
-      overallScore,
-      rewriteRecommendation,
-      rewritePreference: input.rewritePreference,
-      expectedImprovement: publicExpectedImprovement,
-    });
-    let ladderTrace: InternalLadderTrace | null = {
-      current: rewriteLadder.current,
-      next: rewriteLadder.next,
-      target: rewriteLadder.target,
-      maxSafeTarget: rewriteLadder.maxSafeTarget,
-      stopReason: rewriteLadder.stopReason,
-      pattern: patternFit.primary,
-      claimedStep: rewriteLadder.target
-        ? {
-            from: rewriteLadder.current,
-            to: rewriteLadder.target,
-          }
-        : null,
-      ladderAccepted: null,
-      ladderReason: null,
-    };
-
+    let parsedBody: unknown;
     try {
-      let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
-      let evaluation: AnalyzeAndRewriteV2Response['evaluation'] = null;
-      let rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'] = 'suppressed';
-      let guidedCompletion: AnalyzeAndRewriteV2Response['guidedCompletion'] = null;
-
-      if (!shouldSuppress && rewriteLadder.target !== null) {
-        const rewriteEngine = selectRewriteEngine(providerConfig);
-        const generatedRewrite = await rewriteEngine.rewrite({
-          prompt: input.prompt,
-          role: input.role,
-          mode: input.mode,
-          context: effectiveContext,
-          preferences,
-          analysis: resolvedAnalysis,
-          improvementSuggestions,
-          patternFit,
-          ladder: rewriteLadder,
-        });
-
-        const rewriteAnalysis = withV2Scores(
-          analyzePrompt({
-            prompt: generatedRewrite.rewrittenPrompt,
-            role: input.role,
-            mode: input.mode,
-            context: effectiveContext,
-            preferences,
-          }),
-          generatedRewrite.rewrittenPrompt,
-          effectiveContext,
-        );
-        const rewritePatternFit = detectPatternFit({
-          prompt: generatedRewrite.rewrittenPrompt,
-          role: input.role,
-          mode: input.mode,
-          analysis: rewriteAnalysis,
-          context: effectiveContext,
-        });
-        const effectiveRewrite = buildEffectiveResolution({
-          prompt: generatedRewrite.rewrittenPrompt,
-          role: input.role,
-          mode: input.mode,
-          context: effectiveContext,
-          analysis: rewriteAnalysis,
-          patternFit: rewritePatternFit,
-          metadata: validatedInferenceMetadata,
-        });
-        const calibratedRewriteAnalysis = effectiveRewrite.analysis;
-        const rewriteEvaluation = evaluateRewrite({
-          originalPrompt: input.prompt,
-          rewrittenPrompt: generatedRewrite.rewrittenPrompt,
-          originalAnalysis: resolvedAnalysis,
-          rewriteAnalysis: calibratedRewriteAnalysis,
-          context: effectiveContext,
-          role: input.role,
-        });
-        const ladderEvaluation =
-          rewriteLadder.target !== null
-            ? validateLadderStep({
-                from: rewriteLadder.current,
-                to: rewriteLadder.target,
-                evaluationStatus: rewriteEvaluation.improvement.status,
-                diagnostics: rewriteEvaluation.diagnostics,
-              })
-            : null;
-        const evaluationStatus = reconcileLadderStatus({
-          currentStatus: rewriteEvaluation.improvement.status,
-          overallDelta: rewriteEvaluation.improvement.overallDelta,
-          ladderEvaluation,
-        });
-        ladderTrace = {
-          ...ladderTrace,
-          claimedStep: ladderEvaluation?.claimedStep ?? ladderTrace?.claimedStep ?? null,
-          ladderAccepted: ladderEvaluation?.accepted ?? null,
-          ladderReason: ladderEvaluation?.reason ?? null,
-        };
-        const evaluationSignals = [...rewriteEvaluation.signals];
-        if (ladderEvaluation) {
-          evaluationSignals.push(`LADDER_${ladderEvaluation.reason.toUpperCase()}`);
-        }
-
-        rewrite = generatedRewrite;
-        evaluation = {
-          status: evaluationStatus,
-          overallDelta: rewriteEvaluation.improvement.overallDelta,
-          signals: [...new Set(evaluationSignals)].slice(0, 12),
-          scoreComparison: {
-            original: {
-              scope: resolvedAnalysis.scores.scope,
-              contrast: resolvedAnalysis.scores.contrast,
-              clarity: resolvedAnalysis.scores.clarity,
-            },
-            rewrite: {
-              scope: calibratedRewriteAnalysis.scores.scope,
-              contrast: calibratedRewriteAnalysis.scores.contrast,
-              clarity: calibratedRewriteAnalysis.scores.clarity,
-            },
-          },
-        };
-
-        // Semantic findings/policy own covered prompts. Late evaluation only selects a
-        // bounded presentation mode or safe downgrade after that point.
-        rewritePresentationMode = selectRewritePresentationMode({
-          rewriteRecommendation,
-          rewritePreference: input.rewritePreference,
-          evaluation,
-          analysis: resolvedAnalysis,
-          rewrite,
-          scoreBand,
-          prompt: input.prompt,
-          semanticPolicy: semanticRewritePolicy,
-          effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
-          ladderTrace,
-        });
-        if (rewritePresentationMode === 'template_with_example' || rewritePresentationMode === 'questions_only') {
-          guidedCompletion = buildGuidedCompletion({
-            prompt: input.prompt,
-            role: input.role,
-            mode: rewritePresentationMode,
-            analysis: resolvedAnalysis,
-            semanticPolicy: semanticRewritePolicy,
-            bestNextMove,
-            improvementSuggestions,
-            effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
-          });
-          rewrite = null;
-        }
-      } else {
-        rewritePresentationMode = 'suppressed';
-      }
-
-      const finalIssues = semanticFindings?.issues ?? resolvedAnalysis.issues;
-      const finalSignalsBase = semanticFindings?.signals ?? resolvedAnalysis.signals;
-      const finalSignals = [...finalSignalsBase];
-      // Generic signal appends are non-owned fallback only.
-      if (!semanticOwned && expectedImprovement === 'low' && !finalSignals.includes('Low expected improvement.')) {
-        finalSignals.push('Low expected improvement.');
-      }
-      if (!semanticOwned && !semanticFindings) {
-        finalSignals.push(bestImprovementPath(patternFit.primary));
-      }
-      const analysis: Analysis = {
-        ...resolvedAnalysis,
-        issues: finalIssues,
-        detectedIssueCodes: [...new Set(finalIssues.map((issue) => issue.code))],
-        signals: [...new Set(finalSignals)].slice(0, 12),
-        summary:
-          semanticFindings?.summary ??
-          summaryForV2({
-            recommendation: rewriteRecommendation,
-            rewritePreference: input.rewritePreference,
-            generatedRewrite: rewrite !== null,
-            role: input.role,
-            prompt: input.prompt,
-            context: resolvedContext,
-          }),
-      };
+      parsedBody = request.body ? JSON.parse(request.body) : {};
+    } catch {
       const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
-      const payload: AnalyzeAndRewriteV2Response = {
-        id: `par_${requestId}`,
-        overallScore,
-        scoreBand,
-        rewriteRecommendation,
-        analysis,
-        improvementSuggestions,
-        bestNextMove,
-        gating: {
-          rewritePreference: input.rewritePreference,
-          expectedImprovement: publicExpectedImprovement,
-          majorBlockingIssues,
-        },
-        rewrite,
-        evaluation,
-        rewritePresentationMode,
-        guidedCompletion,
-        inferenceFallbackUsed,
-        resolutionSource,
-        meta,
-      };
-
-      const sessionUser = await getSessionUser(sessionId);
-      await persistPromptRunSafely({
-        endpoint: '/v2/analyze-and-rewrite',
-        requestId,
-        sessionId,
-        userId: sessionUser?.id,
-        input,
-        response: payload,
-        inferenceData: {
-          resolvedAnalysis,
-          semanticClassification,
-          semanticDecision,
-          semanticFindings,
-          semanticRewritePolicy,
-          patternFit,
-          improvementSuggestions,
-          bestNextMove,
-          inferenceTrigger,
-          inferenceFallbackUsed,
-          validatedInferenceMetadata,
-          inferenceError: inferenceError ?? null,
-          resolutionSource,
-          effectiveResolution: {
-            inferenceMetadataApplied: effectiveResolution.inferenceMetadataApplied,
-            effectiveTaskType: effectiveResolution.effectiveTaskType,
-            effectiveDeliverableType: effectiveResolution.effectiveDeliverableType,
-            effectiveMissingContextType: effectiveResolution.effectiveMissingContextType,
-            effectivePatternFit: effectiveResolution.effectivePatternFit,
-            effectiveCalibrationPath: effectiveResolution.effectiveCalibrationPath,
-            scoringGuardrailsApplied: effectiveResolution.scoringGuardrailsApplied,
-            effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
-          },
-          providerMode,
-          providerModel: providerConfig.model ?? null,
-          responseVersion: meta.version,
-        },
-      });
-
-      const response = jsonResponse(200, payload, headers);
+      const response = errorResponse(400, 'INVALID_REQUEST', 'Malformed JSON body.', meta, headers);
       logRequest({
         requestId,
         endpoint: pathname,
         method: request.method,
-        role: input.role,
-        mode: input.mode,
         statusCode: response.statusCode,
         latencyMs: meta.latencyMs,
         providerMode,
         providerModel: providerConfig.model,
-        evaluationStatus: evaluation?.status,
-        overallDelta: evaluation?.overallDelta,
-        alreadyStrong: rewriteRecommendation === 'no_rewrite_needed',
-        ladderTrace,
-      });
-      return response;
-    } catch (error) {
-      const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
-
-      if (error instanceof ProviderNotConfiguredError) {
-        const response = errorResponse(
-          500,
-          'PROVIDER_NOT_CONFIGURED',
-          'Rewrite provider is not configured for real mode.',
-          meta,
-          headers,
-        );
-        logRequest({
-          requestId,
-          endpoint: pathname,
-          method: request.method,
-          role: input.role,
-          mode: input.mode,
-          statusCode: response.statusCode,
-          latencyMs: meta.latencyMs,
-          providerMode,
-          providerModel: providerConfig.model,
-          errorCode: 'PROVIDER_NOT_CONFIGURED',
-        });
-        return response;
-      }
-
-      if (error instanceof UpstreamRewriteError) {
-        const response = errorResponse(
-          502,
-          'UPSTREAM_MODEL_ERROR',
-          'Rewrite provider failed. Please try again.',
-          meta,
-          headers,
-        );
-        logRequest({
-          requestId,
-          endpoint: pathname,
-          method: request.method,
-          role: input.role,
-          mode: input.mode,
-          statusCode: response.statusCode,
-          latencyMs: meta.latencyMs,
-          providerMode,
-          providerModel: providerConfig.model,
-          errorCode: 'UPSTREAM_MODEL_ERROR',
-        });
-        return response;
-      }
-
-      const response = errorResponse(500, 'INTERNAL_ERROR', 'Internal server error.', meta, headers);
-      logRequest({
-        requestId,
-        endpoint: pathname,
-        method: request.method,
-        role: input.role,
-        mode: input.mode,
-        statusCode: response.statusCode,
-        latencyMs: meta.latencyMs,
-        providerMode,
-        providerModel: providerConfig.model,
-        errorCode: 'INTERNAL_ERROR',
+        errorCode: 'INVALID_REQUEST',
       });
       return response;
     }
+
+    const parsed = safeParseGuidedRewriteRequest(parsedBody);
+    if (!parsed.success) {
+      const code = validationErrorCode(parsed.issues);
+      const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
+      const response = errorResponse(400, code, parsed.issues[0]?.message ?? 'Invalid request.', meta, headers, {
+        issues: parsed.issues,
+      });
+      logRequest({
+        requestId,
+        endpoint: pathname,
+        method: request.method,
+        statusCode: response.statusCode,
+        latencyMs: meta.latencyMs,
+        providerMode,
+        providerModel: providerConfig.model,
+        errorCode: code,
+      });
+      return response;
+    }
+
+    const normalizedGuidedAnswers = normalizeGuidedAnswers(parsed.data.guidedAnswers);
+    const mergedPrompt = synthesizeGuidedPrompt(parsed.data.prompt, normalizedGuidedAnswers);
+
+    return runAnalyzeAndRewriteV2({
+      requestId,
+      startedAtMs,
+      providerMode,
+      providerConfig,
+      headers,
+      pathname,
+      requestMethod: request.method,
+      sessionId,
+      input: {
+        prompt: mergedPrompt,
+        role: parsed.data.role,
+        mode: parsed.data.mode,
+        rewritePreference: parsed.data.rewritePreference,
+      },
+      persistInput: {
+        prompt: parsed.data.prompt,
+        role: parsed.data.role,
+        mode: parsed.data.mode,
+        rewritePreference: parsed.data.rewritePreference,
+      },
+      extraInferenceData: {
+        guidedRewrite: {
+          kind: 'guided_completion',
+          originalPrompt: parsed.data.prompt,
+          mergedPrompt,
+          guidedAnswers: normalizedGuidedAnswers,
+        },
+      },
+    });
   }
 
   const meta = createMeta(requestId, startedAtMs, providerMode, providerConfig.model);

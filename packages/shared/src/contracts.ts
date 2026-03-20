@@ -58,6 +58,18 @@ export const AnalyzeAndRewriteV2RequestSchema = AnalyzeAndRewriteRequestSchema.e
 });
 export type AnalyzeAndRewriteV2Request = z.infer<typeof AnalyzeAndRewriteV2RequestSchema>;
 
+export const GuidedAnswersSchema = z.record(z.string(), z.union([z.string(), z.array(z.string())]));
+export type GuidedAnswers = z.infer<typeof GuidedAnswersSchema>;
+
+export const GuidedRewriteRequestSchema = z.object({
+  prompt: z.string().trim().min(1, 'Prompt is required.').max(6000, 'Prompt too long.'),
+  role: RoleSchema,
+  mode: ModeSchema,
+  rewritePreference: RewritePreferenceSchema.default('auto'),
+  guidedAnswers: GuidedAnswersSchema,
+});
+export type GuidedRewriteRequest = z.infer<typeof GuidedRewriteRequestSchema>;
+
 export const IssueSchema = z.object({
   code: IssueCodeSchema,
   severity: SeveritySchema,
@@ -414,6 +426,53 @@ export const GuidedCompletionSchema = z.object({
 });
 export type GuidedCompletion = z.infer<typeof GuidedCompletionSchema>;
 
+export const GuidedQuestionKindSchema = z.enum(['radio', 'checkbox', 'text', 'textarea']);
+export type GuidedQuestionKind = z.infer<typeof GuidedQuestionKindSchema>;
+
+export const GuidedQuestionMapTargetSchema = z.enum([
+  'audience',
+  'goal',
+  'includes',
+  'excludes',
+  'format',
+  'tone',
+  'detail',
+  'proof',
+  'context',
+]);
+export type GuidedQuestionMapTarget = z.infer<typeof GuidedQuestionMapTargetSchema>;
+
+export const GuidedQuestionOptionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  value: z.string().min(1),
+  hint: z.string().min(1).optional(),
+});
+export type GuidedQuestionOption = z.infer<typeof GuidedQuestionOptionSchema>;
+
+export const GuidedQuestionBlockSchema = z.object({
+  id: z.string().min(1),
+  kind: GuidedQuestionKindSchema,
+  label: z.string().min(1),
+  help: z.string().min(1).optional(),
+  required: z.boolean().optional(),
+  options: z.array(GuidedQuestionOptionSchema).min(1).optional(),
+  placeholder: z.string().min(1).optional(),
+  mapsTo: GuidedQuestionMapTargetSchema,
+});
+export type GuidedQuestionBlock = z.infer<typeof GuidedQuestionBlockSchema>;
+
+export const GuidedCompletionFormSchema = z.object({
+  enabled: z.boolean(),
+  title: z.string().min(1),
+  summary: z.string().min(1),
+  rationale: z.string().min(1).optional(),
+  submitLabel: z.string().min(1),
+  skipLabel: z.string().min(1),
+  blocks: z.array(GuidedQuestionBlockSchema).max(8),
+});
+export type GuidedCompletionForm = z.infer<typeof GuidedCompletionFormSchema>;
+
 export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   id: z.string().startsWith('par_'),
   overallScore: z.number().int().min(0).max(100),
@@ -427,6 +486,7 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   evaluation: EvaluationV2Schema.nullable(),
   rewritePresentationMode: RewritePresentationModeSchema.optional(),
   guidedCompletion: GuidedCompletionSchema.nullable().optional(),
+  guidedCompletionForm: GuidedCompletionFormSchema.nullable().optional(),
   inferenceFallbackUsed: z.boolean().optional(),
   resolutionSource: z.enum(['local', 'inference']).optional(),
   meta: MetaV2Schema,

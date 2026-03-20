@@ -74,6 +74,23 @@ const sampleResult: AnalyzeAndRewriteV2Response = {
     example:
       'Example of a stronger prompt: Write a webhook handler in Node.js using Express that accepts JSON payloads. Validate the request body against a predefined JSON schema. On success, return a 200 status code with a JSON success response. On validation failure, return a 400 status code with a descriptive error message. Exclude unsupported HTTP methods and non-JSON requests.',
   },
+  guidedCompletionForm: {
+    enabled: true,
+    title: 'Complete the missing details',
+    summary: 'This prompt is too open-ended for a strong rewrite. Answer the missing details below and PeakPrompt will build a better version.',
+    submitLabel: 'Build stronger prompt',
+    skipLabel: 'Skip and rewrite anyway',
+    blocks: [
+      {
+        id: 'runtime',
+        kind: 'radio',
+        label: 'What runtime or framework should this target?',
+        required: true,
+        mapsTo: 'context',
+        options: [{ id: 'node_express', label: 'Node.js / Express', value: 'Node.js / Express' }],
+      },
+    ],
+  },
   meta: {
     version: '2',
     requestId: 'req_guided_completion',
@@ -138,6 +155,8 @@ describe('HomepageContent', () => {
             showOptionalRewrite={false}
             onToggleOptionalRewrite={vi.fn()}
             onForceRewrite={vi.fn(async () => undefined)}
+            onSubmitGuidedRewrite={vi.fn(async () => undefined)}
+            guidedSubmitLoading={false}
             onCopyPrompt={vi.fn()}
           />
         }

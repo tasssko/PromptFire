@@ -1,631 +1,288 @@
-# Promptfire
-# Promptfire Starter Specification
+# PromptFire
 
-## Goal
+PromptFire is a TypeScript monorepo for analyzing prompts, deciding whether a rewrite is warranted, and generating higher-signal rewrites with a small web app, a local/serverless API, shared contracts, deterministic heuristics, and a Postgres persistence layer.
 
-Create a clean MVP foundation for Promptable as a monorepo with:
+## What lives here
 
-* a web frontend
-* a serverless API on AWS
-* shared schemas and types
-* a heuristics package for deterministic prompt analysis
-* infrastructure as code
+- `apps/web`: Vite + React frontend for prompt analysis, auth flows, and viewing results.
+- `apps/api`: HTTP API used locally via `tsx` and in AWS Lambda via SST.
+- `packages/shared`: shared Zod schemas, API contracts, and TypeScript types.
+- `packages/heuristics`: deterministic prompt scoring, semantic classification, rewrite gating, and recommendation logic.
+- `packages/db`: Drizzle ORM schema, client, and migrations for Postgres.
+- `infra`: SST stacks for deploying the API and environment-level AWS resources.
 
-This spec is designed so the repo can be bootstrapped directly from a blank state.
+## Architecture
 
----
+The main product flow is:
 
-## Product scope for MVP
+1. The web app sends a prompt to `POST /v2/analyze-and-rewrite`.
+2. The API validates the request with shared Zod schemas.
+3. Heuristics score the prompt, classify issues, decide whether a rewrite should be shown, and generate suggestions.
+4. If needed, the API calls the configured rewrite provider in `mock` or `real` mode.
+5. When a signed-in user is present and `DATABASE_URL` is configured, the API stores the run and any generated rewrite in Postgres.
 
-Promptable is a service that:
+## Monorepo commands
 
-1. accepts a prompt
-2. analyzes it for scope, contrast, clarity, and likely generic-output risk
-3. rewrites it using a role and mode
-4. returns structured feedback and a rewritten prompt
+From the repo root:
 
-Initial target roles:
-
-* `general`
-* `developer`
-* `marketer`
-
-Initial rewrite modes:
-
-* `balanced`
-* `tight_scope`
-* `high_contrast`
-* `low_token_cost`
-
-Initial primary endpoint:
-
-* `POST /v1/analyze-and-rewrite`
-
----
-
-## Technical approach
-
-### Monorepo
-
-Use a monorepo so frontend and backend stay separate but share schemas and types.
-
-### AWS serverless backend
-
-Use Lambda behind API Gateway HTTP API.
-
-### TypeScript everywhere
-
-Use TypeScript across apps and packages.
-
-### Shared validation
-
-Use Zod for request and response schemas.
-
-### Infrastructure as code
-
-Use AWS CDK in TypeScript.
-
----
-
-## Recommended stack
-
-### Package manager
-
-* `pnpm`
-
-### Monorepo tooling
-
-* `turbo`
-
-### Frontend
-
-* `Next.js`
-* `TypeScript`
-* `Tailwind CSS`
-
-### Backend
-
-* `AWS Lambda`
-* `Node.js 22.x runtime`
-* `API Gateway HTTP API`
-* lightweight handler structure
-
-### Shared packages
-
-* `zod`
-* shared TypeScript config and lint config if needed later
-
-### Infrastructure
-
-* `aws-cdk-lib`
-* `constructs`
-
-### Quality
-
-* `eslint`
-* `prettier`
-* `vitest`
-
----
-
-## Repository layout
-
-```text
-repo/
-  apps/
-    web/
-    api/
-  packages/
-    shared/
-    heuristics/
-  infra/
-  package.json
-  pnpm-workspace.yaml
-  turbo.json
-  tsconfig.base.json
-  .gitignore
-  .editorconfig
-  README.md
+```bash
+pnpm install
+pnpm dev
+pnpm test
+pnpm typecheck
+pnpm build
 ```
 
----
+Useful package-specific commands:
 
-## Package responsibilities
-
-### `apps/web`
-
-User-facing app.
-
-Responsibilities:
-
-* prompt input UI
-* role and mode selection
-* show analysis results
-* show rewritten prompt
-* copy actions
-* basic auth later if needed
-
-Suggested pages for MVP:
-
-* `/`
-* optional `/api-docs` later
-
-### `apps/api`
-
-Serverless API handlers.
-
-Responsibilities:
-
-* request parsing
-* schema validation
-* call heuristics package
-* call rewrite engine
-* return structured response
-
-Suggested structure:
-
-```text
-apps/api/
-  src/
-    handlers/
-      analyze-and-rewrite.ts
-    services/
-      analysis.ts
-      rewrite.ts
-    lib/
-      response.ts
-      env.ts
-  package.json
-  tsconfig.json
+```bash
+pnpm --filter @promptfire/api dev
+pnpm --filter @promptfire/web dev
+pnpm --filter @promptfire/db db:migrate
+pnpm --filter @promptfire/db db:generate
 ```
 
-### `packages/shared`
+## Local development
 
-Shared schemas and types.
+### Prerequisites
 
-Responsibilities:
+- Node.js 22+
+- `pnpm`
+- Docker, if you want the local Postgres container
 
-* request schemas
-* response schemas
-* enums for role and mode
-* inferred TypeScript types
+### 1. Start Postgres
 
-Suggested structure:
-
-```text
-packages/shared/
-  src/
-    prompt.ts
-    analysis.ts
-    rewrite.ts
-    index.ts
-  package.json
-  tsconfig.json
+```bash
+docker compose up -d postgres
 ```
 
-### `packages/heuristics`
-
-Deterministic analysis logic.
-
-Responsibilities:
-
-* score prompt scope
-* score contrast
-* detect missing constraints
-* detect likely generic-output risk
-* produce issue codes and signals
-
-Suggested structure:
+Default local database:
 
 ```text
-packages/heuristics/
-  src/
-    analyzePrompt.ts
-    rules/
-      scope.ts
-      contrast.ts
-      clarity.ts
-      genericRisk.ts
-      tokenWaste.ts
-    issues.ts
-    index.ts
-  package.json
-  tsconfig.json
+postgres://promptfire:promptfire@localhost:5432/promptfire
 ```
 
-### `infra`
+### 2. Configure environment variables
 
-AWS infrastructure.
+Copy the examples you need:
 
-Responsibilities:
-
-* Lambda function
-* API Gateway HTTP API
-* environment variable wiring
-* IAM permissions
-* optional CloudWatch log groups
-
-Suggested structure:
-
-```text
-infra/
-  bin/
-    infra.ts
-  lib/
-    promptfire-stack.ts
-  cdk.json
-  package.json
-  tsconfig.json
+```bash
+cp .env.example .env
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 ```
 
----
+For local development, the most important values are:
 
-## Initial domain model
+- API:
+  - `PORT=3001`
+  - `API_AUTH_BYPASS=true` for unauthenticated local use
+  - `REWRITE_PROVIDER_MODE=mock` for deterministic local rewrites
+  - `DATABASE_URL=postgres://promptfire:promptfire@localhost:5432/promptfire`
+- Web:
+  - `VITE_API_BASE_URL=http://localhost:3001`
 
-### Roles
+If you want real model-backed rewrites, set:
 
-* `general`
-* `developer`
-* `marketer`
+```bash
+REWRITE_PROVIDER_MODE=real
+REWRITE_PROVIDER_API_KEY=...
+```
 
-### Modes
+### 3. Apply database migrations
 
-* `balanced`
-* `tight_scope`
-* `high_contrast`
-* `low_token_cost`
+```bash
+pnpm --filter @promptfire/db db:migrate
+```
 
-### Example request
+### 4. Run the apps
+
+In separate terminals:
+
+```bash
+pnpm --filter @promptfire/api dev
+pnpm --filter @promptfire/web dev
+```
+
+Default local URLs:
+
+- Web: `http://localhost:5173`
+- API: `http://localhost:3001`
+
+## API
+
+The API is implemented in [`apps/api/src/server.ts`](/home/tasssko/Clients/Servana/PromptFire/apps/api/src/server.ts) and served locally by [`apps/api/src/local.ts`](/home/tasssko/Clients/Servana/PromptFire/apps/api/src/local.ts).
+
+### Core endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/v1/health` | Health check with v1 metadata |
+| `GET` | `/v2/health` | Health check with v2 metadata |
+| `POST` | `/v1/analyze-and-rewrite` | Original analyze + rewrite response shape |
+| `POST` | `/v2/analyze-and-rewrite` | Current analysis pipeline with gating, suggestions, best next move, and optional rewrite suppression |
+
+### Auth and account endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/auth/magic-link/request` | Start email sign-in |
+| `GET` | `/v1/auth/magic-link/verify` | Verify token and create session |
+| `GET` | `/v1/auth/session` | Return current session state |
+| `POST` | `/v1/auth/logout` | End current session |
+| `GET` | `/v1/account/home` | Return account summary and recent prompt runs |
+| `GET` | `/v1/prompt-runs` | List prompt history for the current user |
+| `GET` | `/v1/prompt-runs/:id` | Fetch a single stored run with rewrite details |
+| `POST` | `/v1/auth/passkey/register/options` | Begin passkey registration |
+| `POST` | `/v1/auth/passkey/register/verify` | Complete passkey registration |
+| `POST` | `/v1/auth/passkey/authenticate/options` | Begin passkey sign-in |
+| `POST` | `/v1/auth/passkey/authenticate/verify` | Complete passkey sign-in |
+
+### Request model
+
+Shared contracts live in [`packages/shared/src/contracts.ts`](/home/tasssko/Clients/Servana/PromptFire/packages/shared/src/contracts.ts).
+
+Important request fields:
+
+- `prompt`: required prompt text
+- `role`: one of `general`, `developer`, `marketer`
+- `mode`: one of `balanced`, `tight_scope`, `high_contrast`, `low_token_cost`
+- `context`: optional structured context object
+- `preferences`: optional response/rewrite preferences
+- `rewritePreference` on v2: `auto`, `force`, or `suppress`
+
+Example v2 request:
 
 ```json
 {
   "prompt": "Write a webhook handler.",
   "role": "developer",
-  "mode": "tight_scope",
-  "context": {
-    "runtime": "Node.js",
-    "deployment": "AWS Lambda"
-  },
-  "preferences": {
-    "includeScores": true,
-    "includeExplanation": true,
-    "includeAlternatives": false
-  }
+  "mode": "balanced",
+  "rewritePreference": "auto"
 }
 ```
 
-### Example response
+### Response model
 
-```json
-{
-  "analysis": {
-    "scores": {
-      "scope": 2,
-      "contrast": 2,
-      "clarity": 4,
-      "constraintQuality": 1,
-      "genericOutputRisk": 9,
-      "tokenWasteRisk": 8
-    },
-    "issues": [
-      {
-        "code": "TASK_TOO_BROAD",
-        "severity": "high",
-        "message": "The task does not define runtime, failure conditions, or implementation boundaries."
-      }
-    ],
-    "summary": "This prompt is likely to produce a generic implementation."
-  },
-  "rewrite": {
-    "role": "developer",
-    "mode": "tight_scope",
-    "rewrittenPrompt": "Write only the request validation and retry-safety portion of a Node.js Lambda webhook handler. Do not implement downstream business logic.",
-    "explanation": "The rewrite narrows scope and adds implementation boundaries.",
-    "changes": [
-      "Reduced task breadth",
-      "Added implementation boundary"
-    ]
-  },
-  "meta": {
-    "version": "0.1"
-  }
-}
+The v2 endpoint can return:
+
+- `overallScore` and `scoreBand`
+- `analysis` with scores, issues, signals, and a summary
+- `improvementSuggestions`
+- `bestNextMove`
+- `gating` with expected improvement and blocking-issue state
+- `rewrite`, which may be `null` when the system suppresses or withholds a rewrite
+- `evaluation`, when a rewrite was generated and scored
+- `rewritePresentationMode`
+- `guidedCompletion`
+- `inferenceFallbackUsed` and `resolutionSource`
+- `meta`
+
+This matters operationally: the API is not a simple “always rewrite” endpoint. It decides when to suppress a rewrite, when to present guidance instead, and when to escalate to model-backed inference for missing context.
+
+### Auth behavior
+
+`/v1/analyze-and-rewrite` and `/v2/analyze-and-rewrite` allow access when either:
+
+- `API_AUTH_BYPASS=true`, or
+- the request includes a valid `Bearer` token matching `API_STATIC_KEY`, or
+- the caller has a valid session cookie
+
+For local work, `API_AUTH_BYPASS=true` is the default.
+
+## Web
+
+The frontend is a Vite + React app in [`apps/web`](/home/tasssko/Clients/Servana/PromptFire/apps/web). The main app entry is [`apps/web/src/App.tsx`](/home/tasssko/Clients/Servana/PromptFire/apps/web/src/App.tsx).
+
+### What the web app does
+
+- exposes the prompt analyzer UI
+- lets the user choose a role, mode, and rewrite preference
+- calls `POST /v2/analyze-and-rewrite`
+- shows loading states for local analysis and inference fallback
+- renders rewrite results, suggestions, and guided-completion states
+- supports magic-link and passkey auth flows
+- shows recent prompt runs for authenticated users
+
+### Web configuration
+
+The only required frontend environment variable is:
+
+```bash
+VITE_API_BASE_URL=http://localhost:3001
 ```
 
----
+The analyzer hook is in [`apps/web/src/components/home/usePromptAnalyzer.ts`](/home/tasssko/Clients/Servana/PromptFire/apps/web/src/components/home/usePromptAnalyzer.ts) and currently posts directly to the v2 endpoint with cookies enabled.
 
-## API design for MVP
+## DB
 
-### Endpoint
+The database package is in [`packages/db`](/home/tasssko/Clients/Servana/PromptFire/packages/db) and uses Drizzle ORM with PostgreSQL.
 
-`POST /v1/analyze-and-rewrite`
+### Schema overview
 
-### Request fields
+Defined in [`packages/db/src/schema.ts`](/home/tasssko/Clients/Servana/PromptFire/packages/db/src/schema.ts):
 
-* `prompt`: string, required
-* `role`: enum, required
-* `mode`: enum, required
-* `context`: object, optional
-* `preferences`: object, optional
+- `users`: user identity and timestamps
+- `magic_link_tokens`: hashed email sign-in tokens
+- `sessions`: browser sessions
+- `passkey_credentials`: stored passkey registrations
+- `prompt_runs`: persisted analyze/rewrite requests and responses
+- `prompt_rewrites`: generated rewrites attached to a prompt run
 
-### Validation rules
+### Persistence behavior
 
-* `prompt` must be non-empty
-* `prompt` length limit should be set conservatively for MVP
-* `role` must be valid
-* `mode` must be valid
+Prompt runs are stored by [`apps/api/src/persistence/promptRuns.ts`](/home/tasssko/Clients/Servana/PromptFire/apps/api/src/persistence/promptRuns.ts).
 
-### Error response shape
+Current behavior:
 
-```json
-{
-  "error": {
-    "code": "INVALID_REQUEST",
-    "message": "Prompt is required."
-  }
-}
+- persistence only happens when `DATABASE_URL` is configured
+- persistence currently requires an authenticated user id
+- the API stores the original prompt, endpoint, role, mode, scores, rewrite recommendation, raw response payload, inference metadata, and generated rewrites
+
+Read models for account history live in [`apps/api/src/persistence/promptRunsRead.ts`](/home/tasssko/Clients/Servana/PromptFire/apps/api/src/persistence/promptRunsRead.ts).
+
+### Migrations
+
+Migration files live in [`packages/db/drizzle`](/home/tasssko/Clients/Servana/PromptFire/packages/db/drizzle):
+
+- `0000_auth_init.sql`
+- `0001_prompt_runs.sql`
+
+Drizzle config is in [`packages/db/drizzle.config.ts`](/home/tasssko/Clients/Servana/PromptFire/packages/db/drizzle.config.ts).
+
+## Shared packages
+
+- [`packages/shared`](/home/tasssko/Clients/Servana/PromptFire/packages/shared): contracts, Zod schemas, enums, and response types
+- [`packages/heuristics`](/home/tasssko/Clients/Servana/PromptFire/packages/heuristics): deterministic scoring, pattern-fit detection, semantic decision logic, improvement suggestions, and rewrite ladder behavior
+
+These two packages are the core reason the web and API stay aligned: the request/response contracts are shared, and most of the product logic is isolated from transport and UI code.
+
+## Deployment notes
+
+Infrastructure is defined with SST in [`infra/sst.config.ts`](/home/tasssko/Clients/Servana/PromptFire/infra/sst.config.ts) and [`infra/lib/promptfire-stack.ts`](/home/tasssko/Clients/Servana/PromptFire/infra/lib/promptfire-stack.ts).
+
+Important caveat: the current SST API stack only declares routes for:
+
+- `GET /v1/health`
+- `POST /v1/analyze-and-rewrite`
+
+The local API implementation already supports additional v2, auth, account, and prompt-run routes. If you deploy the current infra as-is, those newer routes are not yet exposed by the SST route table.
+
+## Testing
+
+Run the full workspace tests:
+
+```bash
+pnpm test
 ```
 
----
+There are targeted tests across:
 
-## Heuristics engine responsibilities
+- API request handling and persistence
+- shared contracts
+- heuristics and rewrite evaluation
+- web UI components and result presentation
 
-The heuristics package should not depend on the LLM.
+## Current state
 
-It should:
-
-* inspect the prompt text
-* inspect optional context fields
-* generate deterministic findings
-* assign scores from 0 to 10
-* emit stable issue codes
-
-### First issue codes
-
-* `PROMPT_TOO_SHORT`
-* `TASK_TOO_BROAD`
-* `AUDIENCE_MISSING`
-* `NO_CONSTRAINTS`
-* `NO_EXCLUSIONS`
-* `LOW_CONTRAST`
-* `MULTIPLE_JOBS_IN_ONE_PROMPT`
-* `HIGH_GENERIC_OUTPUT_RISK`
-* `HIGH_TOKEN_WASTE_RISK`
-
-### First score dimensions
-
-* `scope`
-* `contrast`
-* `clarity`
-* `constraintQuality`
-* `genericOutputRisk`
-* `tokenWasteRisk`
-
----
-
-## Rewrite engine responsibilities
-
-For MVP, the rewrite service can be abstracted behind an interface.
-
-Example:
-
-```ts
-export interface RewriteEngine {
-  rewrite(input: RewriteInput): Promise<RewriteResult>
-}
-```
-
-This keeps the API independent from the initial LLM provider choice.
-
-The rewrite engine should:
-
-* preserve original intent
-* reduce breadth when mode requires it
-* increase useful contrast when mode requires it
-* avoid inventing product facts not supplied by the user
-* return an explanation and list of changes
-
----
-
-## Frontend MVP behaviour
-
-### Main page
-
-Single-page interface with:
-
-* prompt textarea
-* role selector
-* mode selector
-* optional context fields later
-* submit button
-* analysis panel
-* rewrite panel
-
-### MVP user flow
-
-1. user enters prompt
-2. user selects role
-3. user selects mode
-4. user submits
-5. app calls API
-6. results render
-7. user copies rewritten prompt
-
-### Nice additions after MVP
-
-* before/after diff
-* saved prompt history
-* copy explanation
-* alternative modes
-* prompt score badge
-
----
-
-## Infrastructure scope for MVP
-
-### AWS resources
-
-* one Lambda function for API
-* one API Gateway HTTP API
-* IAM role for Lambda
-* CloudWatch logs
-* environment variables for rewrite provider config
-
-### Optional later
-
-* custom domain
-* WAF
-* Cognito or other auth
-* SQS for async rewrite jobs
-* DynamoDB for saved prompt history
-
----
-
-## Environment variables
-
-### API app
-
-* `REWRITE_PROVIDER`
-* `REWRITE_MODEL`
-* `REWRITE_API_KEY`
-* `NODE_ENV`
-
-### Web app
-
-* `NEXT_PUBLIC_API_BASE_URL`
-
----
-
-## Delivery plan
-
-### Phase 1: repository bootstrap
-
-* initialize monorepo
-* set up pnpm workspace
-* set up turbo
-* create apps and packages
-* add TypeScript base config
-
-### Phase 2: shared contracts
-
-* define role and mode enums
-* define request and response Zod schemas
-* export inferred types
-
-### Phase 3: heuristics engine
-
-* implement first scoring rules
-* implement issue detection
-* add tests
-
-### Phase 4: API
-
-* build analyze-and-rewrite handler
-* wire shared validation
-* stub rewrite engine
-* return mock rewrite initially
-
-### Phase 5: frontend
-
-* build single-page UI
-* integrate endpoint
-* render scores, issues, and rewrite
-
-### Phase 6: infrastructure
-
-* provision API Gateway and Lambda with CDK
-* deploy API
-* connect frontend env
-
-### Phase 7: real rewrite provider
-
-* implement provider adapter
-* add retries and error handling
-* track latency and failures
-
----
-
-## Recommended first milestones
-
-### Milestone 1
-
-Bootstrapped repo with:
-
-* monorepo structure
-* working web app
-* working API app
-* shared package
-* heuristics package
-
-### Milestone 2
-
-`POST /v1/analyze-and-rewrite` works with deterministic analysis and mocked rewrite output.
-
-### Milestone 3
-
-Real rewrite provider connected.
-
-### Milestone 4
-
-Deployed MVP on AWS with working frontend and backend.
-
----
-
-## Open questions to leave until later
-
-Do not block MVP on these:
-
-* authentication
-* billing
-* usage quotas
-* saved prompt history
-* team workspaces
-* analytics dashboards
-* viral sharing features
-* lead capture flow
-
-Those can come after the core loop is proven.
-
----
-
-## Practical instruction for code generation tools
-
-If using Codex or another coding agent, start by generating only:
-
-1. monorepo bootstrap
-2. shared schemas and enums
-3. heuristics package with stubbed rules
-4. API handler with mocked rewrite output
-5. basic frontend form and result rendering
-6. CDK stack for Lambda and API Gateway HTTP API
-
-Do not generate authentication, billing, or persistence in the first pass.
-
----
-
-## Summary
-
-Build PromptFire as a TypeScript monorepo with a Next.js frontend, AWS Lambda API, shared schemas, deterministic heuristics, and CDK infrastructure.
-
-Keep the MVP narrow:
-
-* one main endpoint
-* one page
-* deterministic analysis first
-* rewrite engine abstracted behind an interface
-* deploy early
-
----
-
-## Not in v0.1
-
-The following are explicit non-goals for v0.1 and must not be added during bootstrap:
-
-* user accounts
-* saved prompt history
-* team workspaces
-* billing/quota accounting
-* persistence
-* prompt templates
-* share links
-* analytics dashboards
+This repo is beyond the original starter-spec stage. The root README had not kept pace with the implementation, so this document focuses on the code that actually exists today: a v2 prompt analysis API, a React frontend that consumes it, and a Postgres-backed auth and prompt history layer.

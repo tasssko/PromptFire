@@ -13,7 +13,7 @@ type PersistableRequest = AnalyzeAndRewriteRequest | AnalyzeAndRewriteV2Request;
 type PersistableResponse = AnalyzeAndRewriteResponse | AnalyzeAndRewriteV2Response;
 
 interface PersistPromptRunParams {
-  endpoint: '/v1/analyze-and-rewrite' | '/v2/analyze-and-rewrite';
+  endpoint: '/v1/analyze-and-rewrite' | '/v2/analyze-and-rewrite' | '/v2/rewrite-from-guided-answers';
   requestId: string;
   sessionId?: string;
   userId?: string;
