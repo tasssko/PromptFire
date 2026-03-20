@@ -135,7 +135,7 @@
     --sponsor-logo-border: rgba(77, 101, 132, 0.52);
     --sponsor-action-primary-bg: #dbe7f7;
     --sponsor-action-primary-text: #0b1827;
-    --sponsor-action-primary-bg-hover: #edf4ff;
+    --sponsor-action-primary-bg-hover: #c9d8eb;
     --sponsor-action-secondary-bg: rgba(236, 243, 251, 0.08);
     --sponsor-action-secondary-text: #ecf3fb;
     --sponsor-action-secondary-bg-hover: rgba(236, 243, 251, 0.14);
@@ -477,13 +477,15 @@
   }
 
   .pf-sponsor-primary-link {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold no-underline transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold no-underline transition-all;
     color: var(--sponsor-action-primary-text);
     background: var(--sponsor-action-primary-bg);
   }
 
   .pf-sponsor-primary-link:hover {
     background: var(--sponsor-action-primary-bgHover);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(8, 17, 29, 0.18);
   }
 
   .pf-sponsor-brand-panel {
