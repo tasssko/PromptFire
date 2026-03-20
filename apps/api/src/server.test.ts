@@ -85,7 +85,8 @@ describe('API vertical slice', () => {
     });
 
     expect(response.statusCode).toBe(204);
-    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+    expect(response.headers['access-control-allow-credentials']).toBe('true');
     expect(response.headers['access-control-allow-methods']).toContain('POST');
     expect(response.headers['access-control-allow-headers']).toContain('content-type');
   });

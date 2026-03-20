@@ -35,11 +35,11 @@ function parseAllowedOrigins(): string[] {
 
 function resolveAllowedOrigin(requestHeaders?: Record<string, string>): string {
   const allowedOrigins = parseAllowedOrigins();
+  const requestOrigin = requestHeaders?.origin;
   if (allowedOrigins.includes('*')) {
-    return '*';
+    return requestOrigin ?? '*';
   }
 
-  const requestOrigin = requestHeaders?.origin;
   if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
     return requestOrigin;
   }
@@ -50,9 +50,11 @@ function resolveAllowedOrigin(requestHeaders?: Record<string, string>): string {
 export function corsHeaders(requestHeaders?: Record<string, string>): Record<string, string> {
   return {
     'access-control-allow-origin': resolveAllowedOrigin(requestHeaders),
+    'access-control-allow-credentials': 'true',
     'access-control-allow-methods': CORS_ALLOW_METHODS,
     'access-control-allow-headers': CORS_ALLOW_HEADERS,
     'access-control-max-age': '86400',
+    vary: 'Origin',
   };
 }
 
