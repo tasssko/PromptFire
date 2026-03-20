@@ -19,6 +19,7 @@ type TopShellProps = {
   onLoadGeneral: () => void;
   onLoadMarketer: () => void;
   onLoadDeveloper: () => void;
+  showExampleLoader?: boolean;
 };
 
 export function TopShell({
@@ -39,6 +40,7 @@ export function TopShell({
   onLoadGeneral,
   onLoadMarketer,
   onLoadDeveloper,
+  showExampleLoader = true,
 }: TopShellProps) {
   return (
     <section className="grid gap-4 rounded-xl border border-pf-border-subtle bg-shell p-6 shadow-none max-sm:p-4">
@@ -99,20 +101,22 @@ export function TopShell({
           </button>
         </div>
 
-        <details className="border-t border-pf-border-subtle pt-3">
-          <summary className="cursor-pointer text-pf-text-muted">Load example</summary>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" className="pf-button-secondary" onClick={onLoadGeneral} disabled={loading}>
-              General
-            </button>
-            <button type="button" className="pf-button-secondary" onClick={onLoadMarketer} disabled={loading}>
-              Marketer
-            </button>
-            <button type="button" className="pf-button-secondary" onClick={onLoadDeveloper} disabled={loading}>
-              Developer
-            </button>
-          </div>
-        </details>
+        {showExampleLoader && (
+          <details className="border-t border-pf-border-subtle pt-3">
+            <summary className="cursor-pointer text-pf-text-muted">Load example</summary>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className="pf-button-secondary" onClick={onLoadGeneral} disabled={loading}>
+                General
+              </button>
+              <button type="button" className="pf-button-secondary" onClick={onLoadMarketer} disabled={loading}>
+                Marketer
+              </button>
+              <button type="button" className="pf-button-secondary" onClick={onLoadDeveloper} disabled={loading}>
+                Developer
+              </button>
+            </div>
+          </details>
+        )}
       </form>
 
       {error && <p className="text-pf-status-danger-text">{error}</p>}

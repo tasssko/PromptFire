@@ -13,10 +13,20 @@ function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
 }
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+export function Section({
+  title,
+  children,
+  className,
+  titleClassName,
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+  titleClassName?: string;
+}) {
   return (
-    <section className={SECTION_CLASS}>
-      <h2 className={SECTION_TITLE_CLASS}>{title}</h2>
+    <section className={cx(SECTION_CLASS, className)}>
+      <h2 className={cx(SECTION_TITLE_CLASS, titleClassName)}>{title}</h2>
       {children}
     </section>
   );

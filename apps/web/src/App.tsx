@@ -1,31 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
   AccountHomeResponse,
-  AnalyzeAndRewriteV2Response,
   AuthUser,
-  Mode,
   PromptRunDetail,
   PromptRunListItem,
   PromptRunRewrite,
-  RewritePreference,
-  Role,
   SessionResponse,
 } from '@promptfire/shared';
-import { fixtures, modes, roles } from './config';
-import {
-  LoadingCard,
-  ResultsCard,
-  TopShell,
-  panelForState,
-  resolveResultsPresentation,
-  resolveSuccessState,
-  type AnalysisUiState,
-} from './components/results';
+import { AnalyzerWorkspacePage, PublicHomepage } from './components/home';
 import { PrimaryNav } from './components/PrimaryNav';
-import { StackTrackSponsor } from './components/StackTrackSponsor';
 import { applyTheme, resolveInitialTheme, type ThemeMode } from './theme';
-
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
 
 interface RouteState {
@@ -1019,7 +1004,7 @@ function AuthenticatedApp(props: {
       {(route.pathname === '/app/' || route.pathname === '/app') && (
         <HomePage user={session.user} onNavigate={(to) => onNavigate(to)} onSessionRefresh={onSessionRefresh} />
       )}
-      {route.pathname === '/app/analyze' && <AnalyzerWorkspace theme={theme} />}
+      {route.pathname === '/app/analyze' && <AnalyzerWorkspacePage />}
       {route.pathname === '/app/history' && <HistoryPage onNavigate={(to) => onNavigate(to)} />}
       {runDetailMatch && <RunDetailPage runId={decodeURIComponent(runDetailMatch[1] ?? '')} onNavigate={(to) => onNavigate(to)} />}
       {route.pathname === '/app/settings/security' && (
@@ -1041,133 +1026,6 @@ function AuthenticatedApp(props: {
           </main>
         )}
     </div>
-  );
-}
-
-function AnalyzerWorkspace({ theme, showSponsor = false }: { theme: ThemeMode; showSponsor?: boolean }) {
-  const [prompt, setPrompt] = useState(fixtures.general);
-  const [role, setRole] = useState<Role>('general');
-  const [mode, setMode] = useState<Mode>('balanced');
-  const [rewritePreference, setRewritePreference] = useState<RewritePreference>('auto');
-  const [loading, setLoading] = useState(false);
-  const [uiState, setUiState] = useState<AnalysisUiState>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalyzeAndRewriteV2Response | null>(null);
-  const [showOptionalRewrite, setShowOptionalRewrite] = useState(false);
-
-  const canSubmit = useMemo(() => prompt.trim().length > 0 && !loading, [prompt, loading]);
-  async function submitAnalysis(preferenceOverride?: RewritePreference) {
-    setLoading(true);
-    setUiState('loading-local');
-    setResult(null);
-    setError(null);
-    const inferenceStageTimer = globalThis.setTimeout(() => {
-      setUiState((value) => (value === 'loading-local' ? 'loading-inference' : value));
-    }, 900);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/v2/analyze-and-rewrite`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt,
-          role,
-          mode,
-          rewritePreference: preferenceOverride ?? rewritePreference,
-        }),
-      });
-
-      const payload = await response.json();
-      if (!response.ok) {
-        setResult(null);
-        setError(payload?.error?.message ?? 'Request failed.');
-        setUiState('error');
-      } else {
-        setResult(payload);
-        setShowOptionalRewrite(false);
-        setUiState(resolveSuccessState(payload));
-      }
-    } catch {
-      setResult(null);
-      setError('Network error while calling API.');
-      setUiState('error');
-    } finally {
-      clearTimeout(inferenceStageTimer);
-      setLoading(false);
-    }
-  }
-
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    await submitAnalysis();
-  }
-
-  async function handleForceRewrite() {
-    setRewritePreference('force');
-    await submitAnalysis('force');
-  }
-
-  function copyText(value: string) {
-    void navigator.clipboard.writeText(value);
-  }
-
-  const presentation = result ? resolveResultsPresentation(result, role) : null;
-  const topSuggestions = result ? result.improvementSuggestions.slice(0, 3) : [];
-  const panel = panelForState(uiState, Boolean(result && presentation));
-
-  return (
-    <main className="mx-auto grid max-w-[980px] gap-4 p-6 text-pf-text-primary max-sm:p-3">
-      <TopShell
-        prompt={prompt}
-        role={role}
-        mode={mode}
-        rewritePreference={rewritePreference}
-        roles={roles}
-        modes={modes}
-        loading={loading}
-        canSubmit={canSubmit}
-        error={error}
-        onSubmit={handleSubmit}
-        onPromptChange={setPrompt}
-        onRoleChange={setRole}
-        onModeChange={setMode}
-        onRewritePreferenceChange={setRewritePreference}
-        onLoadGeneral={() => {
-          setRole('general');
-          setPrompt(fixtures.general);
-        }}
-        onLoadMarketer={() => {
-          setRole('marketer');
-          setPrompt(fixtures.marketer);
-        }}
-        onLoadDeveloper={() => {
-          setRole('developer');
-          setPrompt(fixtures.developer);
-        }}
-      />
-
-      {showSponsor && <StackTrackSponsor theme={theme} />}
-
-      {panel === 'loading' && (
-        <LoadingCard state={uiState === 'loading-inference' ? 'loading-inference' : 'loading-local'} />
-      )}
-
-      {panel === 'result' && result && presentation && (
-        <ResultsCard
-          prompt={prompt}
-          result={result}
-          presentation={presentation}
-          topSuggestions={topSuggestions}
-          showOptionalRewrite={showOptionalRewrite}
-          onToggleOptionalRewrite={() => setShowOptionalRewrite((value) => !value)}
-          onForceRewrite={handleForceRewrite}
-          onCopyPrompt={copyText}
-        />
-      )}
-    </main>
   );
 }
 
@@ -1232,7 +1090,7 @@ export function App() {
   return (
     <div>
       <PrimaryNav pathname={route.pathname} theme={theme} onNavigate={navigate} onThemeChange={setTheme} />
-      <AnalyzerWorkspace theme={theme} showSponsor />
+      <PublicHomepage />
     </div>
   );
 }
