@@ -1,13 +1,11 @@
-import type { AnalyzeAndRewriteV2Response, BestNextMove, ImprovementSuggestion } from '@promptfire/shared';
-import { ImpactBadge, MetricTile, Section, SurfaceCard, TechnicalMetric, sectionTitleClass } from '../ui';
+import type { AnalyzeAndRewriteV2Response, ImprovementSuggestion } from '@promptfire/shared';
+import { MetricTile, Section, SurfaceCard, TechnicalMetric, sectionTitleClass } from '../ui';
 import {
   bandLabel,
   formatSuggestionTitle,
-  methodFitLabel,
   scoreDimensionLabel,
-  type GuidedCompletionView,
+  type ActionCardView,
   type HeroView,
-  type NoRewriteView,
   type RewritePanelView,
 } from './helpers';
 
@@ -53,9 +51,9 @@ export function HeroCard({ result, hero, onPrimaryAction, onSecondaryAction }: H
 export function FindingsList({ findings, title }: { findings: string[]; title: string }) {
   return (
     <Section title={title}>
-      <ul className="grid list-disc gap-2 pl-[1.2rem]">
+      <ul className="grid gap-2 sm:grid-cols-2">
         {findings.map((finding) => (
-          <li key={finding} className="text-pf-text-secondary">
+          <li key={finding} className="list-none rounded-md border border-pf-border-subtle bg-pf-bg-cardSubtle px-3 py-2 text-pf-text-secondary">
             {finding}
           </li>
         ))}
@@ -64,36 +62,39 @@ export function FindingsList({ findings, title }: { findings: string[]; title: s
   );
 }
 
+function scoreSeverity(label: string, value: number): number {
+  if (label === 'Generic risk' || label === 'Wordiness') {
+    return value;
+  }
+
+  return 10 - value;
+}
+
 export function ScoreBreakdown({ result, title }: { result: AnalyzeAndRewriteV2Response; title: string }) {
+  const metrics = [
+    { label: 'Scope', value: result.analysis.scores.scope },
+    { label: 'Contrast', value: result.analysis.scores.contrast },
+    { label: 'Clarity', value: result.analysis.scores.clarity },
+    { label: scoreDimensionLabel('constraintQuality'), value: result.analysis.scores.constraintQuality },
+    { label: scoreDimensionLabel('genericOutputRisk'), value: result.analysis.scores.genericOutputRisk },
+    { label: scoreDimensionLabel('tokenWasteRisk'), value: result.analysis.scores.tokenWasteRisk },
+  ];
+  const highlighted = new Set(
+    [...metrics]
+      .sort((left, right) => scoreSeverity(right.label, right.value) - scoreSeverity(left.label, left.value))
+      .filter((metric) => scoreSeverity(metric.label, metric.value) >= 4)
+      .slice(0, 3)
+      .map((metric) => metric.label),
+  );
+
   return (
     <Section title={title}>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2">
-        <MetricTile label="Scope" value={result.analysis.scores.scope} />
-        <MetricTile label="Contrast" value={result.analysis.scores.contrast} />
-        <MetricTile label="Clarity" value={result.analysis.scores.clarity} />
-        <MetricTile label={scoreDimensionLabel('constraintQuality')} value={result.analysis.scores.constraintQuality} />
-        <MetricTile label={scoreDimensionLabel('genericOutputRisk')} value={result.analysis.scores.genericOutputRisk} />
-        <MetricTile label={scoreDimensionLabel('tokenWasteRisk')} value={result.analysis.scores.tokenWasteRisk} />
+        {metrics.map((metric) => (
+          <MetricTile key={metric.label} label={metric.label} value={metric.value} emphasized={highlighted.has(metric.label)} />
+        ))}
       </div>
     </Section>
-  );
-}
-
-export function NextStepCard({ bestNextMove, title }: { bestNextMove: BestNextMove; title: string }) {
-  return (
-    <SurfaceCard tone="suggestion">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className={sectionTitleClass}>{title}</h2>
-        <ImpactBadge impact={bestNextMove.expectedImpact} />
-      </div>
-      <p className="font-semibold text-pf-text-primary">{bestNextMove.title}</p>
-      <p>{bestNextMove.rationale}</p>
-      <p>Improves: {bestNextMove.targetScores.map(scoreDimensionLabel).join(', ')}</p>
-      {bestNextMove.methodFit && (
-        <p>Best improvement path: {methodFitLabel(bestNextMove.methodFit.recommendedPattern)}</p>
-      )}
-      {bestNextMove.exampleChange && <p>Example: {bestNextMove.exampleChange}</p>}
-    </SurfaceCard>
   );
 }
 
@@ -114,7 +115,6 @@ export function FullRewriteCard({ result, view, onCopyRewrite }: FullRewriteCard
       <p className="font-semibold text-pf-text-primary">{view.verdictLabel}</p>
       <p>{view.verdictRecommendation}</p>
       <pre>{result.rewrite.rewrittenPrompt}</pre>
-      {result.rewrite.explanation && <p>{result.rewrite.explanation}</p>}
       <div className="flex flex-wrap gap-2">
         <button type="button" className="pf-button-primary" onClick={onCopyRewrite}>
           {view.primaryActionLabel}
@@ -128,7 +128,7 @@ type GuidedCompletionCardProps = {
   prompt: string;
   result: AnalyzeAndRewriteV2Response;
   topSuggestions: ImprovementSuggestion[];
-  view: GuidedCompletionView;
+  view: ActionCardView;
   showOptionalRewrite: boolean;
   onCopyPrompt: (value: string) => void;
   onToggleOptionalRewrite: () => void;
@@ -150,44 +150,60 @@ export function GuidedCompletionCard({
   const primaryValue = guidedCompletion?.template ?? guidedCompletion?.example ?? (questionsText || prompt);
   const fallbackList =
     topSuggestions.length > 0
-      ? topSuggestions.slice(0, 2).map((suggestion) => `${formatSuggestionTitle(suggestion)}: ${suggestion.reason}`)
+      ? topSuggestions.slice(0, 3).map((suggestion) => formatSuggestionTitle(suggestion))
       : [];
   const hiddenRewrite = result.rewrite && result.evaluation?.status !== 'material_improvement';
+  const prominentBlock = view.template ? 'template' : view.example ? 'example' : view.questions?.length ? 'questions' : null;
 
   return (
     <SurfaceCard tone="suggestion">
       <h2 className={sectionTitleClass}>{view.title}</h2>
-      {view.detailTitle && <p className="font-semibold text-pf-text-primary">{view.detailTitle}</p>}
-      <p>{view.summary}</p>
-
-      {guidedCompletion?.questions && guidedCompletion.questions.length > 0 && (
-        <ul className="grid list-disc gap-1 pl-[1.2rem]">
-          {guidedCompletion.questions.map((question) => (
-            <li key={question}>{question}</li>
+      <p className="font-semibold text-pf-text-primary">{view.lead}</p>
+      {view.reasons.length > 0 && (
+        <ul className="grid gap-1 text-sm text-pf-text-secondary">
+          {view.reasons.map((reason) => (
+            <li key={reason} className="list-none">
+              {reason}
+            </li>
           ))}
         </ul>
       )}
 
-      {!guidedCompletion?.questions?.length && fallbackList.length > 0 && (
-        <ul className="grid list-disc gap-1 pl-[1.2rem]">
-          {fallbackList.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-      )}
+      {prominentBlock === 'questions' && view.questions?.length ? (
+        <div className="grid gap-2">
+          {view.questionTitle && <p className="font-semibold text-pf-text-primary">{view.questionTitle}</p>}
+          <ul className="grid gap-1">
+            {view.questions.map((question) => (
+              <li key={question} className="list-none text-pf-text-secondary">
+                {question}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-      {guidedCompletion?.template && (
+      {prominentBlock === 'template' && view.template && view.templateLabel ? (
         <>
           <p className="font-semibold text-pf-text-primary">{view.templateLabel}</p>
-          <pre>{guidedCompletion.template}</pre>
+          <pre>{view.template}</pre>
         </>
-      )}
+      ) : null}
 
-      {!guidedCompletion?.template && guidedCompletion?.example && (
+      {prominentBlock === 'example' && view.example && view.exampleLabel ? (
         <>
           <p className="font-semibold text-pf-text-primary">{view.exampleLabel}</p>
-          <pre>{guidedCompletion.example}</pre>
+          <pre>{view.example}</pre>
         </>
+      ) : null}
+
+      {!prominentBlock && fallbackList.length > 0 && (
+        <ul className="grid gap-1">
+          {fallbackList.map((item) => (
+            <li key={item} className="list-none text-pf-text-secondary">
+              {item}
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -221,57 +237,6 @@ export function GuidedCompletionCard({
   );
 }
 
-type NoRewriteNeededCardProps = {
-  result: AnalyzeAndRewriteV2Response;
-  prompt: string;
-  view: NoRewriteView;
-  showOptionalRewrite: boolean;
-  onCopyPrompt: (value: string) => void;
-  onToggleOptionalRewrite: () => void;
-  onForceRewrite: () => Promise<void>;
-};
-
-export function NoRewriteNeededCard({
-  result,
-  prompt,
-  view,
-  showOptionalRewrite,
-  onCopyPrompt,
-  onToggleOptionalRewrite,
-  onForceRewrite,
-}: NoRewriteNeededCardProps) {
-  return (
-    <SurfaceCard tone="verdict">
-      <h2 className={sectionTitleClass}>{view.title}</h2>
-      <p className="font-semibold text-pf-text-primary">{view.label}</p>
-      <p>{view.supporting}</p>
-      <div className="flex flex-wrap gap-2">
-        <button type="button" className="pf-button-primary" onClick={() => onCopyPrompt(prompt)}>
-          {view.primaryActionLabel}
-        </button>
-        <button
-          type="button"
-          className="pf-button-secondary"
-          onClick={result.rewrite ? onToggleOptionalRewrite : () => void onForceRewrite()}
-        >
-          {result.rewrite ? (showOptionalRewrite ? view.secondaryActionExpandedLabel : view.secondaryActionLabel) : view.secondaryActionLabel}
-        </button>
-      </div>
-
-      {result.rewrite && showOptionalRewrite && (
-        <SurfaceCard tone="rewrite" className="mt-1">
-          <pre>{result.rewrite.rewrittenPrompt}</pre>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className="pf-button-secondary" onClick={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)}>
-              {view.previewCopyLabel}
-            </button>
-          </div>
-        </SurfaceCard>
-      )}
-    </SurfaceCard>
-  );
-}
-
 export function TechnicalDetailsDrawer({
   result,
   topSuggestions,
@@ -286,87 +251,89 @@ export function TechnicalDetailsDrawer({
   return (
     <details className="border-t border-pf-border-subtle pt-3">
       <summary className="cursor-pointer text-pf-text-muted">{title}</summary>
-      <div className="my-3 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-x-4 gap-y-2">
-        <TechnicalMetric>
-          Recommendation <strong>{result.rewriteRecommendation}</strong>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Rewrite preference <code>{result.gating.rewritePreference}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Expected improvement <code>{result.gating.expectedImprovement}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Major blocking issues <code>{result.gating.majorBlockingIssues ? 'true' : 'false'}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Rewrite presentation <code>{rewritePresentationMode}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Issue codes <code>{result.analysis.detectedIssueCodes.length}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Evaluation signals <code>{result.evaluation?.signals.length ?? 0}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Request ID <code>{result.meta.requestId}</code>
-        </TechnicalMetric>
-        <TechnicalMetric>
-          Provider <code>{result.meta.providerMode}</code>
-        </TechnicalMetric>
-        {result.meta.providerModel && (
+      <div className="mt-4 grid gap-4">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-x-4 gap-y-2">
           <TechnicalMetric>
-            Model <code>{result.meta.providerModel}</code>
+            Recommendation <strong>{result.rewriteRecommendation}</strong>
           </TechnicalMetric>
-        )}
-        <TechnicalMetric>
-          Latency <code>{result.meta.latencyMs}ms</code>
-        </TechnicalMetric>
-      </div>
+          <TechnicalMetric>
+            Rewrite preference <code>{result.gating.rewritePreference}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Expected improvement <code>{result.gating.expectedImprovement}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Major blocking issues <code>{result.gating.majorBlockingIssues ? 'true' : 'false'}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Rewrite presentation <code>{rewritePresentationMode}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Issue codes <code>{result.analysis.detectedIssueCodes.length}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Evaluation signals <code>{result.evaluation?.signals.length ?? 0}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Request ID <code>{result.meta.requestId}</code>
+          </TechnicalMetric>
+          <TechnicalMetric>
+            Provider <code>{result.meta.providerMode}</code>
+          </TechnicalMetric>
+          {result.meta.providerModel && (
+            <TechnicalMetric>
+              Model <code>{result.meta.providerModel}</code>
+            </TechnicalMetric>
+          )}
+          <TechnicalMetric>
+            Latency <code>{result.meta.latencyMs}ms</code>
+          </TechnicalMetric>
+        </div>
 
-      {result.evaluation && (
-        <SurfaceCard tone="default">
-          <p className="font-semibold text-pf-text-primary">Rewrite evaluation</p>
-          <div className="grid gap-1">
-            {(['scope', 'contrast', 'clarity'] as const).map((dimension) => (
-              <p key={dimension}>
-                {scoreDimensionLabel(dimension)}: <code>{result.evaluation!.scoreComparison.original[dimension]}</code> {'->'}{' '}
-                <code>{result.evaluation!.scoreComparison.rewrite[dimension]}</code>
+        {result.evaluation && (
+          <SurfaceCard tone="default">
+            <p className="font-semibold text-pf-text-primary">Rewrite evaluation</p>
+            <div className="grid gap-1">
+              {(['scope', 'contrast', 'clarity'] as const).map((dimension) => (
+                <p key={dimension}>
+                  {scoreDimensionLabel(dimension)}: <code>{result.evaluation!.scoreComparison.original[dimension]}</code> {'->'}{' '}
+                  <code>{result.evaluation!.scoreComparison.rewrite[dimension]}</code>
+                </p>
+              ))}
+              <p>
+                Overall delta: <code>{result.evaluation.overallDelta}</code>
               </p>
-            ))}
-            <p>
-              Overall delta: <code>{result.evaluation.overallDelta}</code>
-            </p>
-          </div>
-        </SurfaceCard>
-      )}
+            </div>
+          </SurfaceCard>
+        )}
 
-      {topSuggestions.length > 0 && (
-        <SurfaceCard tone="default">
-          <p className="font-semibold text-pf-text-primary">Detailed suggestions</p>
-          <div className="grid gap-3">
-            {topSuggestions.map((suggestion) => (
-              <div key={suggestion.id} className="grid gap-1">
-                <p className="font-medium text-pf-text-primary">{formatSuggestionTitle(suggestion)}</p>
-                <p>{suggestion.reason}</p>
-                <p>Improves: {suggestion.targetScores.map(scoreDimensionLabel).join(', ')}</p>
-              </div>
-            ))}
-          </div>
-        </SurfaceCard>
-      )}
+        {topSuggestions.length > 0 && (
+          <SurfaceCard tone="default">
+            <p className="font-semibold text-pf-text-primary">Detailed suggestions</p>
+            <div className="grid gap-3">
+              {topSuggestions.map((suggestion) => (
+                <div key={suggestion.id} className="grid gap-1">
+                  <p className="font-medium text-pf-text-primary">{formatSuggestionTitle(suggestion)}</p>
+                  <p>{suggestion.reason}</p>
+                  <p>Improves: {suggestion.targetScores.map(scoreDimensionLabel).join(', ')}</p>
+                </div>
+              ))}
+            </div>
+          </SurfaceCard>
+        )}
 
-      {result.analysis.detectedIssueCodes.length > 0 && (
-        <p>
-          Raw issue codes: <code>{result.analysis.detectedIssueCodes.join(', ')}</code>
-        </p>
-      )}
-      {result.evaluation?.signals.length ? (
-        <p>
-          Full evaluation signals: <code>{result.evaluation.signals.join(', ')}</code>
-        </p>
-      ) : null}
-      {result.guidedCompletion?.rationale && <p>Fallback rationale: {result.guidedCompletion.rationale}</p>}
+        {result.analysis.detectedIssueCodes.length > 0 && (
+          <p>
+            Raw issue codes: <code>{result.analysis.detectedIssueCodes.join(', ')}</code>
+          </p>
+        )}
+        {result.evaluation?.signals.length ? (
+          <p>
+            Full evaluation signals: <code>{result.evaluation.signals.join(', ')}</code>
+          </p>
+        ) : null}
+        {result.guidedCompletion?.rationale && <p>Fallback rationale: {result.guidedCompletion.rationale}</p>}
+      </div>
     </details>
   );
 }

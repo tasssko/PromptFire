@@ -28,26 +28,20 @@ export type HeroView = {
   secondaryAction?: string;
 };
 
-export type NoRewriteView = {
+export type ActionCardView = {
   title: string;
-  label: string;
-  supporting: string;
-  primaryActionLabel: string;
-  secondaryActionLabel: string;
-  secondaryActionExpandedLabel?: string;
-  previewCopyLabel: string;
-};
-
-export type GuidedCompletionView = {
-  title: string;
-  detailTitle: string | null;
-  summary: string;
+  lead: string;
+  reasons: string[];
+  questionTitle?: string;
+  questions?: string[];
+  templateLabel?: string;
+  template?: string;
+  exampleLabel?: string;
+  example?: string;
   primaryActionLabel: string;
   secondaryActionLabel?: string;
   secondaryActionExpandedLabel?: string;
   forceRewriteLabel: string;
-  templateLabel: string;
-  exampleLabel: string;
   rewritePreviewTitle: string;
   previewCopyLabel: string;
 };
@@ -57,10 +51,6 @@ export type RewritePanelView = {
   verdictLabel: string;
   verdictRecommendation: string;
   primaryActionLabel: string;
-};
-
-export type NextStepView = {
-  title: string;
 };
 
 export type SectionTitleMap = Record<ResultSectionId, string>;
@@ -73,10 +63,8 @@ export type ResultsPresentation = {
   hero: HeroView;
   findings: string[];
   sectionTitles: SectionTitleMap;
-  noRewrite: NoRewriteView;
-  guidedCompletion: GuidedCompletionView;
+  actionCard: ActionCardView;
   rewritePanel: RewritePanelView;
-  nextStep: NextStepView;
 };
 
 const issueFindingMap = {
@@ -226,8 +214,7 @@ export function resolveSectionTitles(result: AnalyzeAndRewriteV2Response, role: 
   return {
     findings: resolveRoleVariant(resultsUiConfig.sections.findings.title, role).value,
     subscores: resolveRoleVariant(resultsUiConfig.sections.subscores.title, role).value,
-    why_no_rewrite: resolveRoleVariant(resultsUiConfig.sections.why_no_rewrite.title, role).value,
-    best_next_move: resolveRoleVariant(resultsUiConfig.states[state].bestNextMoveTitle, role).title,
+    action_card: resolveRoleVariant(resultsUiConfig.states[state].actionCardTitle, role).title,
     rewrite_panel: resolveRoleVariant(resultsUiConfig.states[state].rewritePanelTitle, role).title,
     technical_details: resolveRoleVariant(resultsUiConfig.sections.technical_details.title, role).value,
   };
@@ -295,63 +282,114 @@ function resolveFindings(result: AnalyzeAndRewriteV2Response, role: Role): strin
   const findings = resolveFindingIds(result)
     .sort((left, right) => (priority.get(right) ?? 0) - (priority.get(left) ?? 0))
     .map((findingId) => resolveRoleVariant(resultsUiConfig.findings[findingId].text, role).value);
-  const issueMessages = result.analysis.issues.map((issue) => issue.message);
-  const topIssueMessages = issueMessages.slice(0, 3);
-  const output = [...findings];
+  const fallbackIssues = result.analysis.issues
+    .map((issue) => issue.message.replace(/[.]+$/g, ''))
+    .filter((message) => message.length > 0);
+  let positiveBudget = state === 'strong' ? 2 : 1;
+  const compact = findings.filter((finding) => {
+    const isPositive = ['Clear', 'Good', 'Useful', 'Low'].some((prefix) => finding.startsWith(prefix));
+    if (!isPositive) {
+      return true;
+    }
+    if (positiveBudget <= 0) {
+      return false;
+    }
+    positiveBudget -= 1;
+    return true;
+  });
+  const output = [...new Set(compact)];
 
-  if (state !== 'strong') {
-    output.push(...topIssueMessages);
+  if (output.length < 2) {
+    output.push(...fallbackIssues);
   }
 
-  if (output.length < 3) {
-    output.push(...topIssueMessages);
-  }
-
-  if (output.length < 3) {
-    output.push(result.analysis.summary);
+  if (output.length < 2) {
+    output.push(result.analysis.summary.replace(/[.]+$/g, ''));
   }
 
   return [...new Set(output)].slice(0, 4);
 }
 
-export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: Role): GuidedCompletionView {
-  const guidedCompletion = result.guidedCompletion ?? null;
-  const guidedCopy = resolveGuidedCopy(result, role);
-
-  return {
-    title: guidedCompletion?.title ?? guidedCopy.title,
-    detailTitle: guidedCompletion?.title ? null : result.bestNextMove?.title ?? guidedCopy.fallbackDetailTitle,
-    summary:
-      guidedCompletion?.summary ??
-      (result.bestNextMove
-        ? `Start by ${lowerFirst(result.bestNextMove.title)}. ${result.bestNextMove.rationale}`
-        : guidedCopy.fallbackSummary),
-    primaryActionLabel: resolveActionLabel(resolvePrimaryActionId(result), role),
-    secondaryActionLabel: result.rewrite ? resolveActionLabel('show_rewrite_anyway', role) : undefined,
-    secondaryActionExpandedLabel: result.rewrite ? resolveActionLabel('hide_rewrite_anyway', role) : undefined,
-    forceRewriteLabel: resolveActionLabel('generate_rewrite_anyway', role),
-    templateLabel: guidedCopy.templateLabel,
-    exampleLabel: guidedCopy.exampleLabel,
-    rewritePreviewTitle: guidedCopy.rewritePreviewTitle,
-    previewCopyLabel: resolveActionLabel('copy_rewrite_anyway', role),
-  };
+function shortReasonForScore(dimension: ImprovementSuggestion['targetScores'][number]): string {
+  switch (dimension) {
+    case 'scope':
+      return 'tightens scope';
+    case 'contrast':
+      return 'sharpens trade-offs';
+    case 'clarity':
+      return 'makes the request clearer';
+    case 'constraintQuality':
+      return 'adds usable constraints';
+    case 'genericOutputRisk':
+      return 'reduces generic-output risk';
+    case 'tokenWasteRisk':
+      return 'cuts wordiness';
+    default:
+      return dimension;
+  }
 }
 
-function resolveNoRewriteView(result: AnalyzeAndRewriteV2Response, role: Role): NoRewriteView {
-  const verdictId = resolveVerdictId(result);
-  const fallbackVerdict =
-    verdictId === 'rewrite_already_strong' || verdictId === 'strong_suppressed' || verdictId === 'strong_forced'
-      ? resultsUiConfig.verdicts[verdictId]
-      : resultsUiConfig.verdicts.strong_default;
-  const noRewrite = resolveRoleVariant(fallbackVerdict.noRewrite!, role);
+function positiveReasonForResult(result: AnalyzeAndRewriteV2Response): string[] {
+  const reasons: string[] = [];
+  const { scores } = result.analysis;
+
+  if (scores.scope >= 7) reasons.push('scope is already clear');
+  if (scores.constraintQuality >= 7) reasons.push('constraints are already useful');
+  if (scores.clarity >= 7) reasons.push('wording is already clear');
+  if (scores.genericOutputRisk <= 3) reasons.push('generic-output risk is low');
+  if (result.evaluation?.status === 'already_strong') reasons.unshift('the original is already the better default');
+  if (result.gating.expectedImprovement === 'low') reasons.push('rewrite upside looks low');
+
+  return [...new Set(reasons)].slice(0, 3);
+}
+
+export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: Role): ActionCardView {
+  const guidedCompletion = result.guidedCompletion ?? null;
+  const guidedCopy = resolveGuidedCopy(result, role);
+  const sectionTitles = resolveSectionTitles(result, role);
+  const primarySurface = resolvePrimarySurface(result);
+  const questions = guidedCompletion?.questions?.slice(0, 4);
+  const reasons =
+    primarySurface === 'no-rewrite-needed'
+      ? positiveReasonForResult(result)
+      : (result.bestNextMove?.targetScores ?? [])
+          .map(shortReasonForScore)
+          .slice(0, 3);
+  const fallbackReasons =
+    reasons.length > 0
+      ? reasons
+      : resolveFindings(result, role)
+          .slice(0, 3)
+          .map((finding) => finding.replace(/[.]+$/g, '').toLowerCase());
 
   return {
-    title: noRewrite.title,
-    label: noRewrite.label,
-    supporting: noRewrite.supporting,
-    primaryActionLabel: resolveActionLabel('copy_original_prompt', role),
-    secondaryActionLabel: result.rewrite ? resolveActionLabel('show_rewrite_anyway', role) : resolveActionLabel('generate_rewrite_anyway', role),
-    secondaryActionExpandedLabel: result.rewrite ? resolveActionLabel('hide_rewrite_anyway', role) : undefined,
+    title: sectionTitles.action_card,
+    lead:
+      primarySurface === 'no-rewrite-needed'
+        ? result.bestNextMove?.title ?? 'Keep the original prompt'
+        : result.bestNextMove?.title ?? guidedCompletion?.title ?? guidedCopy.fallbackLead,
+    reasons: fallbackReasons,
+    questionTitle: questions?.length ? guidedCopy.questionTitle : undefined,
+    questions,
+    templateLabel: guidedCompletion?.template ? guidedCopy.templateLabel : undefined,
+    template: guidedCompletion?.template,
+    exampleLabel: !guidedCompletion?.template && guidedCompletion?.example ? guidedCopy.exampleLabel : undefined,
+    example: !guidedCompletion?.template ? guidedCompletion?.example : undefined,
+    primaryActionLabel: resolveActionLabel(resolvePrimaryActionId(result), role),
+    secondaryActionLabel:
+      primarySurface === 'full-rewrite'
+        ? undefined
+        : result.rewrite
+          ? resolveActionLabel('show_rewrite_anyway', role)
+          : undefined,
+    secondaryActionExpandedLabel:
+      primarySurface === 'full-rewrite'
+        ? undefined
+        : result.rewrite
+          ? resolveActionLabel('hide_rewrite_anyway', role)
+          : undefined,
+    forceRewriteLabel: resolveActionLabel('generate_rewrite_anyway', role),
+    rewritePreviewTitle: guidedCopy.rewritePreviewTitle,
     previewCopyLabel: resolveActionLabel('copy_rewrite_anyway', role),
   };
 }
@@ -380,44 +418,27 @@ export function resolveResultsPresentation(result: AnalyzeAndRewriteV2Response, 
     hero: resolveHeroView(result, role),
     findings: resolveFindings(result, role),
     sectionTitles: resolveSectionTitles(result, role),
-    noRewrite: resolveNoRewriteView(result, role),
-    guidedCompletion: resolveActionModule(result, role),
+    actionCard: resolveActionModule(result, role),
     rewritePanel: resolveRewritePanelView(result, role),
-    nextStep: {
-      title: resolveSectionTitles(result, role).best_next_move,
-    },
   };
 }
 
 export function scoreDimensionLabel(name: string): string {
   switch (name) {
+    case 'scope':
+      return 'Scope';
+    case 'contrast':
+      return 'Contrast';
+    case 'clarity':
+      return 'Clarity';
     case 'constraintQuality':
-      return 'Useful constraints';
+      return 'Constraints';
     case 'genericOutputRisk':
-      return 'Too generic';
+      return 'Generic risk';
     case 'tokenWasteRisk':
       return 'Wordiness';
     default:
       return name;
-  }
-}
-
-export function methodFitLabel(name: string | null | undefined): string | null {
-  switch (name) {
-    case 'clarify_directly':
-      return 'clarify the request directly';
-    case 'add_examples':
-      return 'add one or two examples';
-    case 'break_into_steps':
-      return 'break the reasoning into steps';
-    case 'split_into_stages':
-      return 'split the task into stages';
-    case 'add_evaluation_criteria':
-      return 'add evaluation criteria';
-    case 'supply_missing_context':
-      return 'supply the missing context';
-    default:
-      return name ? name.replaceAll('_', ' ') : null;
   }
 }
 

@@ -47,11 +47,18 @@ export function SurfaceCard({
   );
 }
 
-export function MetricTile({ label, value }: { label: string; value: number }) {
+export function MetricTile({ label, value, emphasized = false }: { label: string; value: number; emphasized?: boolean }) {
   return (
-    <article className={METRIC_TILE_CLASS}>
-      <p className="m-0 text-[0.86rem] text-pf-text-muted">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-pf-text-primary">{value}</p>
+    <article
+      className={cx(
+        METRIC_TILE_CLASS,
+        emphasized
+          ? 'border-pf-surface-suggestion-border bg-pf-surface-suggestion-bg'
+          : 'opacity-75',
+      )}
+    >
+      <p className={cx('m-0 text-[0.86rem]', emphasized ? 'text-pf-text-primary' : 'text-pf-text-muted')}>{label}</p>
+      <p className={cx('mt-1 text-2xl font-bold', emphasized ? 'text-pf-text-primary' : 'text-pf-text-secondary')}>{value}</p>
     </article>
   );
 }

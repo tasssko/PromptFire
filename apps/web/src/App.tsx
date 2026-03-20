@@ -22,6 +22,7 @@ import {
   resolveSuccessState,
   type AnalysisUiState,
 } from './components/results';
+import { PrimaryNav } from './components/PrimaryNav';
 import { applyTheme, resolveInitialTheme, type ThemeMode } from './theme';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
@@ -92,15 +93,15 @@ function safeObject(value: unknown): Record<string, unknown> | null {
 
 function scoreBandClass(scoreBand: PromptRunListItem['scoreBand']): string {
   if (scoreBand === 'excellent' || scoreBand === 'strong') {
-    return 'bg-emerald-100 text-emerald-900';
+    return 'pf-app-score-strong';
   }
   if (scoreBand === 'usable') {
-    return 'bg-amber-100 text-amber-900';
+    return 'pf-app-score-usable';
   }
   if (scoreBand === 'weak' || scoreBand === 'poor') {
-    return 'bg-rose-100 text-rose-900';
+    return 'pf-app-score-weak';
   }
-  return 'bg-slate-100 text-slate-700';
+  return 'pf-app-score-neutral';
 }
 
 function formatRelativeDate(iso: string): string {
@@ -251,7 +252,9 @@ async function registerPasskeyForUser(user: AuthUser): Promise<void> {
 function AppTopBar(props: {
   user: AuthUser;
   pathname: string;
+  theme: ThemeMode;
   onNavigate: (to: string) => void;
+  onThemeChange: (theme: ThemeMode) => void;
   onLogout: () => Promise<void>;
 }) {
   const { user, pathname, onNavigate, onLogout } = props;
@@ -267,44 +270,14 @@ function AppTopBar(props: {
   }
 
   return (
-    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-3 max-sm:px-3">
-        <button className="text-left" onClick={() => onNavigate('/app/')}>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">PromptFire</p>
-          <p className="text-sm font-semibold text-slate-900">Prompt workspace</p>
-        </button>
-        <nav className="flex items-center gap-2 text-sm">
-          <button
-            className={`rounded-md px-3 py-2 ${pathname === '/app/analyze' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
-            onClick={() => onNavigate('/app/analyze')}
-          >
-            Analyze
-          </button>
-          <button
-            className={`rounded-md px-3 py-2 ${pathname === '/app/' || pathname === '/app' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
-            onClick={() => onNavigate('/app/')}
-          >
-            Home
-          </button>
-          <button
-            className={`rounded-md px-3 py-2 ${pathname === '/app/history' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
-            onClick={() => onNavigate('/app/history')}
-          >
-            History
-          </button>
-          <button
-            className={`rounded-md px-3 py-2 ${pathname === '/app/settings/security' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'}`}
-            onClick={() => onNavigate('/app/settings/security')}
-          >
-            Security
-          </button>
-          <span className="hidden rounded-full bg-slate-100 px-3 py-2 text-xs text-slate-700 sm:inline">{user.email}</span>
-          <button className="rounded-md px-3 py-2 text-slate-700 hover:bg-slate-100" disabled={loggingOut} onClick={handleLogout}>
-            {loggingOut ? 'Signing out...' : 'Logout'}
-          </button>
-        </nav>
-      </div>
-    </header>
+    <PrimaryNav
+      pathname={pathname}
+      theme={props.theme}
+      user={user}
+      onNavigate={onNavigate}
+      onThemeChange={props.onThemeChange}
+      onLogout={loggingOut ? async () => undefined : handleLogout}
+    />
   );
 }
 
@@ -319,24 +292,24 @@ function HistoryList(props: {
   const { title, subtitle, runs, onOpenRun, emptyCtaLabel, onEmptyCtaClick } = props;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="pf-app-card">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-slate-600">{subtitle}</p>}
+        <h2 className="text-lg font-semibold text-pf-text-primary">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-pf-text-secondary">{subtitle}</p>}
       </div>
 
       {runs.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-5">
-          <p className="text-sm text-slate-700">Your prompt history appears after the first analysis run.</p>
-          <button className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={onEmptyCtaClick}>
+        <div className="pf-app-empty">
+          <p className="text-sm text-pf-text-secondary">Your prompt history appears after the first analysis run.</p>
+          <button className="pf-button-primary mt-3 text-sm font-semibold" onClick={onEmptyCtaClick}>
             {emptyCtaLabel}
           </button>
         </div>
       ) : (
         <div className="grid gap-3">
           {runs.map((run) => (
-            <article key={run.id} className="rounded-lg border border-slate-200 p-4">
-              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <article key={run.id} className="pf-app-card-subtle">
+              <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-pf-text-muted">
                 <span>{formatRelativeDate(run.createdAt)}</span>
                 <span aria-hidden="true">•</span>
                 <span>{formatFullDate(run.createdAt)}</span>
@@ -346,15 +319,15 @@ function HistoryList(props: {
                 <span>{run.mode}</span>
                 {run.scoreBand && <span className={`rounded-full px-2 py-0.5 font-semibold ${scoreBandClass(run.scoreBand)}`}>{run.scoreBand}</span>}
               </div>
-              <p className="pf-clamp-3 text-sm text-slate-900">{run.originalPrompt}</p>
+              <p className="pf-clamp-3 text-sm text-pf-text-primary">{run.originalPrompt}</p>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                {run.overallScore !== null && <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">Score {run.overallScore}</span>}
+                {run.overallScore !== null && <span className="pf-app-chip">Score {run.overallScore}</span>}
                 {run.rewriteRecommendation && (
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{run.rewriteRecommendation.replaceAll('_', ' ')}</span>
+                  <span className="pf-app-chip">{run.rewriteRecommendation.replaceAll('_', ' ')}</span>
                 )}
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{run.hasRewrite ? 'Has rewrite' : 'No rewrite saved'}</span>
+                <span className="pf-app-chip">{run.hasRewrite ? 'Has rewrite' : 'No rewrite saved'}</span>
               </div>
-              <button className="mt-3 rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white" onClick={() => onOpenRun(run.id)}>
+              <button className="pf-button-primary mt-3 text-sm font-semibold" onClick={() => onOpenRun(run.id)}>
                 Open run
               </button>
             </article>
@@ -410,45 +383,45 @@ function HomePage(props: {
 
   return (
     <div className="mx-auto grid max-w-5xl gap-4 px-6 py-6 max-sm:px-3">
-      <section className="rounded-xl bg-slate-900 p-6 text-white shadow-md">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-300">PromptFire</p>
+      <section className="pf-app-hero">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pf-text-inverse/80">PromptFire</p>
         <h1 className="mt-2 text-2xl font-semibold">Your prompt workspace</h1>
-        <p className="mt-2 max-w-2xl text-sm text-slate-200">
+        <p className="mt-2 max-w-2xl text-sm text-pf-text-inverse/85">
           Reopen recent runs, keep momentum on score improvements, and start a new analysis when you are ready.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <button className="rounded-md bg-white px-4 py-2 text-sm font-semibold text-slate-900" onClick={() => onNavigate('/app/analyze')}>
+          <button className="pf-button-primary-on-hero text-sm font-semibold" onClick={() => onNavigate('/app/analyze')}>
             Analyze a new prompt
           </button>
-          <button className="rounded-md border border-white/30 px-4 py-2 text-sm font-semibold text-white" onClick={() => onNavigate('/app/history')}>
+          <button className="pf-button-ghost-on-hero text-sm font-semibold" onClick={() => onNavigate('/app/history')}>
             View full history
           </button>
         </div>
       </section>
 
       {user.passkeyCount === 0 && (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Add a passkey (optional)</h2>
-          <p className="mt-1 text-sm text-slate-600">Keep email-first sign-in and add a passkey as a faster accelerator.</p>
+        <section className="pf-app-card">
+          <h2 className="text-lg font-semibold text-pf-text-primary">Add a passkey (optional)</h2>
+          <p className="mt-1 text-sm text-pf-text-secondary">Keep email-first sign-in and add a passkey as a faster accelerator.</p>
           <button
-            className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="pf-button-primary mt-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
             onClick={handleAddPasskey}
             disabled={passkeyState === 'working'}
           >
             {passkeyState === 'working' ? 'Adding passkey...' : 'Add passkey'}
           </button>
-          {passkeyMessage && <p className={`mt-2 text-sm ${passkeyState === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}>{passkeyMessage}</p>}
+          {passkeyMessage && <p className={`mt-2 text-sm ${passkeyState === 'error' ? 'pf-app-status-error' : 'pf-app-status-success'}`}>{passkeyMessage}</p>}
         </section>
       )}
 
       {loading ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-600">Loading recent history...</p>
+        <section className="pf-app-card">
+          <p className="text-sm text-pf-text-secondary">Loading recent history...</p>
         </section>
       ) : error ? (
-        <section className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
-          <p className="text-sm text-rose-700">{error}</p>
-          <button className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => void fetchHome()}>
+        <section className="pf-app-error">
+          <p className="text-sm pf-app-status-error">{error}</p>
+          <button className="pf-button-primary mt-3 text-sm font-semibold" onClick={() => void fetchHome()}>
             Retry
           </button>
         </section>
@@ -491,19 +464,19 @@ function HistoryPage(props: { onNavigate: (to: string) => void }) {
 
   return (
     <div className="mx-auto grid max-w-5xl gap-4 px-6 py-6 max-sm:px-3">
-      <section className="rounded-xl bg-slate-900 p-6 text-white shadow-md">
+      <section className="pf-app-hero">
         <h1 className="text-2xl font-semibold">Prompt history</h1>
-        <p className="mt-1 text-sm text-slate-200">Runs are persisted by analysis invocation, not as a saved prompt library.</p>
+        <p className="mt-1 text-sm text-pf-text-inverse/85">Runs are persisted by analysis invocation, not as a saved prompt library.</p>
       </section>
 
       {loading ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-600">Loading history...</p>
+        <section className="pf-app-card">
+          <p className="text-sm text-pf-text-secondary">Loading history...</p>
         </section>
       ) : error ? (
-        <section className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
-          <p className="text-sm text-rose-700">{error}</p>
-          <button className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => void fetchHistory()}>
+        <section className="pf-app-error">
+          <p className="text-sm pf-app-status-error">{error}</p>
+          <button className="pf-button-primary mt-3 text-sm font-semibold" onClick={() => void fetchHistory()}>
             Retry
           </button>
         </section>
@@ -523,8 +496,8 @@ function HistoryPage(props: { onNavigate: (to: string) => void }) {
 function RewriteCard(props: { rewrite: PromptRunRewrite }) {
   const { rewrite } = props;
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-xs text-slate-500">
+    <article className="pf-app-card-subtle">
+      <div className="mb-2 flex items-center gap-2 text-xs text-pf-text-muted">
         <span>{rewrite.isPrimary ? 'Primary rewrite' : `Rewrite ${rewrite.position + 1}`}</span>
         <span aria-hidden="true">•</span>
         <span>{rewrite.role}</span>
@@ -532,9 +505,9 @@ function RewriteCard(props: { rewrite: PromptRunRewrite }) {
         <span>{rewrite.mode}</span>
       </div>
       <pre>{rewrite.rewrittenPrompt}</pre>
-      {rewrite.explanation && <p className="mt-3 text-sm text-slate-700">{rewrite.explanation}</p>}
+      {rewrite.explanation && <p className="mt-3 text-sm text-pf-text-secondary">{rewrite.explanation}</p>}
       {Array.isArray(rewrite.changes) && rewrite.changes.length > 0 && (
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
+        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-pf-text-secondary">
           {rewrite.changes.map((change, index) => (
             <li key={`${rewrite.id}-change-${index}`}>{change}</li>
           ))}
@@ -542,7 +515,7 @@ function RewriteCard(props: { rewrite: PromptRunRewrite }) {
       )}
       {Boolean(rewrite.evaluationData) && (
         <details className="mt-3">
-          <summary className="cursor-pointer text-sm font-semibold text-slate-700">Evaluation data</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-pf-text-secondary">Evaluation data</summary>
           <pre className="mt-2">{JSON.stringify(rewrite.evaluationData, null, 2)}</pre>
         </details>
       )}
@@ -576,8 +549,8 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl px-6 py-6 max-sm:px-3">
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-600">Loading run...</p>
+        <section className="pf-app-card">
+          <p className="text-sm text-pf-text-secondary">Loading run...</p>
         </section>
       </div>
     );
@@ -586,13 +559,13 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
   if (error || !run) {
     return (
       <div className="mx-auto max-w-5xl px-6 py-6 max-sm:px-3">
-        <section className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
-          <p className="text-sm text-rose-700">{error ?? 'Run not found.'}</p>
+        <section className="pf-app-error">
+          <p className="text-sm pf-app-status-error">{error ?? 'Run not found.'}</p>
           <div className="mt-3 flex gap-2">
-            <button className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => onNavigate('/app/history')}>
+            <button className="pf-button-primary text-sm font-semibold" onClick={() => onNavigate('/app/history')}>
               Back to history
             </button>
-            <button className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700" onClick={() => void fetchRun()}>
+            <button className="pf-button-secondary text-sm font-semibold" onClick={() => void fetchRun()}>
               Retry
             </button>
           </div>
@@ -606,25 +579,25 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
 
   return (
     <div className="mx-auto grid max-w-5xl gap-4 px-6 py-6 max-sm:px-3">
-      <button className="w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700" onClick={() => onNavigate('/app/history')}>
+      <button className="pf-app-link-button" onClick={() => onNavigate('/app/history')}>
         Back to history
       </button>
 
-      <section className="rounded-xl bg-slate-900 p-6 text-white shadow-md">
-        <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Run detail</p>
+      <section className="pf-app-hero">
+        <p className="text-xs uppercase tracking-[0.18em] text-pf-text-inverse/80">Run detail</p>
         <h1 className="mt-2 text-2xl font-semibold">Score-first review</h1>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-          {run.overallScore !== null && <span className="rounded-full bg-white/15 px-3 py-1 font-semibold">Overall score {run.overallScore}</span>}
-          {run.scoreBand && <span className="rounded-full bg-white/15 px-3 py-1 font-semibold">{run.scoreBand}</span>}
+          {run.overallScore !== null && <span className="pf-app-chip-hero">Overall score {run.overallScore}</span>}
+          {run.scoreBand && <span className="pf-app-chip-hero">{run.scoreBand}</span>}
           {run.rewriteRecommendation && (
-            <span className="rounded-full bg-white/15 px-3 py-1 font-semibold">{run.rewriteRecommendation.replaceAll('_', ' ')}</span>
+            <span className="pf-app-chip-hero">{run.rewriteRecommendation.replaceAll('_', ' ')}</span>
           )}
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Run metadata</h2>
-        <div className="mt-2 grid gap-1 text-sm text-slate-700">
+      <section className="pf-app-card">
+        <h2 className="text-lg font-semibold text-pf-text-primary">Run metadata</h2>
+        <div className="mt-2 grid gap-1 text-sm text-pf-text-secondary">
           <p>
             <span className="font-semibold">Created:</span> {formatFullDate(run.createdAt)}
           </p>
@@ -642,25 +615,25 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Original prompt</h2>
+      <section className="pf-app-card">
+        <h2 className="text-lg font-semibold text-pf-text-primary">Original prompt</h2>
         <pre className="mt-3">{run.originalPrompt}</pre>
       </section>
 
       {evaluation && (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Evaluation</h2>
+        <section className="pf-app-card">
+          <h2 className="text-lg font-semibold text-pf-text-primary">Evaluation</h2>
           <pre className="mt-3">{JSON.stringify(evaluation, null, 2)}</pre>
         </section>
       )}
 
       <section className="grid gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">Rewrites</h2>
+        <h2 className="text-lg font-semibold text-pf-text-primary">Rewrites</h2>
         {run.rewrites.length > 0 ? (
           run.rewrites.map((rewrite) => <RewriteCard key={rewrite.id} rewrite={rewrite} />)
         ) : (
-          <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-sm text-slate-700">No rewrite was persisted for this run.</p>
+          <article className="pf-app-card-subtle">
+            <p className="text-sm text-pf-text-secondary">No rewrite was persisted for this run.</p>
           </article>
         )}
       </section>
@@ -697,33 +670,33 @@ function SecuritySettingsPage(props: {
 
   return (
     <div className="mx-auto grid max-w-3xl gap-4 px-6 py-6 max-sm:px-3">
-      <section className="rounded-xl bg-slate-900 p-6 text-white shadow-md">
+      <section className="pf-app-hero">
         <h1 className="text-2xl font-semibold">Security settings</h1>
-        <p className="mt-1 text-sm text-slate-200">Minimal account security controls for passwordless access.</p>
+        <p className="mt-1 text-sm text-pf-text-inverse/85">Minimal account security controls for passwordless access.</p>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Signed-in email</h2>
-        <p className="mt-2 text-sm text-slate-700">{user.email}</p>
+      <section className="pf-app-card">
+        <h2 className="text-lg font-semibold text-pf-text-primary">Signed-in email</h2>
+        <p className="mt-2 text-sm text-pf-text-secondary">{user.email}</p>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Passkey status</h2>
-        <p className="mt-2 text-sm text-slate-700">{user.passkeyCount > 0 ? 'Passkey configured' : 'No passkey configured yet'}</p>
+      <section className="pf-app-card">
+        <h2 className="text-lg font-semibold text-pf-text-primary">Passkey status</h2>
+        <p className="mt-2 text-sm text-pf-text-secondary">{user.passkeyCount > 0 ? 'Passkey configured' : 'No passkey configured yet'}</p>
         {user.passkeyCount === 0 && (
           <button
-            className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            className="pf-button-primary mt-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-60"
             disabled={state === 'working'}
             onClick={handleAddPasskey}
           >
             {state === 'working' ? 'Adding passkey...' : 'Add passkey'}
           </button>
         )}
-        {message && <p className={`mt-2 text-sm ${state === 'error' ? 'text-rose-700' : 'text-emerald-700'}`}>{message}</p>}
+        {message && <p className={`mt-2 text-sm ${state === 'error' ? 'pf-app-status-error' : 'pf-app-status-success'}`}>{message}</p>}
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <button className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => void handleLogout()}>
+      <section className="pf-app-card">
+        <button className="pf-button-primary text-sm font-semibold" onClick={() => void handleLogout()}>
           Logout
         </button>
       </section>
@@ -990,10 +963,12 @@ function AuthCallbackPage(props: { onNavigate: (to: string, replace?: boolean) =
 function AuthenticatedApp(props: {
   route: RouteState;
   session: SessionState;
+  theme: ThemeMode;
   onNavigate: (to: string, replace?: boolean) => void;
+  onThemeChange: (theme: ThemeMode) => void;
   onSessionRefresh: () => Promise<void>;
 }) {
-  const { route, session, onNavigate, onSessionRefresh } = props;
+  const { route, session, theme, onNavigate, onThemeChange, onSessionRefresh } = props;
 
   const logout = useCallback(async () => {
     await apiFetch('/v1/auth/logout', {
@@ -1016,8 +991,8 @@ function AuthenticatedApp(props: {
   if (session.loading) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-700">Loading session...</p>
+        <section className="pf-app-card">
+          <p className="text-sm text-pf-text-secondary">Loading session...</p>
         </section>
       </main>
     );
@@ -1032,11 +1007,18 @@ function AuthenticatedApp(props: {
 
   return (
     <div>
-      <AppTopBar user={session.user} pathname={route.pathname} onNavigate={(to) => onNavigate(to)} onLogout={logout} />
+      <AppTopBar
+        user={session.user}
+        pathname={route.pathname}
+        theme={theme}
+        onNavigate={(to) => onNavigate(to)}
+        onThemeChange={onThemeChange}
+        onLogout={logout}
+      />
       {(route.pathname === '/app/' || route.pathname === '/app') && (
         <HomePage user={session.user} onNavigate={(to) => onNavigate(to)} onSessionRefresh={onSessionRefresh} />
       )}
-      {route.pathname === '/app/analyze' && <AnalyzerWorkspace />}
+      {route.pathname === '/app/analyze' && <AnalyzerWorkspace theme={theme} />}
       {route.pathname === '/app/history' && <HistoryPage onNavigate={(to) => onNavigate(to)} />}
       {runDetailMatch && <RunDetailPage runId={decodeURIComponent(runDetailMatch[1] ?? '')} onNavigate={(to) => onNavigate(to)} />}
       {route.pathname === '/app/settings/security' && (
@@ -1049,9 +1031,9 @@ function AuthenticatedApp(props: {
         route.pathname !== '/app/history' &&
         route.pathname !== '/app/settings/security' && (
           <main className="mx-auto max-w-3xl px-4 py-10">
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <p className="text-sm text-slate-700">Page not found.</p>
-              <button className="mt-3 rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white" onClick={() => onNavigate('/app/', true)}>
+            <section className="pf-app-card">
+              <p className="text-sm text-pf-text-secondary">Page not found.</p>
+              <button className="pf-button-primary mt-3 text-sm font-semibold" onClick={() => onNavigate('/app/', true)}>
                 Go to account home
               </button>
             </section>
@@ -1061,12 +1043,11 @@ function AuthenticatedApp(props: {
   );
 }
 
-function AnalyzerWorkspace() {
+function AnalyzerWorkspace({ theme }: { theme: ThemeMode }) {
   const [prompt, setPrompt] = useState(fixtures.general);
   const [role, setRole] = useState<Role>('general');
   const [mode, setMode] = useState<Mode>('balanced');
   const [rewritePreference, setRewritePreference] = useState<RewritePreference>('auto');
-  const [theme, setTheme] = useState<ThemeMode>(() => resolveInitialTheme());
   const [loading, setLoading] = useState(false);
   const [uiState, setUiState] = useState<AnalysisUiState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -1074,11 +1055,6 @@ function AnalyzerWorkspace() {
   const [showOptionalRewrite, setShowOptionalRewrite] = useState(false);
 
   const canSubmit = useMemo(() => prompt.trim().length > 0 && !loading, [prompt, loading]);
-
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
   async function submitAnalysis(preferenceOverride?: RewritePreference) {
     setLoading(true);
     setUiState('loading-local');
@@ -1148,7 +1124,6 @@ function AnalyzerWorkspace() {
         role={role}
         mode={mode}
         rewritePreference={rewritePreference}
-        theme={theme}
         roles={roles}
         modes={modes}
         loading={loading}
@@ -1159,7 +1134,6 @@ function AnalyzerWorkspace() {
         onRoleChange={setRole}
         onModeChange={setMode}
         onRewritePreferenceChange={setRewritePreference}
-        onThemeChange={setTheme}
         onLoadGeneral={() => {
           setRole('general');
           setPrompt(fixtures.general);
@@ -1196,6 +1170,7 @@ function AnalyzerWorkspace() {
 
 export function App() {
   const [route, setRoute] = useState<RouteState>(() => readRouteState());
+  const [theme, setTheme] = useState<ThemeMode>(() => resolveInitialTheme());
   const [session, setSession] = useState<SessionState>({
     loading: true,
     authenticated: false,
@@ -1223,6 +1198,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
+
+  useEffect(() => {
     const onPopState = () => setRoute(readRouteState());
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -1235,8 +1214,22 @@ export function App() {
   }, [route.pathname, refreshSession]);
 
   if (route.pathname.startsWith('/app')) {
-    return <AuthenticatedApp route={route} session={session} onNavigate={navigate} onSessionRefresh={refreshSession} />;
+    return (
+      <AuthenticatedApp
+        route={route}
+        session={session}
+        theme={theme}
+        onNavigate={navigate}
+        onThemeChange={setTheme}
+        onSessionRefresh={refreshSession}
+      />
+    );
   }
 
-  return <AnalyzerWorkspace />;
+  return (
+    <div>
+      <PrimaryNav pathname={route.pathname} theme={theme} onNavigate={navigate} onThemeChange={setTheme} />
+      <AnalyzerWorkspace theme={theme} />
+    </div>
+  );
 }

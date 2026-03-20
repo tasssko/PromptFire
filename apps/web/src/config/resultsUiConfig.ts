@@ -47,8 +47,7 @@ export type ResultActionId =
 export type ResultSectionId =
   | 'findings'
   | 'subscores'
-  | 'why_no_rewrite'
-  | 'best_next_move'
+  | 'action_card'
   | 'rewrite_panel'
   | 'technical_details';
 
@@ -69,8 +68,9 @@ export type NoRewriteCopy = {
 
 export type GuidedCompletionCopy = {
   title: string;
-  fallbackDetailTitle: string;
+  fallbackLead: string;
   fallbackSummary: string;
+  questionTitle: string;
   templateLabel: string;
   exampleLabel: string;
   rewritePreviewTitle: string;
@@ -82,7 +82,7 @@ export type RewriteVerdictCopy = {
 };
 
 export type StateConfig = {
-  bestNextMoveTitle: RoleVariant<{ title: string }>;
+  actionCardTitle: RoleVariant<{ title: string }>;
   rewritePanelTitle: RoleVariant<{ title: string }>;
 };
 
@@ -127,7 +127,7 @@ export function resolveRoleVariant<T extends object>(value: RoleVariant<T>, role
 export const resultsUiConfig: ResultsUiConfig = {
   states: {
     strong: {
-      bestNextMoveTitle: {
+      actionCardTitle: {
         default: { title: 'Optional next move' },
         developer: { title: 'Optional implementation hardening' },
       },
@@ -136,7 +136,7 @@ export const resultsUiConfig: ResultsUiConfig = {
       },
     },
     usable: {
-      bestNextMoveTitle: {
+      actionCardTitle: {
         default: { title: 'Best next move' },
         developer: { title: 'Best implementation upgrade' },
       },
@@ -145,7 +145,7 @@ export const resultsUiConfig: ResultsUiConfig = {
       },
     },
     weak: {
-      bestNextMoveTitle: {
+      actionCardTitle: {
         default: { title: 'Best next move' },
         developer: { title: 'Best structural fix' },
       },
@@ -157,7 +157,7 @@ export const resultsUiConfig: ResultsUiConfig = {
   verdicts: {
     strong_default: {
       state: 'strong',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'why_no_rewrite', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Strong prompt',
@@ -176,7 +176,7 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
     strong_suppressed: {
       state: 'strong',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'why_no_rewrite', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Strong prompt',
@@ -195,7 +195,7 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
     strong_forced: {
       state: 'strong',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'why_no_rewrite', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Strong prompt, forced rewrite available',
@@ -214,7 +214,7 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
     usable_default: {
       state: 'usable',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'rewrite_panel', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Usable, with one clear upgrade',
@@ -225,22 +225,24 @@ export const resultsUiConfig: ResultsUiConfig = {
       secondaryAction: 'generate_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Guided completion',
-          fallbackDetailTitle: 'Complete the missing details first',
+          title: 'Best next move',
+          fallbackLead: 'Complete the missing details first',
           fallbackSummary: 'Tighten the missing boundaries before spending time on a rewrite.',
+          questionTitle: 'Ask first',
           templateLabel: 'Template',
           exampleLabel: 'Example',
           rewritePreviewTitle: 'Rewrite preview',
         },
         developer: {
-          fallbackDetailTitle: 'Complete the implementation contract first',
+          fallbackLead: 'Complete the implementation contract first',
           fallbackSummary: 'Define runtime, I/O shape, validation, and failure behavior before spending time on a rewrite.',
+          questionTitle: 'Lock down first',
         },
       },
     },
     usable_with_rewrite: {
       state: 'usable',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'rewrite_panel', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Usable, with a stronger rewrite available',
@@ -251,22 +253,24 @@ export const resultsUiConfig: ResultsUiConfig = {
       secondaryAction: 'show_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Guided completion',
-          fallbackDetailTitle: 'Complete the missing details first',
+          title: 'Best next move',
+          fallbackLead: 'Complete the missing details first',
           fallbackSummary: 'Start with the missing structure, then compare the rewrite only if it still helps.',
+          questionTitle: 'Ask first',
           templateLabel: 'Template',
           exampleLabel: 'Example',
           rewritePreviewTitle: 'Rewrite preview',
         },
         developer: {
-          fallbackDetailTitle: 'Complete the implementation contract first',
+          fallbackLead: 'Complete the implementation contract first',
           fallbackSummary: 'Lock down runtime, input, validation, and failure handling before switching to the rewrite.',
+          questionTitle: 'Lock down first',
         },
       },
     },
     weak_default: {
       state: 'weak',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'rewrite_panel', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'This prompt needs tighter boundaries',
@@ -280,22 +284,24 @@ export const resultsUiConfig: ResultsUiConfig = {
       secondaryAction: 'show_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Guided completion',
-          fallbackDetailTitle: 'Complete the missing details first',
+          title: 'Best next move',
+          fallbackLead: 'Complete the missing details first',
           fallbackSummary: 'Tighten the missing boundaries before spending time on a rewrite.',
+          questionTitle: 'Ask first',
           templateLabel: 'Template',
           exampleLabel: 'Example',
           rewritePreviewTitle: 'Rewrite preview',
         },
         developer: {
-          fallbackDetailTitle: 'Complete the implementation contract first',
+          fallbackLead: 'Complete the implementation contract first',
           fallbackSummary: 'Add runtime, input, validation, success, and failure boundaries before relying on a rewrite.',
+          questionTitle: 'Lock down first',
         },
       },
     },
     weak_without_rewrite: {
       state: 'weak',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'rewrite_panel', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Prompt is too open-ended',
@@ -309,22 +315,24 @@ export const resultsUiConfig: ResultsUiConfig = {
       secondaryAction: 'generate_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Guided completion',
-          fallbackDetailTitle: 'Complete the missing details first',
+          title: 'Best next move',
+          fallbackLead: 'Complete the missing details first',
           fallbackSummary: 'Tighten the missing boundaries before spending time on a rewrite.',
+          questionTitle: 'Ask first',
           templateLabel: 'Template',
           exampleLabel: 'Example',
           rewritePreviewTitle: 'Rewrite preview',
         },
         developer: {
-          fallbackDetailTitle: 'Complete the implementation contract first',
+          fallbackLead: 'Complete the implementation contract first',
           fallbackSummary: 'Add runtime, input, validation, success, and failure boundaries before relying on a rewrite.',
+          questionTitle: 'Lock down first',
         },
       },
     },
     rewrite_material_improvement: {
       state: 'weak',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'rewrite_panel', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'rewrite_panel', 'technical_details'],
       hero: {
         default: {
           headline: 'The rewrite gives you a clearer prompt',
@@ -335,7 +343,7 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
     rewrite_possible_regression: {
       state: 'usable',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'rewrite_panel', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'Keep the original, use the guidance',
@@ -346,9 +354,10 @@ export const resultsUiConfig: ResultsUiConfig = {
       secondaryAction: 'show_rewrite_anyway',
       guidedCompletion: {
         default: {
-          title: 'Guided completion',
-          fallbackDetailTitle: 'Apply the structural fix manually',
+          title: 'Best next move',
+          fallbackLead: 'Apply the structural fix manually',
           fallbackSummary: 'Use the guided next step first. The rewrite looks weaker than the original prompt.',
+          questionTitle: 'Ask first',
           templateLabel: 'Template',
           exampleLabel: 'Example',
           rewritePreviewTitle: 'Rewrite preview',
@@ -357,7 +366,7 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
     rewrite_already_strong: {
       state: 'strong',
-      visibleSections: ['subscores', 'findings', 'best_next_move', 'why_no_rewrite', 'technical_details'],
+      visibleSections: ['subscores', 'findings', 'action_card', 'technical_details'],
       hero: {
         default: {
           headline: 'The original prompt was already strong',
@@ -376,28 +385,28 @@ export const resultsUiConfig: ResultsUiConfig = {
     },
   },
   findings: {
-    clear_scope: { text: { default: { value: 'Clear scope and deliverable.' } } },
-    strong_contrast: { text: { default: { value: 'Good trade-off framing and contrast.' } } },
-    clear_instruction: { text: { default: { value: 'Instructions are clear and direct.' } } },
-    useful_constraints: { text: { default: { value: 'Useful constraints improve precision.' } } },
-    low_generic_risk: { text: { default: { value: 'Low generic-output risk.' } } },
-    low_token_risk: { text: { default: { value: 'Low token-waste risk.' } } },
+    clear_scope: { text: { default: { value: 'Clear scope' } } },
+    strong_contrast: { text: { default: { value: 'Good contrast' } } },
+    clear_instruction: { text: { default: { value: 'Clear wording' } } },
+    useful_constraints: { text: { default: { value: 'Useful constraints' } } },
+    low_generic_risk: { text: { default: { value: 'Low generic risk' } } },
+    low_token_risk: { text: { default: { value: 'Low wordiness' } } },
     constraints_missing: {
       text: {
-        default: { value: 'Key constraints are missing.' },
-        developer: { value: 'Runtime, input, validation, or failure constraints are missing.' },
+        default: { value: 'Missing constraints' },
+        developer: { value: 'Missing runtime or I/O constraints' },
       },
     },
-    audience_missing: { text: { default: { value: 'The prompt does not name the audience clearly.' } } },
-    exclusions_missing: { text: { default: { value: 'The prompt does not say what should stay out of scope.' } } },
-    task_overloaded: { text: { default: { value: 'The request is trying to do too many jobs at once.' } } },
-    generic_phrases_detected: { text: { default: { value: 'Generic phrasing is weakening the result shape.' } } },
-    high_generic_risk: { text: { default: { value: 'The current wording is likely to produce generic output.' } } },
-    rewrite_low_value: { text: { default: { value: 'A rewrite is available, but the expected gain is low.' } } },
-    rewrite_forced_by_user: { text: { default: { value: 'A rewrite was generated because you explicitly forced it.' } } },
-    rewrite_suppressed_by_user: { text: { default: { value: 'Rewrite generation was suppressed by your preference.' } } },
-    rewrite_possible_regression: { text: { default: { value: 'The rewrite may be weaker than the original prompt.' } } },
-    already_strong_before_rewrite: { text: { default: { value: 'The original prompt was already strong before rewriting.' } } },
+    audience_missing: { text: { default: { value: 'Audience is unclear' } } },
+    exclusions_missing: { text: { default: { value: 'Missing exclusions' } } },
+    task_overloaded: { text: { default: { value: 'Too many jobs at once' } } },
+    generic_phrases_detected: { text: { default: { value: 'Generic phrasing' } } },
+    high_generic_risk: { text: { default: { value: 'Likely generic output' } } },
+    rewrite_low_value: { text: { default: { value: 'Rewrite gain looks low' } } },
+    rewrite_forced_by_user: { text: { default: { value: 'Rewrite was forced' } } },
+    rewrite_suppressed_by_user: { text: { default: { value: 'Rewrite was suppressed' } } },
+    rewrite_possible_regression: { text: { default: { value: 'Rewrite may be weaker' } } },
+    already_strong_before_rewrite: { text: { default: { value: 'Original was already strong' } } },
   },
   actions: {
     copy_original_prompt: { text: { default: { label: 'Copy original prompt' } } },
@@ -411,12 +420,11 @@ export const resultsUiConfig: ResultsUiConfig = {
     copy_rewrite_anyway: { text: { default: { label: 'Copy rewrite anyway' } } },
   },
   sections: {
-    findings: { title: { default: { value: 'Key findings' } } },
+    findings: { title: { default: { value: 'Main issues' } } },
     subscores: { title: { default: { value: 'Score breakdown' } } },
-    why_no_rewrite: { title: { default: { value: 'No rewrite needed' } } },
-    best_next_move: { title: { default: { value: 'Best next move' } } },
+    action_card: { title: { default: { value: 'Best next move' } } },
     rewrite_panel: { title: { default: { value: 'Recommended rewrite' } } },
-    technical_details: { title: { default: { value: 'Technical details' } } },
+    technical_details: { title: { default: { value: 'Show full analysis' } } },
   },
   rewriteVerdicts: {
     material_improvement: {

@@ -97,12 +97,12 @@ describe('ResultsCard', () => {
 
     expect(markup).toContain('Prompt is too open-ended');
     expect(markup).toContain('Score breakdown');
-    expect(markup).toContain('Key findings');
+    expect(markup).toContain('Main issues');
     expect(markup).toContain('Best structural fix');
     expect(markup).toContain('Define input and output shape');
-    expect(markup).toContain('What runtime or framework should be used?');
+    expect(markup).toContain('Template');
     expect(markup).toContain('Copy template');
-    expect((markup.match(/Fill in the missing details/g) ?? []).length).toBe(1);
+    expect(markup).not.toContain('Guided completion');
     expect(markup).not.toContain('Recommended rewrite');
   });
 });

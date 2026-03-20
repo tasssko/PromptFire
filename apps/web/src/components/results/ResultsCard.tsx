@@ -4,8 +4,6 @@ import {
   FullRewriteCard,
   GuidedCompletionCard,
   HeroCard,
-  NextStepCard,
-  NoRewriteNeededCard,
   ScoreBreakdown,
   TechnicalDetailsDrawer,
 } from './ResultSections';
@@ -72,20 +70,12 @@ export function ResultsCard({
 
       {visibleSections.has('findings') && <FindingsList findings={presentation.findings} title={presentation.sectionTitles.findings} />}
 
-      {visibleSections.has('best_next_move') && result.bestNextMove && (
-        <NextStepCard bestNextMove={result.bestNextMove} title={presentation.nextStep.title} />
-      )}
-
-      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'full-rewrite' && result.rewrite && result.evaluation && (
-        <FullRewriteCard result={result} view={presentation.rewritePanel} onCopyRewrite={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)} />
-      )}
-
-      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'guided-completion' && (
+      {visibleSections.has('action_card') && (
         <GuidedCompletionCard
           prompt={prompt}
           result={result}
           topSuggestions={topSuggestions}
-          view={presentation.guidedCompletion}
+          view={presentation.actionCard}
           showOptionalRewrite={showOptionalRewrite}
           onCopyPrompt={onCopyPrompt}
           onToggleOptionalRewrite={onToggleOptionalRewrite}
@@ -93,16 +83,8 @@ export function ResultsCard({
         />
       )}
 
-      {visibleSections.has('why_no_rewrite') && presentation.primarySurface === 'no-rewrite-needed' && (
-        <NoRewriteNeededCard
-          result={result}
-          prompt={prompt}
-          view={presentation.noRewrite}
-          showOptionalRewrite={showOptionalRewrite}
-          onCopyPrompt={onCopyPrompt}
-          onToggleOptionalRewrite={onToggleOptionalRewrite}
-          onForceRewrite={onForceRewrite}
-        />
+      {visibleSections.has('rewrite_panel') && presentation.primarySurface === 'full-rewrite' && result.rewrite && result.evaluation && (
+        <FullRewriteCard result={result} view={presentation.rewritePanel} onCopyRewrite={() => onCopyPrompt(result.rewrite!.rewrittenPrompt)} />
       )}
 
       {visibleSections.has('technical_details') && (

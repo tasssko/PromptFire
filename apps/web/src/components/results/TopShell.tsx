@@ -1,13 +1,11 @@
 import type { Mode, RewritePreference, Role } from '@promptfire/shared';
 import type { FormEvent } from 'react';
-import type { ThemeMode } from '../../theme';
 
 type TopShellProps = {
   prompt: string;
   role: Role;
   mode: Mode;
   rewritePreference: RewritePreference;
-  theme: ThemeMode;
   roles: readonly Role[];
   modes: readonly Mode[];
   loading: boolean;
@@ -18,7 +16,6 @@ type TopShellProps = {
   onRoleChange: (value: Role) => void;
   onModeChange: (value: Mode) => void;
   onRewritePreferenceChange: (value: RewritePreference) => void;
-  onThemeChange: (value: ThemeMode) => void;
   onLoadGeneral: () => void;
   onLoadMarketer: () => void;
   onLoadDeveloper: () => void;
@@ -29,7 +26,6 @@ export function TopShell({
   role,
   mode,
   rewritePreference,
-  theme,
   roles,
   modes,
   loading,
@@ -40,7 +36,6 @@ export function TopShell({
   onRoleChange,
   onModeChange,
   onRewritePreferenceChange,
-  onThemeChange,
   onLoadGeneral,
   onLoadMarketer,
   onLoadDeveloper,
@@ -49,25 +44,9 @@ export function TopShell({
     <section className="grid gap-4 rounded-xl border border-pf-border-subtle bg-shell p-6 shadow-none max-sm:p-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="grid gap-2">
-          <h1 className="text-[clamp(1.5rem,2vw,1.8rem)] font-bold text-pf-text-primary">PeakPrompt</h1>
-          <p className="text-pf-text-secondary">
+          <h2 className="text-[clamp(1.2rem,1.8vw,1.45rem)] font-semibold text-pf-text-primary">
             Paste a prompt, get one clear score, and only see rewrites when they are worth using.
-          </p>
-        </div>
-
-        <div className="rounded-full border border-pf-border-default bg-pf-bg-cardElevated p-1">
-          <div className="flex gap-1">
-            {(['light', 'dark'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={theme === option ? 'pf-button-primary !min-h-9 !px-3 !py-1' : 'pf-button-secondary !min-h-9 !px-3 !py-1'}
-                onClick={() => onThemeChange(option)}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
+          </h2>
         </div>
       </header>
 

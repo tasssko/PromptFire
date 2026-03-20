@@ -66,12 +66,12 @@ describe('results presentation resolvers', () => {
     );
 
     expect(presentation.hero.headline).toBe('Excellent prompt');
-    expect(presentation.noRewrite.label).toBe('The current prompt is already strong');
+    expect(presentation.actionCard.lead).toBe('Keep the original prompt');
   });
 
   it('uses config-driven action labels for usable prompts', () => {
     const presentation = resolveResultsPresentation(buildResult(), 'general');
-    expect(presentation.guidedCompletion.primaryActionLabel).toBe('Copy template');
+    expect(presentation.actionCard.primaryActionLabel).toBe('Copy template');
   });
 
   it('uses the configured rewrite panel title for weak prompts', () => {
@@ -113,7 +113,7 @@ describe('results presentation resolvers', () => {
       rewriteRecommendation: 'no_rewrite_needed',
       gating: { rewritePreference: 'suppress', expectedImprovement: 'low', majorBlockingIssues: false },
     }))).toBe('strong_suppressed');
-    expect(presentation.noRewrite.label).toBe('Rewrite suppressed by preference');
+    expect(presentation.actionCard.lead).toBe('Keep the original prompt');
   });
 
   it('resolves forced strong verdicts when a rewrite exists', () => {
@@ -217,7 +217,7 @@ describe('results presentation resolvers', () => {
     expect(resolveFindingIds(result)).toEqual(
       expect.arrayContaining(['clear_scope', 'strong_contrast', 'clear_instruction', 'constraints_missing', 'high_generic_risk']),
     );
-    expect(resolveResultsPresentation(result, 'general').findings).toContain('Key constraints are missing.');
+    expect(resolveResultsPresentation(result, 'general').findings).toContain('Missing constraints');
   });
 
   it('changes section visibility by verdict', () => {
@@ -230,9 +230,9 @@ describe('results presentation resolvers', () => {
     );
     const weak = resolveResultsPresentation(buildResult({ rewriteRecommendation: 'rewrite_recommended' }), 'general');
 
-    expect(strong.visibleSectionIds).toContain('why_no_rewrite');
+    expect(strong.visibleSectionIds).toContain('action_card');
     expect(strong.visibleSectionIds).not.toContain('rewrite_panel');
-    expect(weak.visibleSectionIds).toContain('rewrite_panel');
+    expect(weak.visibleSectionIds).toContain('action_card');
   });
 
   it('applies developer wording overrides without changing surface logic', () => {
@@ -272,6 +272,7 @@ describe('results presentation resolvers', () => {
 
     const module = resolveActionModule(result, 'general');
     expect(module.primaryActionLabel).toBe('Copy example');
+    expect(module.example).toBe('Example prompt');
   });
 
   it('suppresses full rewrite surfaces when the rewrite is not materially better', () => {

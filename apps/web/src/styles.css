@@ -123,17 +123,24 @@
     box-sizing: border-box;
   }
 
-  html {
-    background: var(--bg-page);
+  html,
+  body,
+  #root {
+    min-height: 100%;
   }
 
-  body {
-    margin: 0;
-    font-family: theme('fontFamily.ui');
-    color: var(--text-primary);
+  html {
     background-color: var(--bg-page);
     background-image: var(--page-shell-gradient);
     background-attachment: fixed;
+  }
+
+  body {
+    min-height: 100vh;
+    margin: 0;
+    font-family: theme('fontFamily.ui');
+    color: var(--text-primary);
+    background: transparent;
   }
 
   h1,
@@ -274,5 +281,207 @@
 
   .pf-hero-excellent {
     background-image: var(--state-excellent-hero);
+  }
+
+  .pf-top-nav {
+    border-bottom: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 94%, transparent) 0%, color-mix(in srgb, var(--bg-card-elevated) 90%, transparent) 100%);
+    box-shadow: 0 10px 28px rgba(17, 29, 45, 0.08);
+  }
+
+  :root[data-theme='dark'] .pf-top-nav {
+    border-bottom-color: color-mix(in srgb, var(--border-strong) 62%, transparent);
+    background:
+      linear-gradient(180deg, rgba(7, 12, 20, 0.92) 0%, rgba(14, 20, 32, 0.96) 100%);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+  }
+
+  .pf-nav-button {
+    color: var(--text-secondary);
+    background: transparent;
+    border-color: transparent;
+  }
+
+  .pf-nav-button:hover {
+    background: color-mix(in srgb, var(--bg-card-elevated) 88%, transparent);
+    color: var(--text-primary);
+  }
+
+  .pf-nav-button-active {
+    background: var(--text-primary);
+    color: var(--bg-card);
+  }
+
+  .pf-nav-button-active:hover {
+    background: var(--text-primary);
+    color: var(--bg-card);
+  }
+
+  :root[data-theme='dark'] .pf-nav-button {
+    color: #c7d5e6;
+  }
+
+  :root[data-theme='dark'] .pf-nav-button:hover {
+    background: rgba(96, 126, 164, 0.18);
+    color: #f4f8fc;
+  }
+
+  :root[data-theme='dark'] .pf-nav-button-active {
+    background: linear-gradient(135deg, #7cc5ff 0%, #8fb4ff 100%);
+    color: #08111d;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .pf-nav-theme-toggle {
+    border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
+    background: color-mix(in srgb, var(--bg-card-subtle) 88%, transparent);
+  }
+
+  :root[data-theme='dark'] .pf-nav-theme-toggle {
+    border-color: rgba(111, 144, 184, 0.32);
+    background: rgba(18, 31, 46, 0.92);
+  }
+
+  .pf-nav-icon-button {
+    min-height: 2.25rem;
+    min-width: 2.25rem;
+    padding: 0;
+    border-radius: 9999px;
+    color: var(--text-muted);
+    background: transparent;
+  }
+
+  .pf-nav-icon-button:hover {
+    background: color-mix(in srgb, var(--bg-card-elevated) 82%, transparent);
+    color: var(--text-primary);
+  }
+
+  .pf-nav-icon-button-active {
+    background: var(--text-primary);
+    color: var(--bg-card);
+  }
+
+  .pf-nav-icon-button-active:hover {
+    background: var(--text-primary);
+    color: var(--bg-card);
+  }
+
+  :root[data-theme='dark'] .pf-nav-icon-button {
+    color: #9db2cb;
+  }
+
+  :root[data-theme='dark'] .pf-nav-icon-button:hover {
+    background: rgba(110, 144, 189, 0.16);
+    color: #f4f8fc;
+  }
+
+  :root[data-theme='dark'] .pf-nav-icon-button-active {
+    background: linear-gradient(135deg, #7cc5ff 0%, #8fb4ff 100%);
+    color: #08111d;
+  }
+
+  .pf-nav-pill {
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--bg-card-subtle) 86%, transparent);
+    color: var(--text-secondary);
+    border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  }
+
+  :root[data-theme='dark'] .pf-nav-pill {
+    background: rgba(18, 31, 46, 0.92);
+    border-color: rgba(111, 144, 184, 0.28);
+    color: #d9e6f4;
+  }
+
+  .pf-app-hero {
+    @apply rounded-xl p-6 text-pf-text-inverse shadow-md;
+    background-image: linear-gradient(135deg, #183d59 0%, #19566d 58%, #3f7a88 100%);
+  }
+
+  :root[data-theme='dark'] .pf-app-hero {
+    background-image: linear-gradient(135deg, #09111c 0%, #102537 56%, #174655 100%);
+  }
+
+  .pf-app-card {
+    @apply rounded-xl border p-5 shadow-sm;
+    border-color: var(--border-default);
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+
+  .pf-app-card-subtle {
+    @apply rounded-lg border p-4 shadow-sm;
+    border-color: var(--border-default);
+    background: var(--bg-card);
+    color: var(--text-primary);
+  }
+
+  .pf-app-empty {
+    @apply rounded-lg border border-dashed p-5;
+    border-color: var(--border-strong);
+    background: var(--bg-card-subtle);
+  }
+
+  .pf-app-error {
+    @apply rounded-xl border p-5 shadow-sm;
+    border-color: color-mix(in srgb, var(--status-danger-text) 35%, var(--border-default));
+    background: color-mix(in srgb, var(--status-danger-text) 8%, var(--bg-card));
+  }
+
+  .pf-app-chip {
+    @apply rounded-full px-2 py-1;
+    background: var(--bg-card-subtle);
+    color: var(--text-secondary);
+  }
+
+  .pf-app-chip-hero {
+    @apply rounded-full px-3 py-1 font-semibold;
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-inverse);
+  }
+
+  .pf-app-divider {
+    border-color: var(--border-default);
+  }
+
+  .pf-app-link-button {
+    @apply w-fit rounded-md border px-3 py-2 text-sm font-semibold;
+    border-color: var(--border-default);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+  }
+
+  .pf-app-link-button:hover {
+    background: var(--bg-card-subtle);
+    color: var(--text-primary);
+  }
+
+  .pf-app-status-success {
+    color: var(--feedback-high-text);
+  }
+
+  .pf-app-status-error {
+    color: var(--status-danger-text);
+  }
+
+  .pf-app-score-strong {
+    background: color-mix(in srgb, var(--feedback-high-bg) 92%, transparent);
+    color: var(--feedback-high-text);
+  }
+
+  .pf-app-score-usable {
+    background: color-mix(in srgb, var(--feedback-medium-bg) 92%, transparent);
+    color: var(--feedback-medium-text);
+  }
+
+  .pf-app-score-weak {
+    background: color-mix(in srgb, var(--feedback-low-bg) 92%, transparent);
+    color: var(--feedback-low-text);
+  }
+
+  .pf-app-score-neutral {
+    background: var(--bg-card-subtle);
+    color: var(--text-secondary);
   }
 }
