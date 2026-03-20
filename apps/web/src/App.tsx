@@ -23,6 +23,7 @@ import {
   type AnalysisUiState,
 } from './components/results';
 import { PrimaryNav } from './components/PrimaryNav';
+import { StackTrackSponsor } from './components/StackTrackSponsor';
 import { applyTheme, resolveInitialTheme, type ThemeMode } from './theme';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3001';
@@ -1043,7 +1044,7 @@ function AuthenticatedApp(props: {
   );
 }
 
-function AnalyzerWorkspace({ theme }: { theme: ThemeMode }) {
+function AnalyzerWorkspace({ theme, showSponsor = false }: { theme: ThemeMode; showSponsor?: boolean }) {
   const [prompt, setPrompt] = useState(fixtures.general);
   const [role, setRole] = useState<Role>('general');
   const [mode, setMode] = useState<Mode>('balanced');
@@ -1148,6 +1149,8 @@ function AnalyzerWorkspace({ theme }: { theme: ThemeMode }) {
         }}
       />
 
+      {showSponsor && <StackTrackSponsor theme={theme} />}
+
       {panel === 'loading' && (
         <LoadingCard state={uiState === 'loading-inference' ? 'loading-inference' : 'loading-local'} />
       )}
@@ -1229,7 +1232,7 @@ export function App() {
   return (
     <div>
       <PrimaryNav pathname={route.pathname} theme={theme} onNavigate={navigate} onThemeChange={setTheme} />
-      <AnalyzerWorkspace theme={theme} />
+      <AnalyzerWorkspace theme={theme} showSponsor />
     </div>
   );
 }

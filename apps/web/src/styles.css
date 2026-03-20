@@ -50,6 +50,23 @@
     --surface-verdict-bg: #f6f9fc;
     --surface-verdict-border: #d7e0e9;
 
+    --sponsor-bg: linear-gradient(180deg, rgba(17, 45, 82, 0.96) 0%, rgba(22, 54, 92, 0.96) 100%);
+    --sponsor-border: rgba(66, 99, 143, 0.34);
+    --sponsor-text: #eef4fb;
+    --sponsor-text-muted: rgba(238, 244, 251, 0.76);
+    --sponsor-badge-bg: rgba(255, 255, 255, 0.08);
+    --sponsor-badge-text: #f5f9ff;
+    --sponsor-logo-bg: rgba(255, 255, 255, 0.95);
+    --sponsor-logo-border: rgba(197, 211, 231, 0.9);
+    --sponsor-action-primary-bg: rgba(255, 255, 255, 0.96);
+    --sponsor-action-primary-text: #153150;
+    --sponsor-action-primary-bg-hover: #ffffff;
+    --sponsor-action-secondary-bg: rgba(255, 255, 255, 0.08);
+    --sponsor-action-secondary-text: #eef4fb;
+    --sponsor-action-secondary-bg-hover: rgba(255, 255, 255, 0.14);
+    --sponsor-highlight-bg: rgba(255, 255, 255, 0.08);
+    --sponsor-highlight-text: #f5f9ff;
+
     --code-bg: #f3f7fb;
     --code-border: #d8e4ef;
     --loading-soft: #dfe8f2;
@@ -107,6 +124,23 @@
     --surface-rewrite-border: #294058;
     --surface-verdict-bg: #141d29;
     --surface-verdict-border: #293646;
+
+    --sponsor-bg: linear-gradient(180deg, rgba(12, 21, 33, 0.96) 0%, rgba(16, 30, 46, 0.96) 100%);
+    --sponsor-border: rgba(73, 97, 128, 0.34);
+    --sponsor-text: #ecf3fb;
+    --sponsor-text-muted: rgba(236, 243, 251, 0.72);
+    --sponsor-badge-bg: rgba(236, 243, 251, 0.08);
+    --sponsor-badge-text: #ecf3fb;
+    --sponsor-logo-bg: rgba(18, 29, 44, 0.96);
+    --sponsor-logo-border: rgba(77, 101, 132, 0.52);
+    --sponsor-action-primary-bg: #dbe7f7;
+    --sponsor-action-primary-text: #0b1827;
+    --sponsor-action-primary-bg-hover: #edf4ff;
+    --sponsor-action-secondary-bg: rgba(236, 243, 251, 0.08);
+    --sponsor-action-secondary-text: #ecf3fb;
+    --sponsor-action-secondary-bg-hover: rgba(236, 243, 251, 0.14);
+    --sponsor-highlight-bg: rgba(236, 243, 251, 0.08);
+    --sponsor-highlight-text: #ecf3fb;
 
     --code-bg: #0e1724;
     --code-border: #28384b;
@@ -401,6 +435,102 @@
 
   :root[data-theme='dark'] .pf-app-hero {
     background-image: linear-gradient(135deg, #09111c 0%, #102537 56%, #174655 100%);
+  }
+
+  .pf-sponsor-spotlight {
+    @apply grid gap-4 rounded-xl border p-5 shadow-sm;
+    background: var(--sponsor-bg);
+    border-color: var(--sponsor-border);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .pf-sponsor-copy,
+  .pf-sponsor-brand-panel {
+    min-width: 0;
+  }
+
+  .pf-sponsor-eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.18em];
+    color: var(--sponsor-text-muted);
+  }
+
+  .pf-sponsor-headline {
+    @apply mt-2 text-xl font-semibold leading-tight;
+    color: var(--sponsor-text);
+    max-width: 22rem;
+  }
+
+  .pf-sponsor-support {
+    @apply mt-2 text-sm leading-6;
+    color: var(--sponsor-text-muted);
+    max-width: 36rem;
+  }
+
+  .pf-sponsor-chip-row {
+    @apply mt-3 flex flex-wrap gap-2;
+  }
+
+  .pf-sponsor-chip {
+    @apply inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold;
+    color: var(--sponsor-badge-text);
+    background: var(--sponsor-badge-bg);
+  }
+
+  .pf-sponsor-primary-link {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold no-underline transition-colors;
+    color: var(--sponsor-action-primary-text);
+    background: var(--sponsor-action-primary-bg);
+  }
+
+  .pf-sponsor-primary-link:hover {
+    background: var(--sponsor-action-primary-bgHover);
+  }
+
+  .pf-sponsor-brand-panel {
+    @apply rounded-xl border p-4;
+    justify-self: end;
+    width: min(100%, 18rem);
+    background: var(--sponsor-logo-bg);
+    border-color: var(--sponsor-logo-border);
+  }
+
+  .pf-sponsor-brand-mark {
+    @apply mb-4 flex items-center gap-3;
+  }
+
+  .pf-sponsor-logo-tile {
+    @apply flex h-11 w-11 items-center justify-center rounded-lg border;
+    background: var(--sponsor-highlight-bg);
+    border-color: var(--sponsor-logo-border);
+  }
+
+  .pf-sponsor-brand-name {
+    @apply text-sm font-semibold;
+    color: var(--text-primary);
+  }
+
+  .pf-sponsor-brand-desc {
+    @apply mt-1 text-xs;
+    color: var(--text-muted);
+  }
+
+  @media (min-width: 900px) {
+    .pf-sponsor-spotlight {
+      grid-template-columns: minmax(0, 1.6fr) minmax(15rem, 0.8fr);
+      align-items: center;
+    }
+  }
+
+  @media (max-width: 899px) {
+    .pf-sponsor-brand-panel {
+      justify-self: stretch;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pf-sponsor-chip-row > :nth-child(n + 2) {
+      display: none;
+    }
   }
 
   .pf-app-card {
