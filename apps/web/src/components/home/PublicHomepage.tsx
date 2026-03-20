@@ -21,6 +21,7 @@ import { TrustRow } from './TrustRow';
 import { usePromptAnalyzer } from './usePromptAnalyzer';
 
 export function HomepageContent({
+  hero,
   topShell,
   loadingCard,
   resultsCard,
@@ -28,6 +29,7 @@ export function HomepageContent({
   loading,
   theme,
 }: {
+  hero?: ReactNode;
   topShell: ReactNode;
   loadingCard?: ReactNode;
   resultsCard?: ReactNode;
@@ -37,6 +39,7 @@ export function HomepageContent({
 }) {
   return (
     <main className="mx-auto grid max-w-[980px] gap-6 px-6 py-5 text-pf-text-primary max-sm:gap-5 max-sm:px-3 max-sm:py-3">
+      {hero}
       {topShell}
       {loadingCard}
       {resultsCard}
@@ -51,7 +54,13 @@ export function HomepageContent({
   );
 }
 
-export function PublicHomepage({ theme }: { theme: ThemeMode }) {
+export function PublicHomepage({
+  theme,
+  onGetStarted,
+}: {
+  theme: ThemeMode;
+  onGetStarted: () => void;
+}) {
   const analyzer = usePromptAnalyzer();
 
   function handleLoadExample(id: HomepageExampleId) {
@@ -82,6 +91,24 @@ export function PublicHomepage({ theme }: { theme: ThemeMode }) {
   return (
     <HomepageContent
       theme={theme}
+      hero={
+        <section className="grid gap-4 rounded-xl border border-pf-border-subtle bg-shell p-6 shadow-none max-sm:p-4">
+          <div className="grid gap-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pf-text-muted">PEAKPrompt</p>
+            <h1 className="text-[clamp(1.8rem,3vw,2.6rem)] font-semibold text-pf-text-primary">
+              Analyze prompts, then keep your runs in one calm workspace.
+            </h1>
+            <p className="max-w-2xl text-sm text-pf-text-secondary">
+              Sign in with email. Add a passkey later for faster access.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="pf-button-primary text-sm font-semibold" onClick={onGetStarted}>
+              Get started
+            </button>
+          </div>
+        </section>
+      }
       topShell={
         <TopShell
           prompt={analyzer.prompt}

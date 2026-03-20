@@ -413,7 +413,7 @@ function HomePage(props: {
         </section>
       ) : (
         <HistoryList
-          title="Recent prompt history"
+          title="Recent prompt runs"
           subtitle="Runs are sorted newest first."
           runs={runs}
           onOpenRun={(runId) => onNavigate(`/app/history/${runId}`)}
@@ -769,7 +769,7 @@ function LoginPage(props: {
       <header className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">PromptFire</p>
         <h1 className="mt-2 text-3xl font-semibold text-slate-900">Sign in to PromptFire</h1>
-        <p className="mt-2 text-sm text-slate-600">Use email for a sign-in link, or passkey if you already set one up.</p>
+        <p className="mt-2 text-sm text-slate-600">Use your email for a sign-in link, or use a passkey if you already set one up.</p>
       </header>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -904,7 +904,7 @@ function AuthCallbackPage(props: { onNavigate: (to: string, replace?: boolean) =
     <main className="mx-auto grid max-w-md gap-4 px-4 py-10">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         {state === 'verifying' && <p className="text-sm text-slate-700">Verifying your sign-in link...</p>}
-        {state === 'redirecting' && <p className="text-sm text-emerald-700">Sign-in complete. Redirecting to your workspace...</p>}
+        {state === 'redirecting' && <p className="text-sm text-emerald-700">Sign-in complete. Redirecting to PromptFire...</p>}
 
         {state === 'expired' && (
           <div className="grid gap-3">
@@ -1058,6 +1058,17 @@ export function App() {
     }
   }, []);
 
+  const routePublicUser = useCallback(async () => {
+    try {
+      const nextSession = await getSession();
+      setSession(nextSession);
+      navigate(nextSession.authenticated ? '/app/' : '/app/login');
+    } catch {
+      setSession({ loading: false, authenticated: false, user: null });
+      navigate('/app/login');
+    }
+  }, [navigate]);
+
   useEffect(() => {
     applyTheme(theme);
   }, [theme]);
@@ -1069,10 +1080,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (route.pathname.startsWith('/app')) {
-      void refreshSession();
-    }
-  }, [route.pathname, refreshSession]);
+    void refreshSession();
+  }, [refreshSession]);
 
   if (route.pathname.startsWith('/app')) {
     return (
@@ -1089,8 +1098,15 @@ export function App() {
 
   return (
     <div>
-      <PrimaryNav pathname={route.pathname} theme={theme} onNavigate={navigate} onThemeChange={setTheme} />
-      <PublicHomepage theme={theme} />
+      <PrimaryNav
+        pathname={route.pathname}
+        theme={theme}
+        onNavigate={navigate}
+        onThemeChange={setTheme}
+        publicPrimaryCtaLabel="Get started"
+        onPublicPrimaryCtaClick={() => void routePublicUser()}
+      />
+      <PublicHomepage theme={theme} onGetStarted={() => void routePublicUser()} />
     </div>
   );
 }

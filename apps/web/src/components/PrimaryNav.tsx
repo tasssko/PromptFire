@@ -10,13 +10,24 @@ type PrimaryNavProps = {
   onNavigate: (to: string) => void;
   onThemeChange: (theme: ThemeMode) => void;
   onLogout?: () => Promise<void>;
+  publicPrimaryCtaLabel?: string;
+  onPublicPrimaryCtaClick?: () => void;
 };
 
 function navButtonClass(active: boolean): string {
   return active ? 'pf-nav-button pf-nav-button-active' : 'pf-nav-button';
 }
 
-export function PrimaryNav({ pathname, theme, user, onNavigate, onThemeChange, onLogout }: PrimaryNavProps) {
+export function PrimaryNav({
+  pathname,
+  theme,
+  user,
+  onNavigate,
+  onThemeChange,
+  onLogout,
+  publicPrimaryCtaLabel,
+  onPublicPrimaryCtaClick,
+}: PrimaryNavProps) {
   const inApp = pathname.startsWith('/app');
   const homePath = inApp ? '/app/' : '/';
   const analyzePath = inApp ? '/app/analyze' : '/';
@@ -81,6 +92,11 @@ export function PrimaryNav({ pathname, theme, user, onNavigate, onThemeChange, o
             </button>
           </div>
           {user?.email && <span className="pf-nav-pill hidden px-3 py-2 text-xs sm:inline">{user.email}</span>}
+          {!inApp && publicPrimaryCtaLabel && onPublicPrimaryCtaClick && (
+            <button className="pf-button-primary px-4 py-2 text-sm font-semibold" onClick={onPublicPrimaryCtaClick}>
+              {publicPrimaryCtaLabel}
+            </button>
+          )}
           {onLogout && (
             <button className="pf-nav-button" onClick={() => void onLogout()}>
               <span className="flex items-center gap-2">

@@ -317,6 +317,7 @@ describe('API vertical slice', () => {
     });
     const requestBody = JSON.parse(requestResponse.body);
     expect(requestResponse.statusCode).toBe(200);
+    expect(requestBody.message).toBe('If the email is valid, a sign-in link has been sent.');
     expect(typeof requestBody.debugToken).toBe('string');
 
     const verifyResponse = await handleHttpRequest({
@@ -356,6 +357,34 @@ describe('API vertical slice', () => {
     });
     const postLogoutSessionBody = JSON.parse(postLogoutSessionResponse.body);
     expect(postLogoutSessionBody.authenticated).toBe(false);
+  });
+
+  it('returns the same generic magic-link request response for new and existing emails', async () => {
+    process.env.AUTH_INCLUDE_DEBUG_TOKEN = 'false';
+
+    const firstResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/magic-link/request',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'repeat-user@example.com' }),
+    });
+    const secondResponse = await handleHttpRequest({
+      method: 'POST',
+      path: '/v1/auth/magic-link/request',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'repeat-user@example.com' }),
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+    expect(JSON.parse(firstResponse.body)).toEqual({
+      ok: true,
+      message: 'If the email is valid, a sign-in link has been sent.',
+    });
+    expect(JSON.parse(secondResponse.body)).toEqual({
+      ok: true,
+      message: 'If the email is valid, a sign-in link has been sent.',
+    });
   });
 
   it('returns detailed reason for invalid magic-link callback verification', async () => {

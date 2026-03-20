@@ -85,9 +85,10 @@ const sampleResult: AnalyzeAndRewriteV2Response = {
 describe('HomepageContent', () => {
   it('renders homepage sections in the requested order', () => {
     const markup = renderToStaticMarkup(
-      <HomepageContent topShell={<div>TopShell</div>} onLoadExample={vi.fn()} loading={false} />,
+      <HomepageContent hero={<div>Hero</div>} topShell={<div>TopShell</div>} onLoadExample={vi.fn()} loading={false} />,
     );
 
+    expect(markup.indexOf('Hero')).toBeLessThan(markup.indexOf('TopShell'));
     expect(markup.indexOf('TopShell')).toBeLessThan(markup.indexOf('Project sponsor'));
     expect(markup.indexOf('Project sponsor')).toBeLessThan(markup.indexOf('How PeakPrompt works'));
     expect(markup.indexOf('How PeakPrompt works')).toBeLessThan(markup.indexOf('Start with an example'));
@@ -117,16 +118,17 @@ describe('HomepageContent', () => {
 
   it('omits results by default and renders them when provided', () => {
     const withoutResults = renderToStaticMarkup(
-      <HomepageContent topShell={<div>TopShell</div>} onLoadExample={vi.fn()} loading={false} />,
+      <HomepageContent hero={<div>Hero</div>} topShell={<div>TopShell</div>} onLoadExample={vi.fn()} loading={false} />,
     );
 
     expect(withoutResults).not.toContain('Score breakdown');
 
     const withResults = renderToStaticMarkup(
-      <HomepageContent
-        topShell={<div>TopShell</div>}
-        onLoadExample={vi.fn()}
-        loading={false}
+        <HomepageContent
+          hero={<div>Hero</div>}
+          topShell={<div>TopShell</div>}
+          onLoadExample={vi.fn()}
+          loading={false}
         resultsCard={
           <ResultsCard
             prompt="Write a webhook handler."
