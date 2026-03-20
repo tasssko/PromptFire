@@ -5,6 +5,13 @@
 @layer base {
   :root {
     color-scheme: light;
+    --container-max: 1200px;
+    --page-gutter: 24px;
+    --page-gutter-wide: 32px;
+    --header-height: 72px;
+    --control-height: 36px;
+    --control-radius: 12px;
+    --header-gap: 8px;
     --bg-page: #f4f7fb;
     --bg-shell: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(245, 249, 255, 0.92) 100%);
     --bg-card: #ffffff;
@@ -317,6 +324,41 @@
     background-image: var(--state-excellent-hero);
   }
 
+  .pf-page-shell {
+    width: min(100%, calc(var(--container-max) + (var(--page-gutter) * 2)));
+    margin-inline: auto;
+    padding-inline: var(--page-gutter);
+  }
+
+  .pf-page-stack {
+    @apply grid gap-4 py-6;
+  }
+
+  .pf-page-stack-tight {
+    @apply grid gap-4 py-5;
+  }
+
+  .pf-page-shell-narrow {
+    width: min(100%, 36rem);
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+
+  @media (min-width: 1440px) {
+    .pf-page-shell,
+    .pf-top-nav-shell {
+      padding-inline: var(--page-gutter-wide);
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pf-page-shell,
+    .pf-top-nav-shell,
+    .pf-page-shell-narrow {
+      padding-inline: 0.75rem;
+    }
+  }
+
   .pf-top-nav {
     border-bottom: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
     background:
@@ -331,7 +373,56 @@
     box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
   }
 
+  .pf-top-nav-shell {
+    width: min(100%, calc(var(--container-max) + (var(--page-gutter) * 2)));
+    margin-inline: auto;
+    padding-inline: var(--page-gutter);
+  }
+
+  .pf-top-nav-row {
+    min-height: var(--header-height);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+  }
+
+  .pf-top-nav-brand {
+    min-height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+  }
+
+  .pf-top-nav-brand-copy {
+    display: grid;
+    align-content: center;
+    gap: 0.15rem;
+    line-height: 1.1;
+  }
+
+  .pf-top-nav-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--header-gap);
+  }
+
   .pf-nav-button {
+    min-height: var(--control-height);
+    height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding-inline: 0.875rem;
+    border-radius: var(--control-radius);
     color: var(--text-secondary);
     background: transparent;
     border-color: transparent;
@@ -368,6 +459,13 @@
   }
 
   .pf-nav-theme-toggle {
+    min-height: var(--control-height);
+    height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.125rem;
+    border-radius: calc(var(--control-radius) + 6px);
     border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
     background: color-mix(in srgb, var(--bg-card-subtle) 88%, transparent);
   }
@@ -378,8 +476,13 @@
   }
 
   .pf-nav-icon-button {
-    min-height: 2.25rem;
-    min-width: 2.25rem;
+    min-height: calc(var(--control-height) - 4px);
+    height: calc(var(--control-height) - 4px);
+    min-width: calc(var(--control-height) - 4px);
+    width: calc(var(--control-height) - 4px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 0;
     border-radius: 9999px;
     color: var(--text-muted);
@@ -416,6 +519,12 @@
   }
 
   .pf-nav-pill {
+    min-height: var(--control-height);
+    height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 0.875rem;
     border-radius: 9999px;
     background: color-mix(in srgb, var(--bg-card-subtle) 86%, transparent);
     color: var(--text-secondary);
@@ -426,6 +535,22 @@
     background: rgba(18, 31, 46, 0.92);
     border-color: rgba(111, 144, 184, 0.28);
     color: #d9e6f4;
+  }
+
+  .pf-nav-primary-button {
+    min-height: var(--control-height);
+    height: var(--control-height);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding-inline: 1rem;
+    border-radius: var(--control-radius);
+    background: var(--action-primary-bg);
+    color: var(--action-primary-text);
+  }
+
+  .pf-nav-primary-button:hover {
+    background: var(--action-primary-bg-hover);
   }
 
   .pf-app-hero {

@@ -36,76 +36,68 @@ export function PrimaryNav({
 
   return (
     <header className="pf-top-nav sticky top-0 z-10 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-3 max-sm:px-3">
-        <button className="text-left" onClick={() => onNavigate(homePath)}>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pf-text-muted">PeakPrompt</p>
-          <p className="text-sm font-semibold text-pf-text-primary">{inApp ? 'Prompt workspace' : 'Analyze prompts'}</p>
-        </button>
+      <div className="pf-top-nav-shell">
+        <div className="pf-top-nav-row">
+          <button className="pf-top-nav-brand" onClick={() => onNavigate(homePath)}>
+            <span className="pf-top-nav-brand-copy">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-pf-text-muted">PeakPrompt</span>
+              <span className="text-sm font-semibold text-pf-text-primary">{inApp ? 'Prompt workspace' : 'Analyze prompts'}</span>
+            </span>
+          </button>
 
-        <nav className="flex items-center gap-2 text-sm">
-          <button className={`rounded-md px-3 py-2 ${navButtonClass(homeActive)}`} onClick={() => onNavigate(homePath)}>
-            <span className="flex items-center gap-2">
+          <nav className="pf-top-nav-actions text-sm">
+            <button className={navButtonClass(homeActive)} onClick={() => onNavigate(homePath)}>
               <FontAwesomeIcon icon={faHouse} className="text-sm" />
-              Home
-            </span>
-          </button>
-          <button className={`rounded-md px-3 py-2 ${navButtonClass(analyzeActive)}`} onClick={() => onNavigate(analyzePath)}>
-            <span className="flex items-center gap-2">
+              <span>Home</span>
+            </button>
+            <button className={navButtonClass(analyzeActive)} onClick={() => onNavigate(analyzePath)}>
               <FontAwesomeIcon icon={faSparkles} className="text-sm" />
-              Analyze
-            </span>
-          </button>
-          {inApp && (
-            <>
+              <span>Analyze</span>
+            </button>
+            {inApp && (
+              <>
+                <button className={navButtonClass(pathname === '/app/history')} onClick={() => onNavigate('/app/history')}>
+                  <span>History</span>
+                </button>
+                <button className={navButtonClass(pathname === '/app/settings/security')} onClick={() => onNavigate('/app/settings/security')}>
+                  <span>Security</span>
+                </button>
+              </>
+            )}
+            <div className="pf-nav-theme-toggle" role="group" aria-label="Theme mode">
               <button
-                className={`rounded-md px-3 py-2 ${navButtonClass(pathname === '/app/history')}`}
-                onClick={() => onNavigate('/app/history')}
+                type="button"
+                className={`pf-nav-icon-button ${theme === 'light' ? 'pf-nav-icon-button-active' : ''}`}
+                onClick={() => onThemeChange('light')}
+                aria-label="Use light mode"
+                title="Light mode"
               >
-                History
+                <FontAwesomeIcon icon={faSunBright} />
               </button>
               <button
-                className={`rounded-md px-3 py-2 ${navButtonClass(pathname === '/app/settings/security')}`}
-                onClick={() => onNavigate('/app/settings/security')}
+                type="button"
+                className={`pf-nav-icon-button ${theme === 'dark' ? 'pf-nav-icon-button-active' : ''}`}
+                onClick={() => onThemeChange('dark')}
+                aria-label="Use dark mode"
+                title="Dark mode"
               >
-                Security
+                <FontAwesomeIcon icon={faMoonStars} />
               </button>
-            </>
-          )}
-          <div className="pf-nav-theme-toggle ml-1 flex items-center rounded-full p-1">
-            <button
-              type="button"
-              className={`pf-nav-icon-button ${theme === 'light' ? 'pf-nav-icon-button-active' : ''}`}
-              onClick={() => onThemeChange('light')}
-              aria-label="Use light mode"
-              title="Light mode"
-            >
-              <FontAwesomeIcon icon={faSunBright} />
-            </button>
-            <button
-              type="button"
-              className={`pf-nav-icon-button ${theme === 'dark' ? 'pf-nav-icon-button-active' : ''}`}
-              onClick={() => onThemeChange('dark')}
-              aria-label="Use dark mode"
-              title="Dark mode"
-            >
-              <FontAwesomeIcon icon={faMoonStars} />
-            </button>
-          </div>
-          {user?.email && <span className="pf-nav-pill hidden px-3 py-2 text-xs sm:inline">{user.email}</span>}
-          {!inApp && publicPrimaryCtaLabel && onPublicPrimaryCtaClick && (
-            <button className="pf-button-primary px-4 py-2 text-sm font-semibold" onClick={onPublicPrimaryCtaClick}>
-              {publicPrimaryCtaLabel}
-            </button>
-          )}
-          {onLogout && (
-            <button className="pf-nav-button" onClick={() => void onLogout()}>
-              <span className="flex items-center gap-2">
+            </div>
+            {user?.email && <span className="pf-nav-pill hidden text-xs sm:inline-flex">{user.email}</span>}
+            {!inApp && publicPrimaryCtaLabel && onPublicPrimaryCtaClick && (
+              <button className="pf-nav-primary-button text-sm font-semibold" onClick={onPublicPrimaryCtaClick}>
+                {publicPrimaryCtaLabel}
+              </button>
+            )}
+            {onLogout && (
+              <button className="pf-nav-button" onClick={() => void onLogout()}>
                 <FontAwesomeIcon icon={faArrowRightFromBracket} className="text-sm" />
-                Logout
-              </span>
-            </button>
-          )}
-        </nav>
+                <span>Logout</span>
+              </button>
+            )}
+          </nav>
+        </div>
       </div>
     </header>
   );

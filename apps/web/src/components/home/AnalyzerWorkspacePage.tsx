@@ -6,7 +6,7 @@ export function AnalyzerWorkspacePage() {
   const analyzer = usePromptAnalyzer();
 
   return (
-    <main className="mx-auto grid max-w-[980px] gap-4 p-6 text-pf-text-primary max-sm:p-3">
+    <main className="pf-page-shell pf-page-stack text-pf-text-primary">
       <TopShell
         prompt={analyzer.prompt}
         role={analyzer.role}

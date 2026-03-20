@@ -38,7 +38,7 @@ export function HomepageContent({
   theme?: ThemeMode;
 }) {
   return (
-    <main className="mx-auto grid max-w-[980px] gap-6 px-6 py-5 text-pf-text-primary max-sm:gap-5 max-sm:px-3 max-sm:py-3">
+    <main className="pf-page-shell pf-page-stack-tight text-pf-text-primary max-sm:gap-5 max-sm:py-3">
       {hero}
       {topShell}
       {loadingCard}

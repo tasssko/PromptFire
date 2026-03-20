@@ -368,9 +368,9 @@ function HomePage(props: {
   }
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-4 px-6 py-6 max-sm:px-3">
+    <div className="pf-page-shell pf-page-stack">
       <section className="pf-app-hero">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pf-text-inverse/80">PromptFire</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pf-text-inverse/80">PeakPrompt</p>
         <h1 className="mt-2 text-2xl font-semibold">Your prompt workspace</h1>
         <p className="mt-2 max-w-2xl text-sm text-pf-text-inverse/85">
           Reopen recent runs, keep momentum on score improvements, and start a new analysis when you are ready.
@@ -449,7 +449,7 @@ function HistoryPage(props: { onNavigate: (to: string) => void }) {
   }, [fetchHistory]);
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-4 px-6 py-6 max-sm:px-3">
+    <div className="pf-page-shell pf-page-stack">
       <section className="pf-app-hero">
         <h1 className="text-2xl font-semibold">Prompt history</h1>
         <p className="mt-1 text-sm text-pf-text-inverse/85">Runs are persisted by analysis invocation, not as a saved prompt library.</p>
@@ -534,7 +534,7 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-6 max-sm:px-3">
+      <div className="pf-page-shell py-6">
         <section className="pf-app-card">
           <p className="text-sm text-pf-text-secondary">Loading run...</p>
         </section>
@@ -544,7 +544,7 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
 
   if (error || !run) {
     return (
-      <div className="mx-auto max-w-5xl px-6 py-6 max-sm:px-3">
+      <div className="pf-page-shell py-6">
         <section className="pf-app-error">
           <p className="text-sm pf-app-status-error">{error ?? 'Run not found.'}</p>
           <div className="mt-3 flex gap-2">
@@ -564,7 +564,7 @@ function RunDetailPage(props: { runId: string; onNavigate: (to: string) => void 
   const evaluation = safeObject(responseData?.evaluation);
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-4 px-6 py-6 max-sm:px-3">
+    <div className="pf-page-shell pf-page-stack">
       <button className="pf-app-link-button" onClick={() => onNavigate('/app/history')}>
         Back to history
       </button>
@@ -655,7 +655,7 @@ function SecuritySettingsPage(props: {
   }
 
   return (
-    <div className="mx-auto grid max-w-3xl gap-4 px-6 py-6 max-sm:px-3">
+    <div className="pf-page-shell pf-page-stack">
       <section className="pf-app-hero">
         <h1 className="text-2xl font-semibold">Security settings</h1>
         <p className="mt-1 text-sm text-pf-text-inverse/85">Minimal account security controls for passwordless access.</p>
@@ -765,10 +765,10 @@ function LoginPage(props: {
   const isBusy = uiState === 'sending_magic_link' || uiState === 'passkey_in_progress';
 
   return (
-    <main className="mx-auto grid max-w-md gap-4 px-4 py-10">
+    <main className="pf-page-shell-narrow grid gap-4 py-10">
       <header className="text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">PromptFire</p>
-        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Sign in to PromptFire</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">PeakPrompt</p>
+        <h1 className="mt-2 text-3xl font-semibold text-slate-900">Sign in to PeakPrompt</h1>
         <p className="mt-2 text-sm text-slate-600">Use your email for a sign-in link, or use a passkey if you already set one up.</p>
       </header>
 
@@ -901,7 +901,7 @@ function AuthCallbackPage(props: { onNavigate: (to: string, replace?: boolean) =
   }, [onNavigate]);
 
   return (
-    <main className="mx-auto grid max-w-md gap-4 px-4 py-10">
+    <main className="pf-page-shell-narrow grid gap-4 py-10">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         {state === 'verifying' && <p className="text-sm text-slate-700">Verifying your sign-in link...</p>}
         {state === 'redirecting' && <p className="text-sm text-emerald-700">Sign-in complete. Redirecting to PromptFire...</p>}
@@ -976,7 +976,7 @@ function AuthenticatedApp(props: {
 
   if (session.loading) {
     return (
-      <main className="mx-auto max-w-3xl px-4 py-10">
+      <main className="pf-page-shell py-10">
         <section className="pf-app-card">
           <p className="text-sm text-pf-text-secondary">Loading session...</p>
         </section>
@@ -1016,7 +1016,7 @@ function AuthenticatedApp(props: {
         route.pathname !== '/app/analyze' &&
         route.pathname !== '/app/history' &&
         route.pathname !== '/app/settings/security' && (
-          <main className="mx-auto max-w-3xl px-4 py-10">
+          <main className="pf-page-shell py-10">
             <section className="pf-app-card">
               <p className="text-sm text-pf-text-secondary">Page not found.</p>
               <button className="pf-button-primary mt-3 text-sm font-semibold" onClick={() => onNavigate('/app/', true)}>
