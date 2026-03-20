@@ -415,6 +415,9 @@ export const RewritePresentationModeSchema = z.enum([
 ]);
 export type RewritePresentationMode = z.infer<typeof RewritePresentationModeSchema>;
 
+export const RequestSourceSchema = z.enum(['analyze', 'guided_submit']);
+export type RequestSource = z.infer<typeof RequestSourceSchema>;
+
 export const GuidedCompletionSchema = z.object({
   mode: z.enum(['template_with_example', 'questions_only']),
   title: z.string().min(1),
@@ -485,6 +488,7 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   rewrite: RewriteSchema.nullable(),
   evaluation: EvaluationV2Schema.nullable(),
   rewritePresentationMode: RewritePresentationModeSchema.optional(),
+  requestSource: RequestSourceSchema.optional(),
   guidedCompletion: GuidedCompletionSchema.nullable().optional(),
   guidedCompletionForm: GuidedCompletionFormSchema.nullable().optional(),
   inferenceFallbackUsed: z.boolean().optional(),

@@ -37,7 +37,7 @@ vi.mock('@promptfire/db', () => ({
   promptRewrites: mocks.promptRewrites,
 }));
 
-import { persistPromptRun } from './promptRuns';
+import { buildRewriteRecords, persistPromptRun } from './promptRuns';
 
 describe('persistPromptRun', () => {
   beforeEach(() => {
@@ -295,6 +295,72 @@ describe('persistPromptRun', () => {
     });
   });
 
+  it('builds a rewrite record when a guided-submit response contains a rewrite', () => {
+    const rewrites = buildRewriteRecords({
+      id: 'par_guided_rewrite',
+      overallScore: 74,
+      scoreBand: 'usable',
+      rewriteRecommendation: 'rewrite_optional',
+      analysis: {
+        scores: {
+          scope: 7,
+          contrast: 7,
+          clarity: 7,
+          constraintQuality: 6,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 3,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Improved prompt.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'high',
+        majorBlockingIssues: false,
+      },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: 'Write a short landing page hero for ecommerce founders with one proof point and a clear CTA.',
+      },
+      evaluation: {
+        status: 'no_significant_change',
+        overallDelta: 1,
+        signals: [],
+        scoreComparison: {
+          original: { scope: 6, contrast: 6, clarity: 6 },
+          rewrite: { scope: 7, contrast: 7, clarity: 7 },
+        },
+      },
+      rewritePresentationMode: 'full_rewrite',
+      requestSource: 'guided_submit',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+      inferenceFallbackUsed: false,
+      resolutionSource: 'local',
+      meta: {
+        version: '2',
+        requestId: 'req_guided_rewrite',
+        latencyMs: 4,
+        providerMode: 'mock',
+      },
+    });
+
+    expect(rewrites).toHaveLength(1);
+    expect(rewrites[0]).toMatchObject({
+      kind: 'primary',
+      position: 0,
+      isPrimary: true,
+      rewrite: expect.objectContaining({
+        rewrittenPrompt: 'Write a short landing page hero for ecommerce founders with one proof point and a clear CTA.',
+      }),
+    });
+  });
+
   it('accepts guided rewrite endpoint persistence with guided metadata in inference data', async () => {
     mocks.hasDatabaseUrl.mockReturnValue(true);
 
@@ -335,9 +401,22 @@ describe('persistPromptRun', () => {
           expectedImprovement: 'high',
           majorBlockingIssues: false,
         },
-        rewrite: null,
-        evaluation: null,
-        rewritePresentationMode: 'suppressed',
+        rewrite: {
+          role: 'general',
+          mode: 'balanced',
+          rewrittenPrompt: 'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
+        },
+        evaluation: {
+          status: 'no_significant_change',
+          overallDelta: 1,
+          signals: [],
+          scoreComparison: {
+            original: { scope: 7, contrast: 6, clarity: 7 },
+            rewrite: { scope: 7, contrast: 7, clarity: 7 },
+          },
+        },
+        rewritePresentationMode: 'full_rewrite',
+        requestSource: 'guided_submit',
         guidedCompletion: null,
         guidedCompletionForm: null,
         inferenceFallbackUsed: false,
@@ -372,6 +451,15 @@ describe('persistPromptRun', () => {
           }),
         }),
       }),
+    });
+    expect(mocks.insertCalls[1]).toMatchObject({
+      table: mocks.promptRewrites,
+      values: [
+        expect.objectContaining({
+          rewrittenPrompt:
+            'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
+        }),
+      ],
     });
   });
 });

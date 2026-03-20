@@ -141,4 +141,80 @@ describe('ResultsCard', () => {
     expect(markup).not.toContain('Guided completion');
     expect(markup).not.toContain('Recommended rewrite');
   });
+
+  it('renders a stronger prompt card for guided-submit results with a returned rewrite', () => {
+    const result: AnalyzeAndRewriteV2Response = {
+      id: 'par_guided_submit_result',
+      overallScore: 71,
+      scoreBand: 'usable',
+      rewriteRecommendation: 'rewrite_optional',
+      analysis: {
+        scores: {
+          scope: 7,
+          contrast: 7,
+          clarity: 7,
+          constraintQuality: 6,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 3,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Prompt is now bounded enough to use.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'high',
+        majorBlockingIssues: false,
+      },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt:
+          'Write a short landing page hero for ecommerce founders doing $1M-$10M ARR. Lead with one proof point, end with a demo CTA, and avoid generic marketing buzzwords.',
+      },
+      evaluation: {
+        status: 'no_significant_change',
+        overallDelta: 1,
+        signals: [],
+        scoreComparison: {
+          original: { scope: 7, contrast: 6, clarity: 7 },
+          rewrite: { scope: 7, contrast: 7, clarity: 7 },
+        },
+      },
+      rewritePresentationMode: 'full_rewrite',
+      requestSource: 'guided_submit',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+      meta: {
+        version: '2',
+        requestId: 'req_guided_submit_result',
+        latencyMs: 8,
+        providerMode: 'mock',
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <ResultsCard
+        prompt="Write better copy."
+        result={result}
+        presentation={resolveResultsPresentation(result, 'general')}
+        topSuggestions={result.improvementSuggestions}
+        showOptionalRewrite={false}
+        onToggleOptionalRewrite={vi.fn()}
+        onForceRewrite={vi.fn(async () => undefined)}
+        onSubmitGuidedRewrite={vi.fn(async () => undefined)}
+        guidedSubmitLoading={false}
+        onCopyPrompt={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('Stronger prompt');
+    expect(markup).toContain('Built from your answers');
+    expect(markup).toContain('Write a short landing page hero for ecommerce founders doing $1M-$10M ARR.');
+    expect(markup).not.toContain('Build stronger prompt');
+    expect(markup).not.toContain('Skip and rewrite anyway');
+  });
 });

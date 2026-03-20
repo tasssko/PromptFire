@@ -346,6 +346,35 @@ describe('API vertical slice', () => {
     expect(body.id.startsWith('par_')).toBe(true);
     expect(body.analysis.summary.length).toBeGreaterThan(0);
     expect(body.meta.version).toBe('2');
+    expect(body.requestSource).toBe('guided_submit');
+    expect(body.rewrite).toBeTruthy();
+    expect(body.rewritePresentationMode).toBe('full_rewrite');
+    expect(body.guidedCompletion).toBeNull();
+    expect(body.guidedCompletionForm).toBeNull();
+  });
+
+  it('keeps passive analyze fallback conservative while guided submit preserves the built prompt', async () => {
+    const passive = await analyzeV2('Given this situation, recommend whether to adopt service mesh.', 'general');
+    expect(['template_with_example', 'questions_only']).toContain(passive.rewritePresentationMode ?? 'suppressed');
+    expect(passive.rewrite).toBeNull();
+    expect(passive.guidedCompletion).toBeTruthy();
+
+    const guided = await rewriteFromGuidedAnswers({
+      prompt: 'Write a webhook handler.',
+      role: 'developer',
+      guidedAnswers: {
+        runtime: 'Node.js / Express',
+        inputFormat: 'webhook payload',
+        behaviors: ['validation', 'auth/signature verification', 'structured errors'],
+        successFailure: 'explicit HTTP responses',
+      },
+    });
+
+    expect(guided.requestSource).toBe('guided_submit');
+    expect(guided.rewrite).toBeTruthy();
+    expect(guided.rewritePresentationMode).toBe('full_rewrite');
+    expect(guided.guidedCompletion).toBeNull();
+    expect(guided.guidedCompletionForm).toBeNull();
   });
 
   it('supports magic-link login, session lookup, and logout', async () => {

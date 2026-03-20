@@ -32,6 +32,7 @@ import {
   type GuidedAnswers,
   type ImprovementStatus,
   type Issue,
+  type RequestSource,
   type Role,
   type RewriteRecommendation,
   type RewritePreference,
@@ -321,12 +322,83 @@ type RunAnalyzeAndRewriteV2Params = {
   input: AnalyzeAndRewriteV2Request;
   persistInput?: AnalyzeAndRewriteV2Request;
   extraInferenceData?: Record<string, unknown>;
+  requestSource?: RequestSource;
 };
+
+type RewritePresentationShape = Pick<
+  AnalyzeAndRewriteV2Response,
+  'rewrite' | 'rewritePresentationMode' | 'guidedCompletion' | 'guidedCompletionForm'
+>;
+
+function logGuidedSubmitDiagnostic(params: {
+  stage: 'presentation_shaping' | 'persistence_boundary';
+  requestId: string;
+  requestSource: RequestSource;
+  rewriteExistsBeforeShaping?: boolean;
+  rewritePresentationModeBeforeShaping?: AnalyzeAndRewriteV2Response['rewritePresentationMode'];
+  rewriteExistsAfterShaping?: boolean;
+  responseRewriteExists?: boolean;
+}): void {
+  console.info(
+    JSON.stringify({
+      event: 'guided_submit_diagnostic',
+      ...params,
+    }),
+  );
+}
+
+function shapeRewritePresentation(params: {
+  requestId: string;
+  requestSource: RequestSource;
+  rewrite: AnalyzeAndRewriteV2Response['rewrite'];
+  rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'];
+  guidedCompletion: AnalyzeAndRewriteV2Response['guidedCompletion'];
+  guidedCompletionForm: AnalyzeAndRewriteV2Response['guidedCompletionForm'];
+}): RewritePresentationShape {
+  const rewriteExistsBeforeShaping = Boolean(params.rewrite);
+
+  if (params.requestSource === 'guided_submit') {
+    const shaped = {
+      rewrite: params.rewrite,
+      rewritePresentationMode: params.rewrite ? 'full_rewrite' : params.rewritePresentationMode,
+      guidedCompletion: params.rewrite ? null : params.guidedCompletion,
+      guidedCompletionForm: params.rewrite ? null : params.guidedCompletionForm,
+    } satisfies RewritePresentationShape;
+
+    logGuidedSubmitDiagnostic({
+      stage: 'presentation_shaping',
+      requestId: params.requestId,
+      requestSource: params.requestSource,
+      rewriteExistsBeforeShaping,
+      rewritePresentationModeBeforeShaping: params.rewritePresentationMode,
+      rewriteExistsAfterShaping: Boolean(shaped.rewrite),
+    });
+
+    return shaped;
+  }
+
+  if (params.rewritePresentationMode === 'template_with_example' || params.rewritePresentationMode === 'questions_only') {
+    return {
+      rewrite: null,
+      rewritePresentationMode: params.rewritePresentationMode,
+      guidedCompletion: params.guidedCompletion,
+      guidedCompletionForm: params.guidedCompletionForm,
+    };
+  }
+
+  return {
+    rewrite: params.rewrite,
+    rewritePresentationMode: params.rewritePresentationMode,
+    guidedCompletion: params.guidedCompletion,
+    guidedCompletionForm: params.guidedCompletionForm,
+  };
+}
 
 async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Promise<HttpResponse> {
   const { requestId, startedAtMs, providerMode, providerConfig, headers, pathname, requestMethod, sessionId } = params;
   const input = params.input;
   const persistInput = params.persistInput ?? input;
+  const requestSource = params.requestSource ?? 'analyze';
   const preferences = normalizePreferences(input.preferences);
 
   let resolvedContext = input.context;
@@ -679,11 +751,23 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
           improvementSuggestions,
           effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
         });
-        rewrite = null;
       }
     } else {
       rewritePresentationMode = 'suppressed';
     }
+
+    const shapedPresentation = shapeRewritePresentation({
+      requestId,
+      requestSource,
+      rewrite,
+      rewritePresentationMode,
+      guidedCompletion,
+      guidedCompletionForm,
+    });
+    rewrite = shapedPresentation.rewrite;
+    rewritePresentationMode = shapedPresentation.rewritePresentationMode;
+    guidedCompletion = shapedPresentation.guidedCompletion;
+    guidedCompletionForm = shapedPresentation.guidedCompletionForm;
 
     const finalIssues = semanticFindings?.issues ?? resolvedAnalysis.issues;
     const finalSignalsBase = semanticFindings?.signals ?? resolvedAnalysis.signals;
@@ -727,6 +811,7 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
       rewrite,
       evaluation,
       rewritePresentationMode,
+      requestSource,
       guidedCompletion,
       guidedCompletionForm,
       inferenceFallbackUsed,
@@ -735,6 +820,14 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
     };
 
     const sessionUser = await getSessionUser(sessionId);
+    if (requestSource === 'guided_submit') {
+      logGuidedSubmitDiagnostic({
+        stage: 'persistence_boundary',
+        requestId,
+        requestSource,
+        responseRewriteExists: Boolean(payload.rewrite),
+      });
+    }
     await persistPromptRunSafely({
       endpoint: pathname,
       requestId,
@@ -1856,6 +1949,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
           guidedAnswers: normalizedGuidedAnswers,
         },
       },
+      requestSource: 'guided_submit',
     });
   }
 

@@ -107,11 +107,19 @@ export function hasMaterialRewrite(result: AnalyzeAndRewriteV2Response): boolean
   );
 }
 
+export function isGuidedSubmitRewriteResult(result: AnalyzeAndRewriteV2Response): boolean {
+  return result.requestSource === 'guided_submit' && Boolean(result.rewrite);
+}
+
 export function hasGuidedCompletionForm(result: AnalyzeAndRewriteV2Response): boolean {
   return Boolean(result.guidedCompletionForm?.enabled && result.guidedCompletionForm.blocks.length > 0);
 }
 
 export function resolvePrimarySurface(result: AnalyzeAndRewriteV2Response): PrimarySurfaceKind {
+  if (isGuidedSubmitRewriteResult(result)) {
+    return 'full-rewrite';
+  }
+
   if (result.rewriteRecommendation === 'no_rewrite_needed') {
     return 'no-rewrite-needed';
   }
@@ -220,7 +228,18 @@ export function resolvePrimaryActionId(result: AnalyzeAndRewriteV2Response): Res
 }
 
 export function resolveVisibleSections(result: AnalyzeAndRewriteV2Response): ResultSectionId[] {
-  return resultsUiConfig.verdicts[resolveVerdictId(result)].visibleSections;
+  const visibleSections = [...resultsUiConfig.verdicts[resolveVerdictId(result)].visibleSections];
+
+  if (isGuidedSubmitRewriteResult(result) && !visibleSections.includes('rewrite_panel')) {
+    const technicalDetailsIndex = visibleSections.indexOf('technical_details');
+    if (technicalDetailsIndex >= 0) {
+      visibleSections.splice(technicalDetailsIndex, 0, 'rewrite_panel');
+    } else {
+      visibleSections.push('rewrite_panel');
+    }
+  }
+
+  return visibleSections;
 }
 
 export function resolveSectionTitles(result: AnalyzeAndRewriteV2Response, role: Role): SectionTitleMap {
@@ -265,6 +284,14 @@ export function resolveHeroView(result: AnalyzeAndRewriteV2Response, role: Role)
   }
 
   const primaryAction = resolveActionLabel(resolvePrimaryActionId(result), role);
+
+  if (isGuidedSubmitRewriteResult(result)) {
+    return {
+      headline: 'Stronger prompt',
+      supporting: 'Built from your answers.',
+      primaryAction,
+    };
+  }
 
   let secondaryAction: string | undefined;
   if (primarySurface !== 'full-rewrite') {
@@ -424,14 +451,14 @@ export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: R
 }
 
 function resolveRewritePanelView(result: AnalyzeAndRewriteV2Response, role: Role): RewritePanelView {
-  const title = resolveSectionTitles(result, role).rewrite_panel;
+  const title = isGuidedSubmitRewriteResult(result) ? 'Stronger prompt' : resolveSectionTitles(result, role).rewrite_panel;
   const verdict =
     result.evaluation ? resolveRewriteVerdict(result.evaluation, role) : resolveRoleVariant(resultsUiConfig.rewriteVerdicts.no_significant_change, role);
 
   return {
     title,
-    verdictLabel: verdict.label,
-    verdictRecommendation: verdict.recommendation,
+    verdictLabel: isGuidedSubmitRewriteResult(result) ? 'Built from your answers' : verdict.label,
+    verdictRecommendation: isGuidedSubmitRewriteResult(result) ? 'Use this as the stronger prompt draft.' : verdict.recommendation,
     primaryActionLabel: resolveActionLabel('copy_rewritten_prompt', role),
   };
 }

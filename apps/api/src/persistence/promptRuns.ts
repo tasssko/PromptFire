@@ -34,7 +34,7 @@ function isV2Response(response: PersistableResponse): response is AnalyzeAndRewr
   return response.meta.version === '2';
 }
 
-function buildRewriteRecords(response: PersistableResponse): PersistedRewriteRecord[] {
+export function buildRewriteRecords(response: PersistableResponse): PersistedRewriteRecord[] {
   if (!response.rewrite) {
     return [];
   }
@@ -62,6 +62,18 @@ export async function persistPromptRun(params: PersistPromptRunParams): Promise<
   const scoreBand = isV2Response(params.response) ? params.response.scoreBand : null;
   const rewriteRecommendation = isV2Response(params.response) ? params.response.rewriteRecommendation : null;
   const rewritePreference = 'rewritePreference' in params.input ? params.input.rewritePreference : null;
+
+  if (isV2Response(params.response) && params.response.requestSource === 'guided_submit') {
+    console.info(
+      JSON.stringify({
+        event: 'guided_submit_persistence_boundary',
+        requestId: params.requestId,
+        endpoint: params.endpoint,
+        requestSource: params.response.requestSource,
+        responseRewriteExists: Boolean(params.response.rewrite),
+      }),
+    );
+  }
 
   const db = getDb();
   await db.transaction(async (tx) => {

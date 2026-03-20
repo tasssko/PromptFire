@@ -325,6 +325,37 @@ describe('results presentation resolvers', () => {
     expect(surface).toBe('full-rewrite');
   });
 
+  it('shows guided-submit rewrites as the primary surface even when evaluation is not material', () => {
+    const result = buildResult({
+      requestSource: 'guided_submit',
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: 'Built stronger prompt',
+      },
+      evaluation: {
+        status: 'no_significant_change',
+        overallDelta: 0,
+        signals: [],
+        scoreComparison: {
+          original: { scope: 6, contrast: 6, clarity: 6 },
+          rewrite: { scope: 6, contrast: 6, clarity: 6 },
+        },
+      },
+      rewritePresentationMode: 'full_rewrite',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+    });
+
+    const presentation = resolveResultsPresentation(result, 'general');
+    expect(resolvePrimarySurface(result)).toBe('full-rewrite');
+    expect(presentation.hero.headline).toBe('Stronger prompt');
+    expect(presentation.hero.supporting).toBe('Built from your answers.');
+    expect(presentation.visibleSectionIds).toContain('rewrite_panel');
+    expect(presentation.rewritePanel.title).toBe('Stronger prompt');
+    expect(presentation.rewritePanel.verdictLabel).toBe('Built from your answers');
+  });
+
   it('prefers the guided completion form over legacy guided completion text', () => {
     const result = buildResult({
       rewriteRecommendation: 'rewrite_recommended',
