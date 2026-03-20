@@ -15,6 +15,7 @@ import type {
 } from '@promptfire/shared';
 import type { PrimaryGap, SemanticRewritePolicy } from '@promptfire/heuristics';
 import type { InternalLadderTrace } from './types';
+import { buildGuidedQuestionPlan } from '../guided/guidedPolicy';
 
 type EffectiveContextLike = {
   role?: 'general' | 'developer' | 'marketer';
@@ -367,6 +368,8 @@ function pushSemanticGapQuestions(questions: string[], family: SemanticRewritePo
 }
 
 export function buildGuidedCompletionQuestions(params: {
+  prompt: string;
+  analysis: Analysis;
   role: Role;
   semanticPolicy?: SemanticRewritePolicy | null;
   bestNextMove: BestNextMove | null;
@@ -374,50 +377,22 @@ export function buildGuidedCompletionQuestions(params: {
   effectiveAnalysisContext?: EffectiveContextLike;
 }): string[] {
   const questions: string[] = [];
-  const missing = params.effectiveAnalysisContext?.missingContextType ?? null;
-  const role = params.effectiveAnalysisContext?.role ?? params.role;
-  const bestMoveText = `${params.bestNextMove?.title ?? ''} ${params.bestNextMove?.rationale ?? ''}`.toLowerCase();
-  const suggestionsText = params.improvementSuggestions.map((item) => `${item.title} ${item.reason}`.toLowerCase()).join(' ');
 
   if (params.semanticPolicy?.semanticOwned) {
     pushSemanticGapQuestions(questions, params.semanticPolicy.family, params.semanticPolicy.primaryGap);
     if (questions.length > 0) {
-      return questions.slice(0, 6);
+      return questions.slice(0, 4);
     }
   }
 
-  // Non-owned fallback only.
-  if (role === 'developer') {
-    pushUnique(questions, 'What runtime or framework should be used?');
-    pushUnique(questions, 'What does the input payload look like?');
-    pushUnique(questions, 'How should validation be defined and enforced?');
-    pushUnique(questions, 'What should happen on success and on failure?');
-    if (missing === 'boundary' || /auth|signature/.test(bestMoveText + suggestionsText)) {
-      pushUnique(questions, 'What auth or signature verification scope is required?');
-    }
-    if (missing === 'execution' || /retry|idempot/.test(bestMoveText + suggestionsText)) {
-      pushUnique(questions, 'What retry or idempotency behavior should be enforced?');
-    }
-    pushUnique(questions, 'What setup or config boundaries should be explicit (middleware, port, env)?');
-    return questions.slice(0, 6);
-  }
-
-  if (missing === 'audience') {
-    pushUnique(questions, 'Who is the exact audience for this prompt?');
-  }
-  if (missing === 'comparison') {
-    pushUnique(questions, 'What decision criteria or trade-offs should the output use?');
-  }
-  if (missing === 'source') {
-    pushUnique(questions, 'What source material must the output be grounded in?');
-  }
-
-  // Generic fallback for non-owned prompts when semantic family/gap data is absent.
-  pushUnique(questions, 'What specific outcome should the output drive?');
-  pushUnique(questions, 'What must be included versus explicitly excluded?');
-  pushUnique(questions, 'What format or structure should the response follow?');
-  pushUnique(questions, 'What level of detail is required to avoid generic output?');
-  return questions.slice(0, 6);
+  return buildGuidedQuestionPlan({
+    prompt: params.prompt,
+    role: params.role,
+    analysis: params.analysis,
+    bestNextMove: params.bestNextMove,
+    improvementSuggestions: params.improvementSuggestions,
+    effectiveAnalysisContext: params.effectiveAnalysisContext,
+  }).questions;
 }
 
 function isDeveloperWebhookPrompt(prompt: string): boolean {
@@ -836,23 +811,15 @@ export function buildGuidedCompletionForm(params: {
     return null;
   }
 
-  const role = params.effectiveAnalysisContext?.role ?? params.role;
-  const missing = params.effectiveAnalysisContext?.missingContextType ?? null;
-  const bestMoveText = `${params.bestNextMove?.title ?? ''} ${params.bestNextMove?.rationale ?? ''}`.toLowerCase();
-  const suggestionsText = params.improvementSuggestions.map((item) => `${item.title} ${item.reason}`.toLowerCase()).join(' ');
-
-  const blocks =
-    role === 'developer'
-      ? buildDeveloperBlocks({ missing, bestMoveText, suggestionsText })
-      : role === 'marketer'
-        ? buildMarketerBlocks({ prompt: params.prompt, missing })
-        : buildGeneralBlocks({
-            prompt: params.prompt,
-            analysis: params.analysis,
-            missing,
-            bestMoveText,
-            suggestionsText,
-          });
+  const plan = buildGuidedQuestionPlan({
+    prompt: params.prompt,
+    role: params.role,
+    analysis: params.analysis,
+    bestNextMove: params.bestNextMove,
+    improvementSuggestions: params.improvementSuggestions,
+    effectiveAnalysisContext: params.effectiveAnalysisContext,
+  });
+  const blocks = plan.blocks;
 
   if (blocks.length === 0) {
     return null;
@@ -860,13 +827,13 @@ export function buildGuidedCompletionForm(params: {
 
   return {
     enabled: true,
-    title: 'Complete the missing details',
+    title: 'Answer the highest-impact gaps',
     summary:
-      'This prompt is too open-ended for a strong rewrite. Answer the missing details below and PeakPrompt will build a better version.',
+      'Answer only the missing decisions that matter most. PeakPrompt will use the rest of the analysis as rewrite guidance automatically.',
     rationale:
       params.mode === 'questions_only'
         ? 'A direct rewrite is likely to guess at missing intent, so guided boundaries are safer first.'
-        : 'A stronger rewrite needs clearer boundaries before it can improve the prompt materially.',
+        : 'A stronger rewrite needs a few explicit decisions from you, then the remaining analysis can stay as soft guidance.',
     submitLabel: 'Build stronger prompt',
     skipLabel: 'Skip and rewrite anyway',
     blocks,
@@ -884,6 +851,8 @@ export function buildGuidedCompletion(params: {
   effectiveAnalysisContext?: EffectiveContextLike;
 }): GuidedCompletion | null {
   const questions = buildGuidedCompletionQuestions({
+    prompt: params.prompt,
+    analysis: params.analysis,
     role: params.role,
     semanticPolicy: params.semanticPolicy,
     bestNextMove: params.bestNextMove,

@@ -61,12 +61,27 @@ export type AnalyzeAndRewriteV2Request = z.infer<typeof AnalyzeAndRewriteV2Reque
 export const GuidedAnswersSchema = z.record(z.string(), z.union([z.string(), z.array(z.string())]));
 export type GuidedAnswers = z.infer<typeof GuidedAnswersSchema>;
 
+const GuidedRewriteContextSchema: z.ZodType<{
+  overallScore?: number;
+  analysis?: Analysis;
+  bestNextMove?: BestNextMove | null;
+  improvementSuggestions?: ImprovementSuggestion[];
+}> = z.lazy(() =>
+  z.object({
+    overallScore: z.number().int().min(0).max(100).optional(),
+    analysis: AnalysisSchema.optional(),
+    bestNextMove: BestNextMoveSchema.nullable().optional(),
+    improvementSuggestions: z.array(ImprovementSuggestionSchema).optional(),
+  }),
+);
+
 export const GuidedRewriteRequestSchema = z.object({
   prompt: z.string().trim().min(1, 'Prompt is required.').max(6000, 'Prompt too long.'),
   role: RoleSchema,
   mode: ModeSchema,
   rewritePreference: RewritePreferenceSchema.default('auto'),
   guidedAnswers: GuidedAnswersSchema,
+  guidedContext: GuidedRewriteContextSchema.optional(),
 });
 export type GuidedRewriteRequest = z.infer<typeof GuidedRewriteRequestSchema>;
 
@@ -442,6 +457,8 @@ export const GuidedQuestionMapTargetSchema = z.enum([
   'detail',
   'proof',
   'context',
+  'scopeStrategy',
+  'proofType',
 ]);
 export type GuidedQuestionMapTarget = z.infer<typeof GuidedQuestionMapTargetSchema>;
 
@@ -476,6 +493,21 @@ export const GuidedCompletionFormSchema = z.object({
 });
 export type GuidedCompletionForm = z.infer<typeof GuidedCompletionFormSchema>;
 
+export const GuidedRewritePromotionStatusSchema = z.enum([
+  'stronger_prompt',
+  'guided_draft',
+  'did_not_improve',
+]);
+export type GuidedRewritePromotionStatus = z.infer<typeof GuidedRewritePromotionStatusSchema>;
+
+export const GuidedRewriteOutcomeSchema = z.object({
+  status: GuidedRewritePromotionStatusSchema,
+  originalOverallScore: z.number().int().min(0).max(100),
+  guidedOverallScore: z.number().int().min(0).max(100),
+  scoreDelta: z.number().int().min(-100).max(100),
+});
+export type GuidedRewriteOutcome = z.infer<typeof GuidedRewriteOutcomeSchema>;
+
 export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   id: z.string().startsWith('par_'),
   overallScore: z.number().int().min(0).max(100),
@@ -491,6 +523,7 @@ export const AnalyzeAndRewriteV2ResponseSchema = z.object({
   requestSource: RequestSourceSchema.optional(),
   guidedCompletion: GuidedCompletionSchema.nullable().optional(),
   guidedCompletionForm: GuidedCompletionFormSchema.nullable().optional(),
+  guidedRewriteOutcome: GuidedRewriteOutcomeSchema.optional(),
   inferenceFallbackUsed: z.boolean().optional(),
   resolutionSource: z.enum(['local', 'inference']).optional(),
   meta: MetaV2Schema,

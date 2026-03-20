@@ -31,7 +31,7 @@ function normalizeBlockAnswer(block: GuidedQuestionBlock, value: string | string
 }
 
 function hasMeaningfulBoundary(normalized: GuidedFormAnswers): boolean {
-  const boundaryKeys = ['audience', 'goal', 'format', 'includes', 'excludes'];
+  const boundaryKeys = ['audience', 'goal', 'format', 'includes', 'excludes', 'scopeStrategy', 'proofType', 'nuance'];
   return boundaryKeys.some((key) => {
     const value = normalized[key];
     return Array.isArray(value) ? value.length > 0 : typeof value === 'string' && value.length > 0;

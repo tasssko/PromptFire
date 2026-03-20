@@ -432,8 +432,31 @@ describe('persistPromptRun', () => {
         guidedRewrite: {
           kind: 'guided_completion',
           originalPrompt: 'Write better copy.',
-          internalSynthesisPrompt: 'Original request:\nWrite better copy.',
-          finalGuidedPrompt: 'Write better copy. Make the primary goal persuade.',
+          guidedIntent: {
+            originalPrompt: 'Write better copy.',
+            role: 'general',
+            mode: 'balanced',
+            rewritePreference: 'auto',
+            goal: 'persuade',
+            includes: [],
+            excludes: [],
+            rawGuidedAnswers: {
+              goal: 'persuade',
+            },
+          },
+          internalSynthesisPrompt: 'Guided intent:\n- goal: persuade',
+          modelComposedPrompt:
+            'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
+          finalGuidedPrompt:
+            'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
+          validation: {
+            isValid: true,
+            hardFailures: [],
+            softWarnings: [],
+            fallbackReason: null,
+          },
+          fallbackReason: null,
+          usedDeterministicFallback: false,
           guidedAnswers: {
             goal: 'persuade',
           },
@@ -449,8 +472,15 @@ describe('persistPromptRun', () => {
         inferenceData: expect.objectContaining({
           guidedRewrite: expect.objectContaining({
             kind: 'guided_completion',
-            internalSynthesisPrompt: 'Original request:\nWrite better copy.',
-            finalGuidedPrompt: 'Write better copy. Make the primary goal persuade.',
+            internalSynthesisPrompt: expect.stringContaining('Guided intent:'),
+            modelComposedPrompt:
+              'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
+            finalGuidedPrompt:
+              'Write a short landing page hero for ecommerce founders that persuades them to book a demo. Include one proof point and a clear CTA. Avoid generic marketing buzzwords.',
+            validation: expect.objectContaining({
+              isValid: true,
+            }),
+            usedDeterministicFallback: false,
           }),
         }),
       }),
@@ -465,8 +495,115 @@ describe('persistPromptRun', () => {
         }),
       ],
     });
-    expect(mocks.insertCalls[1]?.values?.[0]?.rewrittenPrompt).not.toContain('Original request:');
-    expect(mocks.insertCalls[1]?.values?.[0]?.rewrittenPrompt).not.toContain('Additional constraints:');
+    const persistedGuidedRewrite = (mocks.insertCalls[1]?.values as Array<{ rewrittenPrompt: string }> | undefined)?.[0];
+    expect(persistedGuidedRewrite?.rewrittenPrompt).not.toContain('Original request:');
+    expect(persistedGuidedRewrite?.rewrittenPrompt).not.toContain('Additional constraints:');
+  });
+
+  it('persists only the final validated prompt as the primary guided rewrite when fallback metadata exists', async () => {
+    mocks.hasDatabaseUrl.mockReturnValue(true);
+
+    await persistPromptRun({
+      endpoint: '/v2/rewrite-from-guided-answers',
+      requestId: 'req_guided_fallback',
+      userId: 'usr_guided_fallback',
+      sessionId: 'ses_guided_fallback',
+      input: {
+        prompt: 'Write better copy.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+      },
+      response: {
+        id: 'par_guided_fallback',
+        overallScore: 66,
+        scoreBand: 'usable',
+        rewriteRecommendation: 'rewrite_optional',
+        analysis: {
+          scores: {
+            scope: 7,
+            contrast: 6,
+            clarity: 7,
+            constraintQuality: 6,
+            genericOutputRisk: 4,
+            tokenWasteRisk: 3,
+          },
+          issues: [],
+          detectedIssueCodes: [],
+          signals: [],
+          summary: 'Improved prompt.',
+        },
+        improvementSuggestions: [],
+        bestNextMove: null,
+        gating: {
+          rewritePreference: 'auto',
+          expectedImprovement: 'high',
+          majorBlockingIssues: false,
+        },
+        rewrite: {
+          role: 'general',
+          mode: 'balanced',
+          rewrittenPrompt: 'Write better copy. Make the primary goal persuade. Target CTOs. Format the output as landing page. Avoid hype.',
+        },
+        evaluation: null,
+        rewritePresentationMode: 'full_rewrite',
+        requestSource: 'guided_submit',
+        guidedCompletion: null,
+        guidedCompletionForm: null,
+        inferenceFallbackUsed: false,
+        resolutionSource: 'local',
+        meta: {
+          version: '2',
+          requestId: 'req_guided_fallback',
+          latencyMs: 8,
+          providerMode: 'real',
+        },
+      },
+      inferenceData: {
+        guidedRewrite: {
+          kind: 'guided_completion',
+          originalPrompt: 'Write better copy.',
+          internalSynthesisPrompt: 'Guided intent:',
+          modelComposedPrompt: 'Original request:\nWrite better copy.',
+          finalGuidedPrompt: 'Write better copy. Make the primary goal persuade. Target CTOs. Format the output as landing page. Avoid hype.',
+          validation: {
+            isValid: false,
+            hardFailures: ['Prompt contains synthesis scaffold markers.'],
+            softWarnings: [],
+            fallbackReason: 'Prompt contains synthesis scaffold markers.',
+          },
+          fallbackReason: 'Prompt contains synthesis scaffold markers.',
+          usedDeterministicFallback: true,
+          guidedAnswers: {
+            goal: 'persuade',
+            audience: 'CTOs',
+            format: 'landing page',
+            excludes: ['hype'],
+          },
+        },
+      },
+    });
+
+    expect(mocks.insertCalls[1]).toMatchObject({
+      table: mocks.promptRewrites,
+      values: [
+        expect.objectContaining({
+          kind: 'guided_completion',
+          rewrittenPrompt: 'Write better copy. Make the primary goal persuade. Target CTOs. Format the output as landing page. Avoid hype.',
+        }),
+      ],
+    });
+    expect(mocks.insertCalls[0]).toMatchObject({
+      table: mocks.promptRuns,
+      values: expect.objectContaining({
+        inferenceData: expect.objectContaining({
+          guidedRewrite: expect.objectContaining({
+            modelComposedPrompt: 'Original request:\nWrite better copy.',
+            usedDeterministicFallback: true,
+          }),
+        }),
+      }),
+    });
   });
 
   it('does not build persistence records for guided scaffold leakage', () => {

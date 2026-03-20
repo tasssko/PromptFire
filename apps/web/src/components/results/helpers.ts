@@ -111,6 +111,10 @@ export function isGuidedSubmitRewriteResult(result: AnalyzeAndRewriteV2Response)
   return result.requestSource === 'guided_submit' && Boolean(result.rewrite);
 }
 
+function guidedRewriteStatus(result: AnalyzeAndRewriteV2Response): AnalyzeAndRewriteV2Response['guidedRewriteOutcome']['status'] | null {
+  return result.guidedRewriteOutcome?.status ?? (isGuidedSubmitRewriteResult(result) ? 'stronger_prompt' : null);
+}
+
 export function isRewriteScaffoldLeak(value: string): boolean {
   const normalized = value.toLowerCase();
   return (
@@ -304,9 +308,15 @@ export function resolveHeroView(result: AnalyzeAndRewriteV2Response, role: Role)
   const primaryAction = resolveActionLabel(resolvePrimaryActionId(result), role);
 
   if (isGuidedSubmitRewriteResult(result)) {
+    const status = guidedRewriteStatus(result);
     return {
-      headline: 'Stronger prompt',
-      supporting: 'Built from your answers.',
+      headline: status === 'stronger_prompt' ? 'Stronger prompt' : 'Guided draft',
+      supporting:
+        status === 'did_not_improve'
+          ? 'This draft did not improve the score.'
+          : status === 'guided_draft'
+            ? 'Built from your answers. The score gain was marginal.'
+            : 'Built from your answers.',
       primaryAction,
     };
   }
@@ -469,14 +479,34 @@ export function resolveActionModule(result: AnalyzeAndRewriteV2Response, role: R
 }
 
 function resolveRewritePanelView(result: AnalyzeAndRewriteV2Response, role: Role): RewritePanelView {
-  const title = isGuidedSubmitRewriteResult(result) ? 'Stronger prompt' : resolveSectionTitles(result, role).rewrite_panel;
+  const guidedStatus = guidedRewriteStatus(result);
+  const title =
+    isGuidedSubmitRewriteResult(result)
+      ? guidedStatus === 'stronger_prompt'
+        ? 'Stronger prompt'
+        : 'Guided draft'
+      : resolveSectionTitles(result, role).rewrite_panel;
   const verdict =
     result.evaluation ? resolveRewriteVerdict(result.evaluation, role) : resolveRoleVariant(resultsUiConfig.rewriteVerdicts.no_significant_change, role);
 
   return {
     title,
-    verdictLabel: isGuidedSubmitRewriteResult(result) ? 'Built from your answers' : verdict.label,
-    verdictRecommendation: isGuidedSubmitRewriteResult(result) ? 'Use this as the stronger prompt draft.' : verdict.recommendation,
+    verdictLabel:
+      isGuidedSubmitRewriteResult(result)
+        ? guidedStatus === 'stronger_prompt'
+          ? 'Built from your answers'
+          : guidedStatus === 'did_not_improve'
+            ? 'Guided draft did not improve the score'
+            : 'Draft from your answers'
+        : verdict.label,
+    verdictRecommendation:
+      isGuidedSubmitRewriteResult(result)
+        ? guidedStatus === 'stronger_prompt'
+          ? 'Use this as the stronger prompt.'
+          : guidedStatus === 'did_not_improve'
+            ? 'Keep this as an optional draft, not the preferred prompt.'
+            : 'Keep this as an optional draft if it fits your intent better.'
+        : verdict.recommendation,
     primaryActionLabel: resolveActionLabel('copy_rewritten_prompt', role),
   };
 }

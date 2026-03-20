@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AnalyzeAndRewriteV2Response } from '@promptfire/shared';
 import { ResultsCard } from './ResultsCard';
@@ -280,5 +281,145 @@ Create a stronger, more specific version of the prompt that preserves the userâ€
     expect(markup).not.toContain('Original request:');
     expect(markup).not.toContain('Additional constraints:');
     expect(markup).not.toContain('Create a stronger, more specific version');
+  });
+
+  it('renders a neutral guided draft state when guided submit does not improve the score', () => {
+    const result: AnalyzeAndRewriteV2Response = {
+      id: 'par_guided_submit_draft',
+      overallScore: 51,
+      scoreBand: 'usable',
+      rewriteRecommendation: 'rewrite_optional',
+      analysis: {
+        scores: {
+          scope: 6,
+          contrast: 5,
+          clarity: 6,
+          constraintQuality: 4,
+          genericOutputRisk: 5,
+          tokenWasteRisk: 4,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Prompt is usable.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+        majorBlockingIssues: false,
+      },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt: 'Write a landing page for CTOs. Avoid hype.',
+      },
+      evaluation: null,
+      rewritePresentationMode: 'full_rewrite',
+      requestSource: 'guided_submit',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+      guidedRewriteOutcome: {
+        status: 'did_not_improve',
+        originalOverallScore: 58,
+        guidedOverallScore: 51,
+        scoreDelta: -7,
+      },
+      meta: {
+        version: '2',
+        requestId: 'req_guided_submit_draft',
+        latencyMs: 8,
+        providerMode: 'mock',
+      },
+    };
+
+    const markup = renderToStaticMarkup(
+      <ResultsCard
+        prompt="Write better copy."
+        result={result}
+        presentation={resolveResultsPresentation(result, 'general')}
+        topSuggestions={result.improvementSuggestions}
+        showOptionalRewrite={false}
+        onToggleOptionalRewrite={vi.fn()}
+        onForceRewrite={vi.fn(async () => undefined)}
+        onSubmitGuidedRewrite={vi.fn(async () => undefined)}
+        guidedSubmitLoading={false}
+        onCopyPrompt={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('Guided draft');
+    expect(markup).toContain('did not improve the score');
+    expect(markup).not.toContain('Stronger prompt');
+  });
+
+  it('copies the final validated stronger prompt for guided-submit results', () => {
+    const onCopyPrompt = vi.fn();
+    const result: AnalyzeAndRewriteV2Response = {
+      id: 'par_guided_submit_copy',
+      overallScore: 74,
+      scoreBand: 'strong',
+      rewriteRecommendation: 'no_rewrite_needed',
+      analysis: {
+        scores: {
+          scope: 8,
+          contrast: 8,
+          clarity: 8,
+          constraintQuality: 6,
+          genericOutputRisk: 3,
+          tokenWasteRisk: 3,
+        },
+        issues: [],
+        detectedIssueCodes: [],
+        signals: [],
+        summary: 'Prompt is now bounded enough to use.',
+      },
+      improvementSuggestions: [],
+      bestNextMove: null,
+      gating: {
+        rewritePreference: 'auto',
+        expectedImprovement: 'low',
+        majorBlockingIssues: false,
+      },
+      rewrite: {
+        role: 'general',
+        mode: 'balanced',
+        rewrittenPrompt:
+          'Create a landing page for CTOs at mid-market companies that persuades them with evidence-backed Kubernetes recommendations. Avoid hype and jargon.',
+      },
+      evaluation: null,
+      rewritePresentationMode: 'full_rewrite',
+      requestSource: 'guided_submit',
+      guidedCompletion: null,
+      guidedCompletionForm: null,
+      meta: {
+        version: '2',
+        requestId: 'req_guided_submit_copy',
+        latencyMs: 8,
+        providerMode: 'mock',
+      },
+    };
+
+    const element = ResultsCard({
+      prompt: 'Write better copy.',
+      result,
+      presentation: resolveResultsPresentation(result, 'general'),
+      topSuggestions: result.improvementSuggestions,
+      showOptionalRewrite: false,
+      onToggleOptionalRewrite: vi.fn(),
+      onForceRewrite: vi.fn(async () => undefined),
+      onSubmitGuidedRewrite: vi.fn(async () => undefined),
+      guidedSubmitLoading: false,
+      onCopyPrompt,
+    }) as ReactElement;
+
+    const children = Array.isArray(element.props.children) ? element.props.children : [element.props.children];
+    const hero = children[0] as ReactElement;
+    hero.props.onPrimaryAction();
+
+    expect(onCopyPrompt).toHaveBeenCalledWith(
+      'Create a landing page for CTOs at mid-market companies that persuades them with evidence-backed Kubernetes recommendations. Avoid hype and jargon.',
+    );
   });
 });

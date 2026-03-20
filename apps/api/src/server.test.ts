@@ -73,6 +73,20 @@ describe('API vertical slice', () => {
     return JSON.parse(response.body);
   }
 
+  function buildGuidedCompositionFetch(content: string) {
+    return vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content } }],
+        }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+  }
+
   function expectTextToAvoidSnippets(text: string, forbidden: string[]): void {
     const lowered = text.toLowerCase();
     for (const snippet of forbidden) {
@@ -348,6 +362,8 @@ describe('API vertical slice', () => {
     expect(body.meta.version).toBe('2');
     expect(body.requestSource).toBe('guided_submit');
     expect(body.rewrite).toBeTruthy();
+    expect(body.rewrite?.rewrittenPrompt).toMatch(/Node\.js \/ Express|webhook payload|explicit HTTP responses/i);
+    expect(body.rewrite?.rewrittenPrompt).toMatch(/validation|auth\/signature verification|structured errors/i);
     expect(body.rewritePresentationMode).toBe('full_rewrite');
     expect(body.guidedCompletion).toBeNull();
     expect(body.guidedCompletionForm).toBeNull();
@@ -396,20 +412,195 @@ describe('API vertical slice', () => {
     expect(guided.rewriteRecommendation).toBe('no_rewrite_needed');
     expect(guided.gating.expectedImprovement).toBe('low');
     expect(guided.rewritePresentationMode).toBe('full_rewrite');
-    expect(guided.rewrite).toEqual({
-      role: 'general',
-      mode: 'balanced',
-      rewrittenPrompt:
-        'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses. Make the primary goal persuade. Target CTOs at mid-market companies. Format the output as landing page. Include evidence or proof, specific recommendations. Avoid hype, jargon.',
-      explanation: 'Built from guided answers.',
-      changes: ['guided_completion'],
-    });
+    expect(guided.rewrite).toEqual(
+      expect.objectContaining({
+        role: 'general',
+        mode: 'balanced',
+        explanation: 'Built from guided answers.',
+        changes: ['guided_completion'],
+      }),
+    );
+    expect(guided.rewrite?.rewrittenPrompt).toContain('landing page');
+    expect(guided.rewrite?.rewrittenPrompt).toContain('CTOs at mid-market companies');
+    expect(guided.rewrite?.rewrittenPrompt).toMatch(/evidence or proof|specific recommendations/i);
+    expect(guided.rewrite?.rewrittenPrompt).toMatch(/avoid hype|avoid jargon|free of hype and jargon/i);
+    expect(guided.rewrite?.rewrittenPrompt).not.toContain('Make the primary goal');
+    expect(guided.rewrite?.rewrittenPrompt).not.toContain('Format the output as');
+    expect(guided.rewrite?.rewrittenPrompt).not.toContain('Target ');
     expect(guided.rewrite?.rewrittenPrompt).not.toContain('Original request:');
     expect(guided.rewrite?.rewrittenPrompt).not.toContain('Additional constraints:');
     expect(guided.rewrite?.rewrittenPrompt).not.toContain('Create a stronger, more specific version');
     expect(guided.evaluation).toBeNull();
     expect(guided.guidedCompletion).toBeNull();
     expect(guided.guidedCompletionForm).toBeNull();
+  });
+
+  it('uses one guided composition inference pass and trusts the validated model output', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+
+    const fetchMock = buildGuidedCompositionFetch(
+      'Create a landing page for CTOs at mid-market companies that persuades them to adopt Kubernetes with clear recommendations grounded in evidence. Keep the structure executive-friendly and avoid hype, jargon, and generic filler.',
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/rewrite-from-guided-answers',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+        guidedAnswers: {
+          goal: 'persuade',
+          audience: 'CTOs at mid-market companies',
+          includes: ['evidence or proof', 'specific recommendations'],
+          excludes: ['hype', 'jargon', 'generic filler'],
+          format: 'landing page',
+        },
+      }),
+    });
+
+    const body = JSON.parse(response.body) as AnalyzeAndRewriteV2Response;
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.requestSource).toBe('guided_submit');
+    expect(body.rewrite?.rewrittenPrompt).toBe(
+      'Create a landing page for CTOs at mid-market companies that persuades them to adopt Kubernetes with clear recommendations grounded in evidence. Keep the structure executive-friendly and avoid hype, jargon, and generic filler.',
+    );
+    expect(body.rewrite?.rewrittenPrompt).not.toContain('Original request:');
+    expect(body.rewrite?.rewrittenPrompt).not.toContain('Format the output as');
+  });
+
+  it('falls back to deterministic guided assembly when composed output fails validation', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+
+    const fetchMock = buildGuidedCompositionFetch(
+      'Original request:\nWrite better copy.\n\nAdditional constraints:\n- Primary goal: persuade\n\nCreate a stronger, more specific version of the prompt that preserves the user’s intent while adding these boundaries.',
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/rewrite-from-guided-answers',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write better copy.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+        guidedAnswers: {
+          goal: 'persuade',
+          audience: 'CTOs',
+          includes: ['proof points'],
+          excludes: ['hype'],
+          format: 'landing page',
+        },
+      }),
+    });
+
+    const body = JSON.parse(response.body) as AnalyzeAndRewriteV2Response;
+    expect(response.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.rewrite?.rewrittenPrompt).toContain('landing page');
+    expect(body.rewrite?.rewrittenPrompt).toContain('CTOs');
+    expect(body.rewrite?.rewrittenPrompt).toContain('proof points');
+    expect(body.rewrite?.rewrittenPrompt).toContain('Avoid hype.');
+    expect(body.rewrite?.rewrittenPrompt).not.toContain('Original request:');
+    expect(body.rewrite?.rewrittenPrompt).not.toContain('Make the primary goal');
+  });
+
+  it('preserves audience fidelity for guided submit without drifting to adjacent roles', async () => {
+    const guided = await rewriteFromGuidedAnswers({
+      prompt: 'Write better copy.',
+      role: 'general',
+      guidedAnswers: {
+        goal: 'persuade',
+        audience: 'CTOs at mid-market companies',
+        includes: ['specific recommendations'],
+        excludes: ['hype'],
+        format: 'landing page',
+      },
+    });
+
+    expect(guided.rewrite?.rewrittenPrompt).toContain('CTOs at mid-market companies');
+    expect(guided.rewrite?.rewrittenPrompt).not.toMatch(/engineering managers|software development managers/i);
+  });
+
+  it('marks lower-scoring guided results as drafts instead of stronger prompts', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'real';
+    process.env.REWRITE_PROVIDER_MODEL = 'gpt-4o-mini';
+    process.env.REWRITE_PROVIDER_API_KEY = 'test-key';
+
+    const fetchMock = buildGuidedCompositionFetch(
+      'Write a landing page for CTOs at mid-sized enterprises. Avoid hype.',
+    );
+    vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/rewrite-from-guided-answers',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt:
+          'Write landing page copy for CTOs at mid-sized enterprises dealing with identity sprawl and audit pressure. Lead with compliance readiness and reduced admin overhead. Include one measurable proof point. Avoid generic cybersecurity buzzwords.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+        guidedAnswers: {
+          format: 'landing page',
+          audience: 'CTOs at mid-sized enterprises',
+          excludes: ['hype'],
+        },
+      }),
+    });
+
+    const body = JSON.parse(response.body) as AnalyzeAndRewriteV2Response;
+    expect(response.statusCode).toBe(200);
+    expect(body.guidedRewriteOutcome).toEqual(
+      expect.objectContaining({
+        status: 'did_not_improve',
+      }),
+    );
+    expect((body.guidedRewriteOutcome?.scoreDelta ?? 0) <= 0).toBe(true);
+  });
+
+  it('marks materially improved guided results as stronger prompts', async () => {
+    process.env.REWRITE_PROVIDER_MODE = 'mock';
+
+    const response = await handleHttpRequest({
+      method: 'POST',
+      path: '/v2/rewrite-from-guided-answers',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'Write better copy.',
+        role: 'general',
+        mode: 'balanced',
+        rewritePreference: 'auto',
+        guidedAnswers: {
+          goal: 'persuade',
+          audience: 'CTOs at mid-market SaaS companies',
+          format: 'landing page',
+          includes: ['proof points', 'specific recommendations'],
+          excludes: ['hype'],
+        },
+      }),
+    });
+
+    const body = JSON.parse(response.body) as AnalyzeAndRewriteV2Response;
+    expect(response.statusCode).toBe(200);
+    expect(body.guidedRewriteOutcome).toEqual(
+      expect.objectContaining({
+        status: 'stronger_prompt',
+      }),
+    );
+    expect((body.guidedRewriteOutcome?.scoreDelta ?? 0) >= 3).toBe(true);
   });
 
   it('supports magic-link login, session lookup, and logout', async () => {

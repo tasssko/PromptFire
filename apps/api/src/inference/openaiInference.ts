@@ -146,4 +146,59 @@ export class OpenAIInferenceClient {
       clearTimeout(timeout);
     }
   }
+
+  async composeGuidedPrompt(input: { internalSynthesisPrompt: string }): Promise<string> {
+    if (!this.config.apiKey) {
+      throw new ProviderNotConfiguredError('REWRITE_PROVIDER_API_KEY is required for guided prompt composition.');
+    }
+
+    if (!this.config.model) {
+      throw new ProviderNotConfiguredError('REWRITE_PROVIDER_MODEL is required for guided prompt composition.');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+
+    try {
+      const response = await this.fetchImpl(this.config.endpoint, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${this.config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: this.config.model,
+          temperature: 0.2,
+          messages: [
+            {
+              role: 'system',
+              content: 'Return only the final rewritten prompt text. Do not return labels, headings, bullets, JSON, or explanations.',
+            },
+            { role: 'user', content: input.internalSynthesisPrompt },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new UpstreamRewriteError(`Guided composition request failed with status ${response.status}.`);
+      }
+
+      const payload = (await response.json()) as OpenAIResponse;
+      const content = payload.choices?.[0]?.message?.content;
+      if (!content) {
+        throw new UpstreamRewriteError('Guided composition response did not include message content.');
+      }
+
+      return content.trim();
+    } catch (error) {
+      if (error instanceof ProviderNotConfiguredError || error instanceof UpstreamRewriteError) {
+        throw error;
+      }
+
+      throw new UpstreamRewriteError(error instanceof Error ? error.message : 'Unknown guided composition provider error.');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 }

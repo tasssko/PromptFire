@@ -498,11 +498,12 @@ describe('rewrite presentation fallback', () => {
       },
     });
 
-    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['goal', 'audience', 'includes', 'excludes', 'format']));
-    expect(form?.blocks).toHaveLength(5);
+    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['audience', 'goal', 'format']));
+    expect(form?.blocks.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(form?.blocks.length ?? 0).toBeLessThanOrEqual(4);
   });
 
-  it('builds developer guided forms with runtime, input, and execution details', () => {
+  it('builds developer guided forms from the top structural and boundary gaps', () => {
     const form = buildGuidedCompletionForm({
       prompt: 'Write a webhook handler.',
       role: 'developer',
@@ -524,11 +525,9 @@ describe('rewrite presentation fallback', () => {
       },
     });
 
-    expect(form?.blocks.map((block) => block.id)).toEqual(
-      expect.arrayContaining(['runtime', 'inputFormat', 'behaviors', 'successFailure', 'setupBoundaries']),
-    );
-    expect(form?.blocks.find((block) => block.id === 'runtime')?.kind).toBe('radio');
-    expect(form?.blocks.find((block) => block.id === 'behaviors')?.kind).toBe('checkbox');
+    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['format', 'goal']));
+    expect(form?.blocks.map((block) => block.id)).not.toContain('audience');
+    expect(form?.blocks.length ?? 0).toBeLessThanOrEqual(4);
   });
 
   it('builds marketer guided forms without re-asking audience when it is already explicit', () => {
@@ -552,7 +551,94 @@ describe('rewrite presentation fallback', () => {
       },
     });
 
-    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['job', 'includes', 'excludes', 'format']));
+    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['goal', 'format']));
     expect(form?.blocks.map((block) => block.id)).not.toContain('audience');
+  });
+
+  it('prioritizes top structural and boundary gaps for broad Kubernetes prompts', () => {
+    const form = buildGuidedCompletionForm({
+      prompt:
+        'Create a complete guide to Kubernetes, including architecture, security, deployment, monitoring, troubleshooting, cost optimization, migration strategy, best practices, examples, and a conclusion for different kinds of businesses.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis({
+        detectedIssueCodes: ['TASK_OVERLOADED', 'EXCLUSIONS_MISSING', 'GENERIC_OUTPUT_RISK_HIGH'],
+      }),
+      semanticPolicy: semanticPolicy({
+        semanticOwned: false,
+        family: 'analysis',
+        primaryGap: 'boundary',
+      }),
+      bestNextMove: {
+        id: 'reduce_task_load',
+        type: 'reduce_task_load',
+        title: 'Split the guide into stages',
+        rationale: 'The request is overloaded and needs structure.',
+        expectedImpact: 'high',
+        targetScores: ['scope', 'clarity'],
+      },
+      improvementSuggestions: [
+        {
+          id: 'clarify_structure',
+          title: 'Clarify the output structure',
+          reason: 'A narrower structure will reduce generic output.',
+          impact: 'high',
+          targetScores: ['scope', 'clarity'],
+          category: 'structure',
+        },
+        {
+          id: 'proof_requirement',
+          title: 'Add a proof requirement',
+          reason: 'Evidence or grounded trade-offs will improve the answer.',
+          impact: 'medium',
+          targetScores: ['contrast'],
+          category: 'proof',
+        },
+        {
+          id: 'exclusion',
+          title: 'Add exclusions',
+          reason: 'Exclusions will keep the scope bounded.',
+          impact: 'medium',
+          targetScores: ['scope'],
+          category: 'exclusion',
+        },
+      ],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: 'boundary',
+      },
+    });
+
+    const ids = form?.blocks.map((block) => block.id) ?? [];
+    expect(ids).toContain('scopeStrategy');
+    expect(ids).toContain('excludes');
+    expect(ids.some((id) => id === 'format' || id === 'proofType')).toBe(true);
+    expect(form?.blocks.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(form?.blocks.length ?? 0).toBeLessThanOrEqual(4);
+  });
+
+  it('keeps short weak prompts to a minimal high-leverage set of questions', () => {
+    const form = buildGuidedCompletionForm({
+      prompt: 'Write better copy.',
+      role: 'general',
+      mode: 'questions_only',
+      analysis: analysis({
+        detectedIssueCodes: ['GENERIC_OUTPUT_RISK_HIGH'],
+      }),
+      semanticPolicy: semanticPolicy({
+        semanticOwned: false,
+        family: 'analysis',
+        primaryGap: 'boundary',
+      }),
+      bestNextMove: null,
+      improvementSuggestions: [],
+      effectiveAnalysisContext: {
+        role: 'general',
+        missingContextType: 'audience',
+      },
+    });
+
+    expect(form?.blocks.length ?? 0).toBeLessThanOrEqual(4);
+    expect(form?.blocks.map((block) => block.id)).toEqual(expect.arrayContaining(['audience', 'goal', 'format']));
   });
 });

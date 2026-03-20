@@ -17,6 +17,12 @@ type GuidedRewriteRequestBody = {
   mode: Mode;
   rewritePreference: RewritePreference;
   guidedAnswers: Record<string, string | string[]>;
+  guidedContext?: {
+    overallScore?: number;
+    analysis?: AnalyzeAndRewriteV2Response['analysis'];
+    bestNextMove?: AnalyzeAndRewriteV2Response['bestNextMove'];
+    improvementSuggestions?: AnalyzeAndRewriteV2Response['improvementSuggestions'];
+  };
 };
 
 export async function submitGuidedRewriteRequest(
@@ -117,12 +123,21 @@ export function usePromptAnalyzer() {
     }, 900);
 
     try {
+      const guidedContext = result
+        ? {
+            overallScore: result.overallScore,
+            analysis: result.analysis,
+            bestNextMove: result.bestNextMove,
+            improvementSuggestions: result.improvementSuggestions,
+          }
+        : undefined;
       const { ok, payload } = await submitGuidedRewriteRequest(API_BASE_URL, {
         prompt,
         role,
         mode,
         rewritePreference,
         guidedAnswers,
+        guidedContext,
       });
 
       if (!ok) {

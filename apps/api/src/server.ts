@@ -10,6 +10,7 @@ import {
   evaluateRewrite,
   generateBestNextMove,
   generateImprovementSuggestions,
+  inferMissingContextType,
   projectScores,
   validateLadderStep,
 } from '@promptfire/heuristics';
@@ -30,6 +31,7 @@ import {
   type Analysis,
   type BestNextMove,
   type GuidedAnswers,
+  type GuidedRewriteOutcome,
   type ImprovementStatus,
   type Issue,
   type RequestSource,
@@ -78,6 +80,17 @@ import { evaluateInferenceTrigger, mergeContextWithInference } from './inference
 import { buildEffectiveResolution } from './inference/effectiveContext';
 import { OpenAIInferenceClient } from './inference/openaiInference';
 import type { InferenceMetadata } from './inference/types';
+import {
+  buildGuidedIntent,
+  buildGuidedIntentCompositionPrompt,
+  buildMockGuidedComposedPrompt,
+  buildUserFacingGuidedPrompt,
+  isGuidedSynthesisScaffold,
+  normalizeGuidedAnswers,
+  validateGuidedComposedPrompt,
+  type GuidedIntent,
+  type GuidedPromptValidationResult,
+} from './guided/guidedRewrite';
 
 function isAuthorized(headers: Record<string, string>): boolean {
   if (getAuthBypassEnabled()) {
@@ -224,7 +237,22 @@ function isGuidedAnswersRecord(value: unknown): value is GuidedAnswers {
 }
 
 function safeParseGuidedRewriteRequest(parsedBody: unknown):
-  | { success: true; data: { prompt: string; role: Role; mode: AnalyzeAndRewriteV2Request['mode']; rewritePreference: RewritePreference; guidedAnswers: GuidedAnswers } }
+  | {
+      success: true;
+      data: {
+        prompt: string;
+        role: Role;
+        mode: AnalyzeAndRewriteV2Request['mode'];
+        rewritePreference: RewritePreference;
+        guidedAnswers: GuidedAnswers;
+        guidedContext?: {
+          overallScore?: number;
+          analysis?: Analysis;
+          bestNextMove?: BestNextMove | null;
+          improvementSuggestions?: AnalyzeAndRewriteV2Response['improvementSuggestions'];
+        };
+      };
+    }
   | { success: false; issues: { path: PropertyKey[]; message: string }[] } {
   if (GuidedRewriteRequestSchema) {
     const parsed = GuidedRewriteRequestSchema.safeParse(parsedBody);
@@ -254,105 +282,9 @@ function safeParseGuidedRewriteRequest(parsedBody: unknown):
     data: {
       ...base.data,
       guidedAnswers,
+      guidedContext: undefined,
     },
   };
-}
-
-function normalizeGuidedAnswers(guidedAnswers: GuidedAnswers): GuidedAnswers {
-  const normalizedEntries = Object.entries(guidedAnswers)
-    .map(([key, value]) => {
-      if (Array.isArray(value)) {
-        const items = [...new Set(value.map((item) => item.trim()).filter(Boolean))];
-        return items.length > 0 ? [key, items] : null;
-      }
-      const trimmed = value.trim();
-      return trimmed.length > 0 ? [key, trimmed] : null;
-    })
-    .filter((entry): entry is [string, string | string[]] => entry !== null);
-
-  return Object.fromEntries(normalizedEntries);
-}
-
-function asJoinedValue(value: string | string[] | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-  return Array.isArray(value) ? value.join(', ') : value;
-}
-
-function normalizePromptSentence(value: string): string {
-  const normalized = value.trim().replace(/\s+/g, ' ');
-  if (normalized.length === 0) {
-    return '';
-  }
-
-  return /[.!?]$/.test(normalized) ? normalized : `${normalized}.`;
-}
-
-function isGuidedSynthesisScaffold(value: string): boolean {
-  const normalized = value.toLowerCase();
-  return (
-    normalized.includes('original request:') ||
-    normalized.includes('additional constraints:') ||
-    normalized.includes('create a stronger, more specific version')
-  );
-}
-
-function buildInternalGuidedSynthesisPrompt(originalPrompt: string, guidedAnswers: GuidedAnswers): string {
-  const goal = asJoinedValue(guidedAnswers.goal);
-  const audience = asJoinedValue(guidedAnswers.audience);
-  const includes = asJoinedValue(guidedAnswers.includes);
-  const excludes = asJoinedValue(guidedAnswers.excludes);
-  const format = asJoinedValue(guidedAnswers.format);
-  const tone = asJoinedValue(guidedAnswers.tone);
-  const detail = asJoinedValue(guidedAnswers.detail);
-  const proof = asJoinedValue(guidedAnswers.proof);
-  const context = asJoinedValue(guidedAnswers.context);
-
-  const lines = [
-    'Original request:',
-    originalPrompt.trim(),
-    '',
-    'Additional constraints:',
-    `- Primary goal: ${goal ?? 'preserve the original goal'}`,
-    `- Audience: ${audience ?? 'use the implied audience from the original request'}`,
-    `- Include: ${includes ?? 'no additional required inclusions provided'}`,
-    `- Avoid: ${excludes ?? 'no additional exclusions provided'}`,
-    `- Format: ${format ?? 'use the format implied by the original request'}`,
-    `- Tone/detail notes: ${[tone, detail].filter(Boolean).join('; ') || 'no extra tone or detail notes provided'}`,
-    `- Proof or differentiation: ${proof ?? 'no additional proof requirement provided'}`,
-    `- Additional context: ${context ?? 'no additional context provided'}`,
-    '',
-    'Create a stronger, more specific version of the prompt that preserves the user’s intent while adding these boundaries.',
-  ];
-
-  return lines.join('\n');
-}
-
-function buildUserFacingGuidedPrompt(originalPrompt: string, guidedAnswers: GuidedAnswers): string {
-  const goal = asJoinedValue(guidedAnswers.goal);
-  const audience = asJoinedValue(guidedAnswers.audience);
-  const includes = asJoinedValue(guidedAnswers.includes);
-  const excludes = asJoinedValue(guidedAnswers.excludes);
-  const format = asJoinedValue(guidedAnswers.format);
-  const tone = asJoinedValue(guidedAnswers.tone);
-  const detail = asJoinedValue(guidedAnswers.detail);
-  const proof = asJoinedValue(guidedAnswers.proof);
-  const context = asJoinedValue(guidedAnswers.context);
-
-  const sentences = [
-    normalizePromptSentence(originalPrompt),
-    goal ? normalizePromptSentence(`Make the primary goal ${goal}`) : null,
-    audience ? normalizePromptSentence(`Target ${audience}`) : null,
-    format ? normalizePromptSentence(`Format the output as ${format}`) : null,
-    includes ? normalizePromptSentence(`Include ${includes}`) : null,
-    proof ? normalizePromptSentence(`Use ${proof}`) : null,
-    tone || detail ? normalizePromptSentence(`Tone and detail notes: ${[tone, detail].filter(Boolean).join('; ')}`) : null,
-    context ? normalizePromptSentence(`Context: ${context}`) : null,
-    excludes ? normalizePromptSentence(`Avoid ${excludes}`) : null,
-  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
-
-  return sentences.join(' ');
 }
 
 type RunAnalyzeAndRewriteV2Params = {
@@ -368,10 +300,17 @@ type RunAnalyzeAndRewriteV2Params = {
   persistInput?: AnalyzeAndRewriteV2Request;
   extraInferenceData?: Record<string, unknown>;
   guidedRewriteArtifacts?: {
+    guidedIntent: GuidedIntent;
     internalSynthesisPrompt: string;
+    modelComposedPrompt: string | null;
     finalGuidedPrompt: string;
+    validation: GuidedPromptValidationResult;
+    fallbackReason: string | null;
+    usedDeterministicFallback: boolean;
   };
   requestSource?: RequestSource;
+  precomputedRewrite?: Rewrite | null;
+  guidedOriginalOverallScore?: number;
 };
 
 type RewritePresentationShape = Pick<
@@ -497,6 +436,16 @@ function shapeRewritePresentation(params: {
   };
 }
 
+function classifyGuidedRewriteOutcome(originalOverallScore: number, guidedOverallScore: number): GuidedRewriteOutcome {
+  const scoreDelta = guidedOverallScore - originalOverallScore;
+  return {
+    status: scoreDelta >= 3 ? 'stronger_prompt' : scoreDelta > 0 ? 'guided_draft' : 'did_not_improve',
+    originalOverallScore,
+    guidedOverallScore,
+    scoreDelta,
+  };
+}
+
 async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Promise<HttpResponse> {
   const { requestId, startedAtMs, providerMode, providerConfig, headers, pathname, requestMethod, sessionId } = params;
   const input = params.input;
@@ -520,19 +469,25 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
     ? buildDecisionState(semanticClassification.inventory, input.rewritePreference)
     : null;
   const hasSemanticDecision = semanticDecision !== null;
-  const inferenceTrigger = hasSemanticDecision
-    ? {
-        shouldInfer: false,
-        reasons: [],
-      }
-    : evaluateInferenceTrigger({
-        prompt: input.prompt,
-        role: input.role,
-        mode: input.mode,
-        analysis: resolvedAnalysis,
-        context: resolvedContext,
-        patternFit,
-      });
+  const inferenceTrigger =
+    requestSource === 'guided_submit'
+      ? {
+          shouldInfer: false,
+          reasons: [],
+        }
+      : hasSemanticDecision
+        ? {
+            shouldInfer: false,
+            reasons: [],
+          }
+        : evaluateInferenceTrigger({
+            prompt: input.prompt,
+            role: input.role,
+            mode: input.mode,
+            analysis: resolvedAnalysis,
+            context: resolvedContext,
+            patternFit,
+          });
   const localMatchStatus = inferenceTrigger.shouldInfer ? inferenceTrigger.reasons.join('|') : 'strong_local_match';
   let inferenceFallbackUsed = false;
   let resolutionSource: 'local' | 'inference' = 'local';
@@ -722,13 +677,13 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
   };
 
   try {
-    let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = null;
+    let rewrite: AnalyzeAndRewriteV2Response['rewrite'] = params.precomputedRewrite ?? null;
     let evaluation: AnalyzeAndRewriteV2Response['evaluation'] = null;
-    let rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'] = 'suppressed';
+    let rewritePresentationMode: AnalyzeAndRewriteV2Response['rewritePresentationMode'] = params.precomputedRewrite ? 'full_rewrite' : 'suppressed';
     let guidedCompletion: AnalyzeAndRewriteV2Response['guidedCompletion'] = null;
     let guidedCompletionForm: AnalyzeAndRewriteV2Response['guidedCompletionForm'] = null;
 
-    if (!shouldSuppress && rewriteLadder.target !== null) {
+    if (!rewrite && !shouldSuppress && rewriteLadder.target !== null) {
       const rewriteEngine = selectRewriteEngine(providerConfig);
       const generatedRewrite = await rewriteEngine.rewrite({
         prompt: input.prompt,
@@ -863,7 +818,7 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
           effectiveAnalysisContext: effectiveResolution.effectiveAnalysisContext,
         });
       }
-    } else {
+    } else if (!rewrite) {
       rewritePresentationMode = 'suppressed';
     }
 
@@ -914,6 +869,10 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
         }),
     };
     const meta = createMetaV2(requestId, startedAtMs, providerMode, providerConfig.model);
+    const guidedRewriteOutcome =
+      requestSource === 'guided_submit' && typeof params.guidedOriginalOverallScore === 'number'
+        ? classifyGuidedRewriteOutcome(params.guidedOriginalOverallScore, overallScore)
+        : undefined;
     const payload: AnalyzeAndRewriteV2Response = {
       id: `par_${requestId}`,
       overallScore,
@@ -933,6 +892,7 @@ async function runAnalyzeAndRewriteV2(params: RunAnalyzeAndRewriteV2Params): Pro
       requestSource,
       guidedCompletion,
       guidedCompletionForm,
+      guidedRewriteOutcome,
       inferenceFallbackUsed,
       resolutionSource,
       meta,
@@ -2037,8 +1997,102 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
     }
 
     const normalizedGuidedAnswers = normalizeGuidedAnswers(parsed.data.guidedAnswers);
-    const internalSynthesisPrompt = buildInternalGuidedSynthesisPrompt(parsed.data.prompt, normalizedGuidedAnswers);
-    const finalGuidedPrompt = buildUserFacingGuidedPrompt(parsed.data.prompt, normalizedGuidedAnswers);
+    const originalAnalysis =
+      parsed.data.guidedContext?.analysis ??
+      withV2Scores(analyzePrompt({ ...parsed.data, preferences: normalizePreferences(undefined) }), parsed.data.prompt, undefined);
+    const originalOverallScore = parsed.data.guidedContext?.overallScore ?? computeOverallScore(originalAnalysis.scores);
+    const originalBestNextMove =
+      parsed.data.guidedContext?.bestNextMove ??
+      generateBestNextMove({
+        input: {
+          prompt: parsed.data.prompt,
+          role: parsed.data.role,
+          mode: parsed.data.mode,
+          context: undefined,
+        },
+        analysis: originalAnalysis,
+        overallScore: originalOverallScore,
+        scoreBand: scoreBandFromOverallScore(originalOverallScore),
+        rewriteRecommendation: recommendationFromState({
+          overallScore: originalOverallScore,
+          rewritePreference: parsed.data.rewritePreference,
+          shouldSuppress: false,
+          expectedImprovementLow: originalOverallScore >= 75,
+        }),
+      });
+    const originalImprovementSuggestions =
+      parsed.data.guidedContext?.improvementSuggestions ??
+      generateImprovementSuggestions({
+        input: {
+          prompt: parsed.data.prompt,
+          role: parsed.data.role,
+          mode: parsed.data.mode,
+          context: undefined,
+        },
+        analysis: originalAnalysis,
+        overallScore: originalOverallScore,
+        scoreBand: scoreBandFromOverallScore(originalOverallScore),
+        rewriteRecommendation: recommendationFromState({
+          overallScore: originalOverallScore,
+          rewritePreference: parsed.data.rewritePreference,
+          shouldSuppress: false,
+          expectedImprovementLow: originalOverallScore >= 75,
+        }),
+      });
+    const guidedIntent = buildGuidedIntent({
+      originalPrompt: parsed.data.prompt,
+      role: parsed.data.role,
+      mode: parsed.data.mode,
+      rewritePreference: parsed.data.rewritePreference,
+      guidedAnswers: normalizedGuidedAnswers,
+      analysis: originalAnalysis,
+      bestNextMove: originalBestNextMove,
+      improvementSuggestions: originalImprovementSuggestions,
+      effectiveAnalysisContext: {
+        role: parsed.data.role,
+        missingContextType: inferMissingContextType({
+          prompt: parsed.data.prompt,
+          role: parsed.data.role,
+          analysis: originalAnalysis,
+        }),
+      },
+    });
+    const internalSynthesisPrompt = buildGuidedIntentCompositionPrompt(guidedIntent);
+    const deterministicFallbackPrompt = buildUserFacingGuidedPrompt(guidedIntent);
+
+    let modelComposedPrompt: string | null = null;
+    if (providerMode === 'real') {
+      try {
+        const inferenceClient = new OpenAIInferenceClient(providerConfig);
+        modelComposedPrompt = await inferenceClient.composeGuidedPrompt({ internalSynthesisPrompt });
+      } catch (error) {
+        modelComposedPrompt = null;
+        console.info(
+          JSON.stringify({
+            event: 'guided_submit_composition_error',
+            requestId,
+            error: error instanceof Error ? error.message : 'UNKNOWN_GUIDED_COMPOSITION_ERROR',
+          }),
+        );
+      }
+    } else {
+      modelComposedPrompt = buildMockGuidedComposedPrompt(guidedIntent);
+    }
+
+    const validation = validateGuidedComposedPrompt(guidedIntent, modelComposedPrompt ?? '');
+    const usedDeterministicFallback = !validation.isValid;
+    const finalGuidedPrompt = usedDeterministicFallback ? deterministicFallbackPrompt : (modelComposedPrompt ?? '').trim();
+    const fallbackReason = usedDeterministicFallback ? validation.fallbackReason ?? 'Guided composition validation failed.' : null;
+    const precomputedRewrite: Rewrite | null =
+      finalGuidedPrompt.trim().length > 0
+        ? {
+            role: parsed.data.role,
+            mode: parsed.data.mode,
+            rewrittenPrompt: finalGuidedPrompt.trim(),
+            explanation: 'Built from guided answers.',
+            changes: ['guided_completion'],
+          }
+        : null;
 
     return runAnalyzeAndRewriteV2({
       requestId,
@@ -2050,7 +2104,7 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
       requestMethod: request.method,
       sessionId,
       input: {
-        prompt: internalSynthesisPrompt,
+        prompt: finalGuidedPrompt,
         role: parsed.data.role,
         mode: parsed.data.mode,
         rewritePreference: parsed.data.rewritePreference,
@@ -2065,16 +2119,28 @@ export async function handleHttpRequest(request: HttpRequest): Promise<HttpRespo
         guidedRewrite: {
           kind: 'guided_completion',
           originalPrompt: parsed.data.prompt,
+          guidedIntent,
           internalSynthesisPrompt,
+          modelComposedPrompt,
           finalGuidedPrompt,
+          validation,
+          fallbackReason,
+          usedDeterministicFallback,
           guidedAnswers: normalizedGuidedAnswers,
         },
       },
       guidedRewriteArtifacts: {
+        guidedIntent,
         internalSynthesisPrompt,
+        modelComposedPrompt,
         finalGuidedPrompt,
+        validation,
+        fallbackReason,
+        usedDeterministicFallback,
       },
       requestSource: 'guided_submit',
+      precomputedRewrite,
+      guidedOriginalOverallScore: originalOverallScore,
     });
   }
 
